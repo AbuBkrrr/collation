@@ -141,6 +141,7 @@ alter table locations add column if not exists name text;alter table observers a
 create table if not exists cmd_users(id serial primary key,name text unique,pass_hash text,active bool default true);
 create table if not exists radio_keys(room_id text primary key,key_hash text);
 create table if not exists tenants(id text primary key,name text,active bool default true);
+alter table tenants add column if not exists state text;
 alter table cmd_users add column if not exists tenant text,add column if not exists su bool default false;
 alter table rooms add column if not exists tenant text;alter table contacts add column if not exists tenant text;alter table messages add column if not exists tenant text;alter table audit add column if not exists tenant text;
 alter table radio add column if not exists freq text,add column if not exists talkgroup text,add column if not exists unit text,add column if not exists audio_path text,add column if not exists code text;
@@ -337,7 +338,14 @@ const roomScope = (u, col = "room_id") =>
       : [" where code=$1", [u.id]];
 const getS = async (k) => (await q("select v from settings where k=$1", [k]))[0]?.v,
   setS = (k, v) => q("insert into settings values($1,$2) on conflict(k) do update set v=$2", [k, String(v)]);
-const appName = async (tn) =>
-  (tn && (await getS("app_name:" + tn))) || (await getS("app_name")) || E.APP_NAME || "My Collation Center";
+const appName = async (tn) => {
+  if (tn) {
+    const own = await getS("app_name:" + tn);
+    if (own) return own; // admin's custom name in App Settings
+    const [t] = await qsys("select name from tenants where id=$1", [tn]);
+    if (t?.name) return t.name; // the Command Center's name
+  }
+  return (await getS("app_name")) || E.APP_NAME || "My Collation Center"; // platform name (login screens)
+};
 const clean = (v) => (v == null ? null : String(v).slice(0, 40));
 module.exports = {qsys,qx,RLS,hit,LK,als,express,jwt,bcrypt,http,https,fs,path,crypto,E,PORT,SECRET,DATA,PARTIES,STATES,pool,q,rnd,abbr,aud,h,SCHEMA,app,rate,auth,su,own,mine,tnOf,cfgTenant,roomScope,getS,setS,appName,clean,bus};

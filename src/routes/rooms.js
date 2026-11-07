@@ -17,6 +17,7 @@ app.post(
   auth("cmd"),
   h(async (req, res) => {
     const b = req.body;
+    if (!b.state) { const [t] = await q("select state from tenants where id=$1", [req.u.tn]); if (t?.state) b.state = t.state; }
     if (!b.name || !STATES.includes(b.state))
       return res.status(400).json({ error: "Name and valid state required" });
     const id = "SR-" + abbr(b.state) + "-" + rnd(3),
@@ -41,8 +42,8 @@ app.patch(
     if (!(await mine(req.u, req.params.id))) return res.sendStatus(404);
     const b = req.body;
     await q(
-      "update rooms set state=coalesce($2,state),scope=coalesce($3,scope),operator=coalesce($4,operator) where id=$1",
-      [req.params.id, b.state, b.scope, b.operator],
+      "update rooms set name=coalesce($5,name),state=coalesce($2,state),scope=coalesce($3,scope),operator=coalesce($4,operator) where id=$1",
+      [req.params.id, b.state, b.scope, b.operator, b.name ? String(b.name).slice(0, 80) : null],
     );
     res.json({ ok: 1 });
   }),

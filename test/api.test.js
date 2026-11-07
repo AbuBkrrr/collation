@@ -293,3 +293,36 @@ test("radio: Rdio Scanner / trunk-recorder call upload reaches the room", async 
   const other = ok(await api("radio", { tok: S.RA2.tok }));
   assert.equal(other.some((x) => x.talkgroup == "101"), false, "radio stays within the room");
 });
+
+test("Command Center carries a state; names flow to room and observer banners", async () => {
+  // platform admin creates a state-bound Command Center
+  ok(await api("tenants", { tok: S.A, body: { name: "Kaduna State Command", state: "Kaduna", operator: "kdadmin", pass: "kdadminpass1" } }));
+  const row = ok(await api("tenants", { tok: S.A })).find((t) => t.name == "Kaduna State Command");
+  assert.equal(row.state, "Kaduna");
+  const KD = ok(await api("login/command", { body: { user: "kdadmin", pass: "kdadminpass1" } })).token;
+  // its config shows the Command Center name as the app name (customizable, defaults to the CC name)
+  assert.equal(ok(await api("config", { tok: KD })).appName, "Kaduna State Command");
+  assert.equal(ok(await api("me", { tok: KD })).tenantState, "Kaduna");
+  // a room created without a state inherits the Command Center's state
+  const r = ok(await api("rooms", { tok: KD, body: { name: "Zaria LGA Situation Room" } }));
+  ok(await api("rooms/" + r.id + "/status", { tok: KD, body: { status: "active" } }));
+  const RT = ok(await api("login/room", { body: { id: r.id, pass: r.passcode } })).token;
+  assert.match(r.id, /^SR-KD-/);
+  const me = ok(await api("me", { tok: RT }));
+  assert.equal(me.room.state, "Kaduna");
+  assert.equal(me.cc, "Kaduna State Command");          // Command Center name for the room banner
+  assert.equal(me.room.name, "Zaria LGA Situation Room"); // Situation Room name for the banner
+  assert.equal(ok(await api("config", { tok: RT })).appName, "Kaduna State Command");
+  // rename the room (customizable by the administrator), reflected on its banner
+  ok(await api("rooms/" + r.id, { tok: KD, method: "PATCH", body: { name: "Zaria Central SR" } }));
+  assert.equal(ok(await api("me", { tok: RT })).room.name, "Zaria Central SR");
+  // observer under it gets both the Command Center name and its room name
+  const code = ok(await api("room/obs", { tok: RT, body: { state: "Kaduna", lga: "Zaria", ward: "W", pu: "001" } })).code;
+  const OT = ok(await obsLogin(code, 88)).token;
+  const ome = ok(await api("me", { tok: OT }));
+  assert.equal(ome.cc, "Kaduna State Command");
+  assert.equal(ome.obs.room_name, "Zaria Central SR");
+  // the admin can override the displayed name in App Settings, and it propagates
+  ok(await api("settings", { tok: KD, body: { appName: "Kaduna 2027 Command" } }));
+  assert.equal(ok(await api("config", { tok: RT })).appName, "Kaduna 2027 Command");
+});

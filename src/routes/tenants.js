@@ -7,7 +7,7 @@ app.get(
   h(async (req, res) =>
     res.json(
       await qsys(
-        "select t.id,t.name,t.active,(select count(*)::int from rooms where tenant=t.id) rooms,(select count(*)::int from cmd_users where tenant=t.id) operators from tenants t order by t.id",
+        "select t.id,t.name,t.state,t.active,(select count(*)::int from rooms where tenant=t.id) rooms,(select count(*)::int from cmd_users where tenant=t.id) operators from tenants t order by t.id",
       ),
     ),
   ),
@@ -18,6 +18,7 @@ app.post(
   su,
   h(async (req, res) => {
     const { name, operator, pass } = req.body;
+    const state = STATES.includes(req.body.state) ? req.body.state : null;
     if (!String(name || "").trim()) return res.status(400).json({ error: "Name required" });
     if (!/^[A-Za-z0-9._-]{2,40}$/.test(operator || ""))
       return res.status(400).json({ error: "Operator name: 2-40 letters, digits . _ -" });
@@ -25,7 +26,7 @@ app.post(
       return res.status(400).json({ error: "Passcode must be at least 8 characters" });
     const id = "CC-" + rnd(4);
     try {
-      await qsys("insert into tenants(id,name) values($1,$2)", [id, String(name).trim().slice(0, 80)]);
+      await qsys("insert into tenants(id,name,state) values($1,$2,$3)", [id, String(name).trim().slice(0, 80), state]);
       await qsys("insert into cmd_users(name,pass_hash,tenant) values($1,$2,$3)", [
         operator,
         await bcrypt.hash(String(pass), 10),

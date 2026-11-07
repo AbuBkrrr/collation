@@ -182,13 +182,15 @@ app.get(
         id: "CMD",
         name: u.name,
         su: u.su,
-        tenant: (await q("select name from tenants where id=$1", [u.tn]))[0]?.name,
+        tenant: (await qsys("select name from tenants where id=$1", [u.tn]))[0]?.name,
+        tenantState: (await qsys("select state from tenants where id=$1", [u.tn]))[0]?.state,
       });
     if (u.role == "room") {
       const [r] = await q("select id,name,state,scope,operator,status,activated_at from rooms where id=$1", [
         u.id,
       ]);
-      return res.json({ role: "room", id: u.id, room: r });
+      const [t] = await qsys("select name,state from tenants where id=$1", [u.tn]);
+      return res.json({ role: "room", id: u.id, room: r, cc: t?.name, ccState: t?.state });
     }
     const [o] = await q(
       "select o.*,r.name room_name from observers o join rooms r on r.id=o.room_id where code=$1",
@@ -196,7 +198,8 @@ app.get(
     );
     delete o.device_hash;
     delete o.pin_hash;
-    res.json({ role: "obs", id: u.id, obs: o });
+    const [t] = await qsys("select name from tenants where id=$1", [u.tn]);
+    res.json({ role: "obs", id: u.id, obs: o, cc: t?.name });
   }),
 );
 // ---- two-step login (TOTP) for Command operators ----
