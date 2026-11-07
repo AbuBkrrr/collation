@@ -152,7 +152,9 @@ create index if not exists obs_room_i on observers(room_id);create index if not 
 create index if not exists tal_code_i on tallies(code);create index if not exists inc_room_i on incidents(room_id);
 create index if not exists clip_room_i on clips(room_id);create index if not exists radio_room_i on radio(room_id,id);
 create index if not exists msg_tn_i on messages(tenant,id);create index if not exists aud_tn_i on audit(tenant,id);
-create index if not exists ec8a_room_i on ec8a(room_id,state,lga,ward,pu);`;
+create index if not exists ec8a_room_i on ec8a(room_id,state,lga,ward,pu);
+alter table observers add column if not exists acc float8,add column if not exists ec_reg int,add column if not exists ec_acc int;
+alter table radio add column if not exists source text,add column if not exists system text;`;
 // Row-level security: applied to the restricted role used inside authenticated requests.
 const RLS = `do $$ begin if not exists(select 1 from pg_roles where rolname='collation_app') then create role collation_app nologin; end if; end $$;
 do $$ begin execute format('grant collation_app to %I', current_user); exception when others then null; end $$;
@@ -190,6 +192,23 @@ app.use(
   }),
 );
 app.use(express.text({ type: "text/csv", limit: "100mb" }));
+// CORS for the Android app (Capacitor serves the bundled observer app from https://localhost) and any extra
+// origins in CORS_ORIGINS. Auth is a bearer token (no cookies), so this exposes nothing without a login.
+const ORIGINS = new Set(["https://localhost", "capacitor://localhost", "http://localhost", ...String(E.CORS_ORIGINS || "").split(",").map((x) => x.trim()).filter(Boolean)]);
+app.use((req, res, next) => {
+  const o = req.headers.origin;
+  if (o && ORIGINS.has(o)) {
+    res.set({
+      "Access-Control-Allow-Origin": o,
+      Vary: "Origin",
+      "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Gateway-Key",
+      "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
+      "Access-Control-Max-Age": "86400",
+    });
+    if (req.method == "OPTIONS") return res.sendStatus(204);
+  }
+  next();
+});
 app.use((req, res, next) => {
   res.set({
     "X-Content-Type-Options": "nosniff",

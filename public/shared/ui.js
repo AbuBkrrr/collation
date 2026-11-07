@@ -1,3 +1,5 @@
+// API base: "" on the web; the Android app sets window.MCC_BASE to the Command Center address
+const BASE = String(window.MCC_BASE || "").replace(/\/$/, "");
 const $ = (s) => document.querySelector(s),
   esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => "&#" + c.charCodeAt(0) + ";"),
   TM = (t) => new Date(t).toLocaleTimeString(),
@@ -22,7 +24,7 @@ const A = {
       b = JSON.stringify(b);
       h["Content-Type"] = "application/json";
     }
-    const r = await fetch("/api/" + p, { method: o.method || (b ? "POST" : "GET"), headers: h, body: b });
+    const r = await fetch(BASE + "/api/" + p, { method: o.method || (b ? "POST" : "GET"), headers: h, body: b });
     const j = (r.headers.get("content-type") || "").includes("json") ? await r.json() : await r.blob();
     if (r.status == 401 && A.tok && !p.startsWith("login")) {
       logout();
@@ -44,7 +46,7 @@ const A = {
   ws(on) {
     const open = () => {
       const s = new WebSocket(
-        (location.protocol == "https:" ? "wss://" : "ws://") + location.host + "/ws?t=" + A.tok,
+        (BASE ? BASE.replace(/^http/, "ws") : (location.protocol == "https:" ? "wss://" : "ws://") + location.host) + "/ws?t=" + A.tok,
       );
       A.sock = s;
       s.onmessage = (e) => on(JSON.parse(e.data));
@@ -194,6 +196,12 @@ const SC = {
   pending: ["s", "Pending"],
   anomaly: ["r", "Over reg. voters"],
 };
+// parties ordered by votes collated, highest first (ties keep ballot order) - re-sorts live
+const byVotes = (ps, t) =>
+  ps
+    .map((p, i) => [p, i])
+    .sort((a, b) => (t[b[0]] || 0) - (t[a[0]] || 0) || a[1] - b[1])
+    .map((x) => x[0]);
 const pillS = (k, n) => `<span class="pill ${SC[k][0]}">${SC[k][1]}${n != null ? " · " + n : ""}</span>`;
 function hist() {
   const c = DATA.coll;
@@ -201,7 +209,7 @@ function hist() {
   if (c.error) return '<div class="muted">⚠️ ' + esc(c.error) + "</div>";
   const s = c.sum,
     n = s.counts,
-    show = c.parties.filter((p, i) => i < 10 || s.totals[p] > 0);
+    show = byVotes(c.parties, s.totals).filter((p, i) => i < 10 || s.totals[p] > 0);
   return (
     `<div class="muted" style="margin-bottom:8px">${n.verified}/${n.pus} PUs verified · ${s.total} votes counted · ${n.disputed} disputed (not counted until resolved)</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">${Object.keys(SC)
       .filter((k) => n[k])
@@ -219,7 +227,7 @@ function hist() {
 function drill() {
   const c = DATA.coll;
   if (!c || c.error) return "";
-  const ps = c.parties.filter((p, i) => i < 10 || c.sum.totals[p] > 0);
+  const ps = byVotes(c.parties, c.sum.totals).filter((p, i) => i < 10 || c.sum.totals[p] > 0);
   return `<div class="tw"><table><tr><th>${c.level == "nat" ? "Scope" : c.level.toUpperCase()}</th><th>PUs</th><th>Verified</th><th>Disputed</th>${ps.map((p) => "<th>" + p + "</th>").join("")}<th>Total</th></tr>${
     c.rows
       .map(
@@ -268,6 +276,8 @@ const sv = (a, b) =>
 let map,
   mgrp,
   cv,
+  BASES = {},
+  LCTL,
   hold = document.createElement("div");
 hold.id = "map";
 function mapMount() {
@@ -286,7 +296,20 @@ function mapMount() {
         { attribution: "Tiles &copy; Esri", maxZoom: 19 },
       );
     dk.addTo(map);
-    L.control.layers({ "Dark map": dk, "Satellite (Esri)": sat }).addTo(map);
+    // place names / roads over the Esri imagery
+    const lbl = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}", { maxZoom: 19 });
+    BASES = { "Dark map": dk, "Satellite (Esri)": L.layerGroup([sat, lbl]) };
+    LCTL = L.control.layers(BASES).addTo(map);
+    // Google Map Tiles / Mapbox imagery when the server has a key configured (sharper in Nigerian cities)
+    A.get("maps")
+      .then((ls) =>
+        ls.forEach((x) => {
+          const t = L.tileLayer(x.url, { tileSize: x.tileSize || 256, zoomOffset: x.zoomOffset || 0, maxZoom: x.maxZoom || 20, attribution: x.attribution });
+          BASES[x.name] = t;
+          LCTL.addBaseLayer(t, x.name);
+        }),
+      )
+      .catch(() => {});
     mgrp = L.layerGroup().addTo(map);
     map.on("click", (e) =>
       L.popup()
@@ -316,8 +339,11 @@ function mapMount() {
       L.circleMarker([o.lat, o.lng], ic(o.streaming ? "red" : s == "Live" ? "" : s == "Idle" ? "amber" : "grey"))
         .addTo(mgrp)
         .bindPopup(
-          `<b>${esc(o.code)}</b><br>${esc(o.lga)} · PU ${esc(o.pu)}<br>${s}<br><a href="#" onclick="selObs('${o.code}');return false">Open feed / talkback</a><br>${sv(o.lat, o.lng)}`,
+          `<b>${esc(o.code)}</b><br>${esc(o.lga)} · PU ${esc(o.pu)}<br>${s}${o.acc != null ? " · GPS ±" + o.acc + " m" : ""}<br><a href="#" onclick="pinpoint(${o.lat},${o.lng});return false">📍 Pinpoint (satellite)</a> · <a href="#" onclick="selObs('${o.code}');return false">Open feed / talkback</a><br>${sv(o.lat, o.lng)}`,
         );
+      // GPS accuracy ring: the observer is inside this circle
+      if (o.acc != null && o.acc <= 500)
+        L.circle([o.lat, o.lng], { radius: o.acc, weight: 1, color: "#38a169", fillOpacity: 0.08, interactive: false, renderer: cv }).addTo(mgrp);
       pts.push([o.lat, o.lng]);
     });
     MS.inc
@@ -362,6 +388,14 @@ function mapMount() {
 }
 const cardMap = (l, x) =>
   `<div class="card" style="flex:1"><div class="card-header"><h3><i class="fas fa-map-location-dot"></i> Live Tactical Map · Observer GPS</h3><span class="tag">${l.filter((o) => st(o) == "Live").length} Observers Live</span></div><div id="mapSlot"></div><div class="muted" style="margin-top:8px;display:flex;gap:14px;flex-wrap:wrap"><span>🟢 Observer</span><span>🟡 Idle</span><span>⚪ Offline</span><span>🔴 Incident / streaming</span>${x || ""}</div></div>`;
+// zoom to street level on the sharpest satellite layer available
+function pinpoint(lat, lng) {
+  if (!map) return;
+  const pref = ["Google Satellite", "Mapbox Satellite Streets", "Satellite (Esri)"].find((n) => BASES[n]);
+  Object.values(BASES).forEach((l) => map.hasLayer(l) && map.removeLayer(l));
+  BASES[pref].addTo(map);
+  map.setView([lat, lng], 18);
+}
 function selObs(c) {
   SEL = c;
   if (A.role == "cmd" && TAB != "obs" && TAB != "drill") TAB = "obs";
@@ -425,6 +459,7 @@ const restreamStop = () =>
     .catch((e) => toast("⚠️ " + e.message));
 const tallyCell = (o) =>
   Object.entries(o.t || {})
+    .sort((a, b) => b[1].v - a[1].v)
     .map(
       ([p, x]) =>
         `<span class="tag" title="${esc((x.hist || []).map((h) => h.v + " (" + h.src + " " + TM(h.ts) + ")").join(" → "))}">${p} ${x.v}${x.edits ? " ✎" : ""}</span>`,
@@ -529,7 +564,7 @@ function tabResults(ro) {
     l
       .map((x) => {
         const ps = [...new Set(x.obs.flatMap((o) => Object.keys(o.t)))];
-        return `<div class="incident-item ${x.status == "disputed" || x.anomaly ? "" : x.verified ? "green" : x.status == "resolved" ? "blue" : "yellow"}" style="flex-direction:column;align-items:stretch"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px"><div class="incident-info"><div class="title">${esc(x.lga)} · ${esc(x.ward)} · PU ${esc(x.pu)}${x.pu_name ? " · " + esc(x.pu_name) : ""}</div><div class="meta">${x.room_id} · reg. ${x.reg} · counted total ${x.total}${x.res ? " · resolved by " + esc(x.res.by) + ": " + esc(x.res.note) : ""}</div></div><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${pillS(x.status)}${x.verified ? pillS("verified") : ""}${x.anomaly ? pillS("anomaly") : ""}${x.photos.map((p, i) => `<button class="btn btn-sm btn-outline" onclick="viewEc8a(${p.id})" title="SHA-256 ${p.sha256}"><i class="fas fa-file-image"></i> EC8A ${i + 1}</button>`).join("") || '<span class="pill s">No EC8A</span>'}${ro ? "" : `<button class="btn btn-sm btn-primary" onclick="RES='${esc(x.key)}';render()">${x.status == "resolved" ? "Edit result" : "Resolve"}</button>${x.status == "resolved" ? `<button class="btn btn-sm btn-outline" onclick='unRes(${JSON.stringify({ state: x.state, lga: x.lga, ward: x.ward, pu: x.pu })})'>Reopen</button>` : ""}`}</div></div><div class="tw" style="margin-top:8px"><table><tr><th>Observer</th>${ps.map((p) => "<th>" + p + "</th>").join("")}<th>Total</th></tr>${x.obs
+        return `<div class="incident-item ${x.status == "disputed" || x.anomaly ? "" : x.verified ? "green" : x.status == "resolved" ? "blue" : "yellow"}" style="flex-direction:column;align-items:stretch"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px"><div class="incident-info"><div class="title">${esc(x.lga)} · ${esc(x.ward)} · PU ${esc(x.pu)}${x.pu_name ? " · " + esc(x.pu_name) : ""}</div><div class="meta">${x.room_id} · registered ${x.reg}${x.acc != null ? " · accredited (BVAS) " + x.acc : ""}${x.sheetConflict ? ' · <b style="color:#e53e3e">observers read different EC8A voter figures</b>' : ""} · counted total ${x.total}${x.res ? " · resolved by " + esc(x.res.by) + ": " + esc(x.res.note) : ""}</div></div><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${pillS(x.status)}${x.verified ? pillS("verified") : ""}${x.anomaly ? pillS("anomaly") : ""}${x.photos.map((p, i) => `<button class="btn btn-sm btn-outline" onclick="viewEc8a(${p.id})" title="SHA-256 ${p.sha256}"><i class="fas fa-file-image"></i> EC8A ${i + 1}</button>`).join("") || '<span class="pill s">No EC8A</span>'}${ro ? "" : `<button class="btn btn-sm btn-primary" onclick="RES='${esc(x.key)}';render()">${x.status == "resolved" ? "Edit result" : "Resolve"}</button>${x.status == "resolved" ? `<button class="btn btn-sm btn-outline" onclick='unRes(${JSON.stringify({ state: x.state, lga: x.lga, ward: x.ward, pu: x.pu })})'>Reopen</button>` : ""}`}</div></div><div class="tw" style="margin-top:8px"><table><tr><th>Observer</th>${ps.map((p) => "<th>" + p + "</th>").join("")}<th>Total</th></tr>${x.obs
           .map((o) => {
             const t = Object.values(o.t).reduce((a, b) => a + b, 0);
             return `<tr><td class="mono">${esc(o.code)}${o.name ? " · " + esc(o.name) : ""}</td>${ps.map((p) => {

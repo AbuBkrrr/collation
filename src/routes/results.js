@@ -21,7 +21,7 @@ async function puList(u, f) {
   else if (f.room) add("o.room_id", f.room);
   LV.forEach((k) => f[k] && add("o." + k, String(f[k])));
   const obs = await q(
-    "select o.code,o.name,o.room_id,o.state,o.lga,o.ward,o.pu,o.pu_name,o.reg from observers o where " +
+    "select o.code,o.name,o.room_id,o.state,o.lga,o.ward,o.pu,o.pu_name,o.reg,o.ec_reg,o.ec_acc from observers o where " +
       w.join(" and "),
     a,
   );
@@ -59,7 +59,12 @@ async function puList(u, f) {
     }
     const o0 = l[0],
       total = fig ? Object.values(fig).reduce((s, v) => s + v, 0) : 0,
-      photos = P[k] || [];
+      photos = P[k] || [],
+      // voters on register / accredited (BVAS) as read off the EC8A by the observers; room's figure as fallback
+      ecr = l.map((o) => o.ec_reg).filter((v) => v != null),
+      eca = l.map((o) => o.ec_acc).filter((v) => v != null),
+      reg = ecr.length ? Math.max(...ecr) : o0.reg,
+      acc = eca.length ? Math.max(...eca) : null;
     return {
       key: k,
       room_id: o0.room_id,
@@ -68,14 +73,17 @@ async function puList(u, f) {
       ward: o0.ward,
       pu: o0.pu,
       pu_name: o0.pu_name,
-      reg: o0.reg,
+      reg,
+      acc,
+      sheetConflict: new Set(ecr).size > 1 || new Set(eca).size > 1,
       status,
       fig,
       total,
-      anomaly: total > o0.reg,
+      // over-voting: votes above accredited voters (INEC rule), or above registered voters when not known
+      anomaly: total > (acc ?? reg),
       ec8a: photos.length,
       verified: (status == "matched" || status == "resolved") && photos.length > 0,
-      obs: l.map((o) => ({ code: o.code, name: o.name, t: T[o.code] || {} })),
+      obs: l.map((o) => ({ code: o.code, name: o.name, t: T[o.code] || {}, ec_reg: o.ec_reg, ec_acc: o.ec_acc })),
       photos,
       res: res ? { by: res.by_who, note: res.note, ts: res.ts, src: res.src } : null,
     };
@@ -202,6 +210,21 @@ app.post(
     cache.clear();
     aud(o.code, "Uploaded EC8A photo " + x.id + " sha256 " + sha.slice(0, 16));
     res.json({ id: x.id, sha256: sha });
+  }),
+);
+// observer types two numbers from the EC8A: voters on register and accredited voters
+app.post(
+  "/api/observer/sheet",
+  auth("obs"),
+  h(async (req, res) => {
+    const n = (v) => (v === "" || v == null ? null : Number.isInteger(+v) && +v >= 0 && +v <= 100000 ? +v : NaN),
+      reg = n(req.body.reg),
+      acc = n(req.body.acc);
+    if (Number.isNaN(reg) || Number.isNaN(acc)) return res.status(400).json({ error: "Enter whole numbers" });
+    if (reg != null && acc != null && acc > reg) return res.status(400).json({ error: "Accredited cannot be more than registered" });
+    await q("update observers set ec_reg=coalesce($2,ec_reg),ec_acc=coalesce($3,ec_acc) where code=$1", [req.u.id, reg, acc]);
+    aud(req.u.id, "EC8A figures: registered " + reg + ", accredited " + acc);
+    res.json({ ok: 1 });
   }),
 );
 app.get(

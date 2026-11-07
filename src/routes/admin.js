@@ -119,3 +119,62 @@ app.get(
     res.download(path.join(BK, n));
   }),
 );
+// ---- one Situation Room per LGA of a state, in one step (e.g. Kano: 44 rooms) ----
+app.post(
+  "/api/rooms/bulk",
+  auth("cmd"),
+  h(async (req, res) => {
+    const st = String(req.body.state || "");
+    if (!STATES.includes(st)) return res.status(400).json({ error: "Choose a valid state" });
+    const lgas = (await q("select distinct lga from locations where state=$1 order by 1", [st])).map((x) => x.lga);
+    if (!lgas.length) return res.status(400).json({ error: "No LGAs loaded for " + st + " (Locations tab)" });
+    const have = new Set((await q("select lower(scope) s from rooms where tenant=$1 and state=$2", [req.u.tn, st])).map((x) => x.s));
+    const out = [];
+    for (const lga of lgas) {
+      if (have.has(lga.toLowerCase())) continue;
+      const id = "SR-" + abbr(st) + "-" + rnd(3),
+        pass = rnd(10),
+        on = !!req.body.activate;
+      await q(
+        "insert into rooms(id,name,state,scope,operator,pass_hash,tenant,status,activated_at) values($1,$2,$3,$4,'',$5,$6,$7,$8)",
+        [id, lga + " LGA Situation Room", st, lga, await bcrypt.hash(pass, 10), req.u.tn, on ? "active" : "inactive", on ? new Date() : null],
+      );
+      out.push({ id, name: lga + " LGA Situation Room", lga, passcode: pass });
+    }
+    aud("CMD", "Created " + out.length + " LGA Situation Rooms for " + st);
+    res.json({ created: out, skipped: lgas.length - out.length });
+  }),
+);
+// ---- map imagery: Esri (free) always; Google Map Tiles API and Mapbox when a key/token is configured ----
+const gsess = {};
+app.get(
+  "/api/maps",
+  auth(),
+  h(async (req, res) => {
+    const L = [];
+    if (E.MAPBOX_TOKEN)
+      for (const [n, s] of [["Mapbox Satellite Streets", "satellite-streets-v12"], ["Mapbox Streets", "streets-v12"]])
+        L.push({ name: n, url: `https://api.mapbox.com/styles/v1/mapbox/${s}/tiles/512/{z}/{x}/{y}@2x?access_token=${E.MAPBOX_TOKEN}`, tileSize: 512, zoomOffset: -1, maxZoom: 22, attribution: "© Mapbox © OpenStreetMap © Maxar" });
+    if (E.GOOGLE_MAPS_KEY)
+      for (const [n, t, lay] of [["Google Satellite", "satellite", ["layerRoadmap"]], ["Google Roadmap", "roadmap", null]]) {
+        try {
+          let s = gsess[t];
+          if (!s || s.exp < Date.now() + 3600000) {
+            const r = await fetch("https://tile.googleapis.com/v1/createSession?key=" + E.GOOGLE_MAPS_KEY, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ mapType: t, language: "en-NG", region: "NG", ...(lay ? { layerTypes: lay } : {}) }),
+              signal: AbortSignal.timeout(10000),
+            });
+            const j = await r.json();
+            if (!r.ok) throw new Error(j.error?.message || r.status);
+            s = gsess[t] = { id: j.session, exp: +j.expiry * 1000 };
+          }
+          L.push({ name: n, url: `https://tile.googleapis.com/v1/2dtiles/{z}/{x}/{y}?session=${s.id}&key=${E.GOOGLE_MAPS_KEY}`, maxZoom: 22, attribution: "Map data ©" + new Date().getFullYear() + " Google" });
+        } catch (e) {
+          console.log("Google tiles:", e.message);
+        }
+      }
+    res.json(L);
+  }),
+);

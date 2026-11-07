@@ -240,3 +240,32 @@ test("database backup on this PC (platform administrator only)", async () => {
   assert.ok(k.token);
   assert.equal((await api("backups/../../etc/passwd", { tok: S.A })).s >= 400, true);
 });
+
+test("one room per LGA, LGA scope, EC8A voter figures, CORS for the Android app, maps", async () => {
+  const c = new Client({ connectionString: DB });
+  await c.connect();
+  await c.query("insert into locations(state,lga,ward,pu,reg) values ('Kano','Dala','Gwammaja','001',500),('Kano','Fagge','Fagge A','001',500),('Kano','Gwale','Dorayi','001',500)");
+  await c.end();
+  const r = ok(await api("rooms/bulk", { tok: S.A, body: { state: "Kano", activate: true } }));
+  assert.equal(r.created.length, 3);
+  assert.equal(ok(await api("rooms/bulk", { tok: S.A, body: { state: "Kano" } })).created.length, 0, "second run skips existing LGAs");
+  const dala = r.created.find((x) => x.lga == "Dala");
+  const tok = ok(await api("login/room", { body: { id: dala.id, pass: dala.passcode } })).token;
+  assert.equal((await api("room/obs", { tok, body: { state: "Kano", lga: "Fagge", ward: "Fagge A", pu: "001" } })).s, 403, "outside its LGA");
+  assert.equal((await api("room/obs", { tok, body: { state: "Kaduna", lga: "Dala", ward: "x", pu: "001" } })).s, 403, "outside its state");
+  const code = ok(await api("room/obs", { tok, body: { state: "Kano", lga: "Dala", ward: "Gwammaja", pu: "002", reg: 500 } })).code;
+  const t = ok(await obsLogin(code, 77)).token;
+  assert.equal((await api("observer/sheet", { tok: t, body: { reg: 300, acc: 400 } })).s, 400, "accredited > registered refused");
+  ok(await api("observer/sheet", { tok: t, body: { reg: 320, acc: 150 } }));
+  ok(await api("observer/tally", { tok: t, body: { party: "APC", v: 160 } }));
+  const pu = ok(await api("pus", { tok })).items.find((x) => x.pu == "002");
+  assert.deepEqual([pu.reg, pu.acc, pu.anomaly], [320, 150, true], "over-voting vs accredited voters is flagged");
+  ok(await api("observer/heartbeat", { tok: t, body: { lat: 12, lng: 8.5, acc: 14.6 } }));
+  assert.equal(ok(await api("obs", { tok })).find((o) => o.code == code).acc, 15);
+  const pre = await fetch(BASE + "/api/obs", { method: "OPTIONS", headers: { Origin: "https://localhost", "Access-Control-Request-Method": "GET" } });
+  assert.equal(pre.status, 204);
+  assert.equal(pre.headers.get("access-control-allow-origin"), "https://localhost");
+  const evil = await fetch(BASE + "/api/health", { headers: { Origin: "https://evil.example" } });
+  assert.equal(evil.headers.get("access-control-allow-origin"), null);
+  assert.deepEqual(ok(await api("maps", { tok })), [], "no Google/Mapbox key configured");
+});

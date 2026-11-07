@@ -39,6 +39,7 @@
         CORR = null,
         lat = null,
         lng = null,
+        gacc = null,
         taps = [],
         lastN = -1,
         busy = false,
@@ -210,6 +211,7 @@
           stream = new MediaStream([v?.track?.mediaStreamTrack, a?.track?.mediaStreamTrack].filter(Boolean));
           pv.srcObject = stream;
           streaming = true;
+          window.Capacitor?.Plugins?.KeepAwake?.keepAwake().catch(() => {});
           recSeg();
           hb();
           toast("🔴 Streaming with adaptive quality — Situation Room can watch live.");
@@ -280,6 +282,7 @@
       }
       async function stopStream() {
         streaming = false;
+        window.Capacitor?.Plugins?.KeepAwake?.allowSleep().catch(() => {});
         lk?.disconnect();
         lk = null;
         Object.values(pcs).forEach((p) => p.close());
@@ -326,7 +329,7 @@
       // ---------- GPS + heartbeat ----------
       function hb() {
         if (navigator.onLine)
-          A.post("observer/heartbeat", { lat, lng, streaming, pend: OB ? Q().length + BQ : 0 })
+          A.post("observer/heartbeat", { lat, lng, acc: gacc, streaming, pend: OB ? Q().length + BQ : 0 })
             .then((r) => {
               if (r.live != LIVEREQ) {
                 LIVEREQ = r.live;
@@ -443,7 +446,7 @@
         if (!window.Vosk) throw new Error("offline speech engine not loaded");
         if (!vm) {
           toast("Loading offline speech model (first time ~40 MB)…");
-          vm = await Vosk.createModel("/models/vosk-model-small-en-us-0.15.tar.gz");
+          vm = await Vosk.createModel(BASE + "/models/vosk-model-small-en-us-0.15.tar.gz");
         }
         vstr = await navigator.mediaDevices.getUserMedia({
           audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 },
@@ -610,6 +613,15 @@
           toast("⚠️ " + e.message);
         }
       }
+      async function saveSheet() {
+        try {
+          const r = await send("observer/sheet", { reg: $("#er").value, acc: $("#ea").value });
+          if (!r.queued) toast("✅ EC8A voter figures saved.");
+          load();
+        } catch (e) {
+          toast("⚠️ " + e.message);
+        }
+      }
       // ---------- incident ----------
       async function reportInc(silent) {
         const note = $("#note")?.value || "";
@@ -664,7 +676,7 @@ ${CORR ? `<div class="correction-controls"><input id="mi" type="number" inputmod
             .join(
               "",
             )}</select><input id="mv" class="dk" type="number" inputmode="numeric" placeholder="votes"><button style="background:#2b6cb0" onclick="manualAdd()">+</button></div></div>
-<div class="tally-panel"><div class="tally-title"><span>EC8A RESULT SHEET</span><span>${EC.length ? '<span style="color:#68d391">' + EC.length + " uploaded ✓</span>" : '<span style="color:#fc8181">not uploaded</span>'}</span></div><label class="btn btn-primary" style="width:100%;padding:12px;cursor:pointer"><i class="fas fa-camera"></i> Photograph EC8A<input type="file" accept="image/*" capture="environment" style="display:none" onchange="ec8a(this)"></label><div style="color:#a0aec0;font-size:11px;margin-top:6px">Whole sheet, flat, in good light. Your room uses it to settle any difference between the two observers.</div></div>
+<div class="tally-panel"><div class="tally-title"><span>EC8A RESULT SHEET</span><span>${EC.length ? '<span style="color:#68d391">' + EC.length + " uploaded ✓</span>" : '<span style="color:#fc8181">not uploaded</span>'}</span></div><div class="correction-controls" style="margin:0 0 8px"><input id="er" class="dk" type="number" inputmode="numeric" placeholder="Voters on register" value="${OB.ec_reg ?? ""}"><input id="ea" class="dk" type="number" inputmode="numeric" placeholder="Accredited (BVAS)" value="${OB.ec_acc ?? ""}"><button style="background:#2b6cb0" onclick="saveSheet()" title="Save EC8A voter figures">✓</button></div><label class="btn btn-primary" style="width:100%;padding:12px;cursor:pointer"><i class="fas fa-camera"></i> Photograph EC8A<input type="file" accept="image/*" capture="environment" style="display:none" onchange="ec8a(this)"></label><div style="color:#a0aec0;font-size:11px;margin-top:6px">Whole sheet, flat, in good light. Your room uses it to settle any difference between the two observers.</div></div>
 <div class="tally-panel"><div class="tally-title">MESSAGES FROM ROOM / COMMAND</div>${
             ms
               .filter((m) => !m.cmd)
@@ -680,7 +692,7 @@ ${CORR ? `<div class="correction-controls"><input id="mi" type="number" inputmod
         if (s) s.prepend(pv);
       }
       async function boot() {
-        navigator.serviceWorker?.register("sw.js").catch(() => {});
+        if (!window.Capacitor) navigator.serviceWorker?.register("sw.js").catch(() => {});
         setTimeout(() => {
           const c = navigator.connection;
           if (
@@ -689,7 +701,7 @@ ${CORR ? `<div class="correction-controls"><input id="mi" type="number" inputmod
             !c?.saveData &&
             (c?.type == "wifi" || (!c?.type && c?.effectiveType == "4g"))
           )
-            fetch("/models/vosk-model-small-en-us-0.15.tar.gz").catch(() => {});
+            fetch(BASE + "/models/vosk-model-small-en-us-0.15.tar.gz").catch(() => {});
         }, 8000);
         try {
           const me = await A.get("me");
@@ -718,11 +730,25 @@ ${CORR ? `<div class="correction-controls"><input id="mi" type="number" inputmod
           A.sig(m);
         });
         EC = await A.get("observer/ec8a").catch(() => []);
-        if (navigator.geolocation)
+        // Android app: GPS keeps flowing with the screen off (foreground service with a notification)
+        const BG = window.Capacitor?.Plugins?.BackgroundGeolocation;
+        if (BG)
+          BG.addWatcher(
+            { backgroundTitle: "Observer GPS active", backgroundMessage: "Sharing your location with your Situation Room", requestPermissions: true, stale: false, distanceFilter: 10 },
+            (p, err) => {
+              if (err) return toast("📍 " + (err.code == "NOT_AUTHORIZED" ? "Allow location 'all the time' in Settings." : err.message));
+              lat = p.latitude;
+              lng = p.longitude;
+              gacc = p.accuracy;
+              if (Date.now() - (window._bgHb || 0) > 14000) (window._bgHb = Date.now()), hb();
+            },
+          );
+        else if (navigator.geolocation)
           navigator.geolocation.watchPosition(
             (p) => {
               lat = p.coords.latitude;
               lng = p.coords.longitude;
+              gacc = p.coords.accuracy;
             },
             () => toast("📍 Location permission needed for GPS tracking."),
             { enableHighAccuracy: true, maximumAge: 5000 },

@@ -12,7 +12,7 @@ app.get(
             ? ["code=$1", u.id]
             : ["room_id in (select id from rooms where tenant=$1)", u.tn];
     const o = await q(
-      "select code,room_id,name,state,lga,ward,pu,pu_name,reg,active,lat,lng,seen,streaming,pend,live_req,(device_hash is not null) bound from observers where " +
+      "select code,room_id,name,state,lga,ward,pu,pu_name,reg,ec_reg,ec_acc,active,lat,lng,acc,seen,streaming,pend,live_req,(device_hash is not null) bound from observers where " +
         w[0] +
         " order by code",
       [w[1]],
@@ -44,6 +44,12 @@ app.post(
       ]);
     if (!STATES.includes(b.state) || !b.lga || !b.ward || !b.pu)
       return res.status(400).json({ error: "State, LGA, ward and PU are required" });
+    // a room created for an LGA (scope) may only issue codes inside that LGA / state
+    const [rm] = await q("select state,scope from rooms where id=$1", [req.u.id]),
+      sc = String(rm?.scope || "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
+    if (rm?.state && rm.state != b.state) return res.status(403).json({ error: "This room covers " + rm.state + " only" });
+    if (sc.length && !sc.includes(String(b.lga).trim().toLowerCase()))
+      return res.status(403).json({ error: "This room covers " + rm.scope + " LGA only" });
     let code;
     do code = "OBS-" + (1000 + crypto.randomInt(9000)) + "-PU" + pu + "-" + abbr(b.state);
     while ((await q("select 1 from observers where code=$1", [code])).length);
@@ -80,13 +86,14 @@ app.post(
     if (u.role != "obs" || !u.dh) return res.status(401).json({ error: "Unauthorized" });
     const b = req.body || {},
       lat = Number.isFinite(b.lat) && Math.abs(b.lat) <= 90 ? b.lat : null,
-      lng = Number.isFinite(b.lng) && Math.abs(b.lng) <= 180 ? b.lng : null;
+      lng = Number.isFinite(b.lng) && Math.abs(b.lng) <= 180 ? b.lng : null,
+      acc = Number.isFinite(b.acc) && b.acc >= 0 && b.acc < 100000 ? Math.round(b.acc) : null;
     const [r] = await qsys(
-      `update observers o set seen=now(),lat=coalesce($2,o.lat),lng=coalesce($3,o.lng),streaming=coalesce($4,o.streaming),pend=coalesce($5,o.pend)
+      `update observers o set seen=now(),lat=coalesce($2,o.lat),lng=coalesce($3,o.lng),acc=case when $2::float8 is null then o.acc else $7 end,streaming=coalesce($4,o.streaming),pend=coalesce($5,o.pend)
        from observers p join rooms r on r.id=p.room_id join tenants t on t.id=r.tenant
        where o.code=$1 and p.code=$1 and o.active and r.status='active' and t.active and left(o.device_hash,16)=$6
        returning p.streaming old,o.streaming,o.live_req,r.tenant`,
-      [u.id, lat, lng, typeof b.streaming == "boolean" ? b.streaming : null, Number.isInteger(b.pend) ? b.pend : null, u.dh],
+      [u.id, lat, lng, typeof b.streaming == "boolean" ? b.streaming : null, Number.isInteger(b.pend) ? b.pend : null, u.dh, acc],
     );
     if (!r) return res.status(401).json({ error: "Access revoked" });
     // only a change of streaming state is pushed at once; GPS moves reach dashboards on their 10 s refresh

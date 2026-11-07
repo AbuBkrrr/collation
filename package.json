@@ -26,6 +26,5 @@
     "read-excel-file": "^5.8.0",
     "vosk-browser": "^0.0.8",
     "ws": "^8.17.0"
-  },
-  "devDependencies": {}
+  }
 }
