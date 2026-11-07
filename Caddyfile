@@ -1,0 +1,7 @@
+{$DOMAIN} {
+	{$CADDY_TLS}
+	handle_path /lk/* {
+		reverse_proxy livekit:7880
+	}
+	reverse_proxy app:3000
+}

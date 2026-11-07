@@ -1,0 +1,79 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: collation
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d collation"]
+      interval: 5s
+      retries: 20
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+  livekit:
+    image: livekit/livekit-server:latest
+    restart: unless-stopped
+    environment:
+      LIVEKIT_KEYS: "${LK_KEY}: ${LK_SECRET}"
+      LIVEKIT_CONFIG: |
+        port: 7880
+        rtc:
+          tcp_port: 7881
+          udp_port: 7882
+          node_ip: ${PUBLIC_IP}
+        redis:
+          address: redis:6379
+    ports: ["7881:7881", "7882:7882/udp"]
+    depends_on: [redis]
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db: {condition: service_healthy}
+    environment:
+      DATABASE_URL: postgres://postgres:${DB_PASSWORD}@db:5432/collation
+      JWT_SECRET: ${JWT_SECRET}
+      COMMAND_PASSCODE: ${COMMAND_PASSCODE}
+      PARTIES: ${PARTIES}
+      TURN_HOST: ${DOMAIN}
+      TURN_SECRET: ${TURN_SECRET}
+      LIVEKIT_URL: wss://${DOMAIN}/lk
+      LIVEKIT_INTERNAL_URL: http://livekit:7880
+      LIVEKIT_API_KEY: ${LK_KEY}
+      LIVEKIT_API_SECRET: ${LK_SECRET}
+      STT_URL: ${STT_URL:-}
+      APP_NAME: ${APP_NAME:-My Collation Center}
+      DATA_DIR: /data
+    volumes: [appdata:/data]
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      DOMAIN: ${DOMAIN}
+      CADDY_TLS: ${CADDY_TLS:-}
+    volumes: ["./Caddyfile:/etc/caddy/Caddyfile:ro", "caddydata:/data"]
+    depends_on: [app, livekit]
+  egress:            # YouTube/Facebook/Twitch restream (enabled by COMPOSE_PROFILES=restream)
+    image: livekit/egress:latest
+    profiles: ["restream"]
+    restart: unless-stopped
+    cap_add: [SYS_ADMIN]
+    environment:
+      EGRESS_CONFIG_BODY: |
+        api_key: ${LK_KEY}
+        api_secret: ${LK_SECRET}
+        ws_url: ws://livekit:7880
+        redis:
+          address: redis:6379
+    depends_on: [livekit, redis]
+  coturn:            # optional extra TURN relay, Linux only (COMPOSE_PROFILES=turn); LiveKit already relays over TCP 7881
+    image: coturn/coturn:latest
+    profiles: ["turn"]
+    restart: unless-stopped
+    network_mode: host
+    command: ["-n","--log-file=stdout","--realm=${DOMAIN}","--use-auth-secret","--static-auth-secret=${TURN_SECRET}","--external-ip=${PUBLIC_IP}","--min-port=49160","--max-port=49200","--fingerprint","--no-cli"]
+volumes: {pgdata: {}, appdata: {}, caddydata: {}}
