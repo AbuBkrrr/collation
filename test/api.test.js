@@ -205,10 +205,12 @@ test("bulk contacts, scoped per Command Center", async () => {
 });
 
 test("two-step login (TOTP) for Command operators", async () => {
+  assert.equal(ok(await api("totp", { tok: S.B })).on, false);
   const s = ok(await api("totp/setup", { tok: S.B, body: {} }));
   assert.match(s.uri, /^otpauth:\/\/totp\//);
   assert.equal((await api("totp/enable", { tok: S.B, body: { code: "000000" } })).s, 400);
   ok(await api("totp/enable", { tok: S.B, body: { code: TOTP.code(s.secret, Math.floor(Date.now() / 30000)) } }));
+  assert.equal(ok(await api("totp", { tok: S.B })).on, true);
   const r = await api("login/command", { body: { user: "kdop", pass: "kadunapass1" } });
   assert.equal(r.s, 401);
   assert.equal(r.j.otp, true);

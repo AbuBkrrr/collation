@@ -168,48 +168,65 @@ const hav = (a, b, c, d) => {
       Math.sin(((c - a) * r) / 2) ** 2 + Math.cos(a * r) * Math.cos(c * r) * Math.sin(((d - b) * r) / 2) ** 2;
   return 12742 * Math.asin(Math.sqrt(x));
 };
-function agg(l) {
-  const r = {};
-  CFG.parties.forEach((p) => (r[p] = 0));
-  let ver = 0;
-  l.forEach((o) => {
-    let any = 0;
-    CFG.parties.forEach((p) => {
-      if (o.t[p]) {
-        r[p] += o.t[p].v;
-        any = 1;
-      }
-    });
-    if (any && !anom(o)) ver++;
-  });
-  return { r, ver, n: l.length, total: Object.values(r).reduce((a, b) => a + b, 0) };
+// ---- collation (computed on the server: reconciles the 2 observers per PU) ----
+const COLL_KEYS = ["state", "lga", "ward", "pu", "room"];
+let CR = null; // room id when Command drills into one room
+const collKey = () => JSON.stringify([LVL, ...COLL_KEYS.map((k) => (k == "room" ? F.room || CR || "" : F[k] || ""))]);
+async function loadColl() {
+  const k = collKey(),
+    p = new URLSearchParams({ level: LVL });
+  COLL_KEYS.forEach((x) => (x == "room" ? F.room || CR : F[x]) && p.set(x, x == "room" ? F.room || CR : F[x]));
+  DATA.collKey = k;
+  try {
+    DATA.coll = await A.get("collation?" + p);
+  } catch (e) {
+    DATA.coll = { error: e.message };
+  }
+  refresh();
 }
-function hist(l) {
-  const a = agg(l);
+const SC = {
+  verified: ["g", "Verified (EC8A)"],
+  matched: ["g", "Matched"],
+  resolved: ["b", "Resolved"],
+  single: ["a", "Single observer"],
+  partial: ["a", "Entering"],
+  disputed: ["r", "Disputed"],
+  pending: ["s", "Pending"],
+  anomaly: ["r", "Over reg. voters"],
+};
+const pillS = (k, n) => `<span class="pill ${SC[k][0]}">${SC[k][1]}${n != null ? " · " + n : ""}</span>`;
+function hist() {
+  const c = DATA.coll;
+  if (!c) return '<div class="muted">Loading collation…</div>';
+  if (c.error) return '<div class="muted">⚠️ ' + esc(c.error) + "</div>";
+  const s = c.sum,
+    n = s.counts,
+    show = c.parties.filter((p, i) => i < 10 || s.totals[p] > 0);
   return (
-    `<div class="muted" style="margin-bottom:10px">${a.ver}/${a.n} PUs verified · ${a.total} votes · ${l.filter(anom).length} anomalies</div>` +
-    CFG.parties
-      .map((p, i) => {
-        const pc = a.total ? Math.round((a.r[p] / a.total) * 100) : 0;
-        return `<div class="histogram-row"><div class="party-name">${p}</div><div class="bar-bg"><div class="bar-fill" style="width:${pc}%;background:${PCOL[i % 10]}"></div></div><div class="pct">${a.r[p]} · ${pc}%</div></div>`;
+    `<div class="muted" style="margin-bottom:8px">${n.verified}/${n.pus} PUs verified · ${s.total} votes counted · ${n.disputed} disputed (not counted until resolved)</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">${Object.keys(SC)
+      .filter((k) => n[k])
+      .map((k) => pillS(k, n[k]))
+      .join("")}</div>` +
+    show
+      .map((p) => {
+        const i = c.parties.indexOf(p),
+          pc = s.total ? Math.round((s.totals[p] / s.total) * 100) : 0;
+        return `<div class="histogram-row"><div class="party-name">${p}</div><div class="bar-bg"><div class="bar-fill" style="width:${pc}%;background:${PCOL[i % PCOL.length]}"></div></div><div class="pct">${s.totals[p]} · ${pc}%</div></div>`;
       })
       .join("")
   );
 }
-function drill(l, lvl) {
-  const g = {};
-  l.forEach((o) => {
-    const k = lvl == "nat" ? "National" : lvl == "pu" ? [o.state, o.lga, o.ward, o.pu].join("/") : o[lvl];
-    (g[k] = g[k] || []).push(o);
-  });
-  return `<div class="tw"><table><tr><th>${lvl == "nat" ? "Scope" : lvl.toUpperCase()}</th><th>PUs</th><th>Verified</th>${CFG.parties.map((p) => "<th>" + p + "</th>").join("")}<th>Total</th></tr>${
-    Object.entries(g)
-      .sort()
-      .map(([k, v]) => {
-        const a = agg(v);
-        return `<tr><td><b>${esc(k)}</b></td><td>${a.n}</td><td>${a.ver}</td>${CFG.parties.map((p) => "<td>" + a.r[p] + "</td>").join("")}<td><b>${a.total}</b></td></tr>`;
-      })
-      .join("") || "<tr><td colspan=20>No data</td></tr>"
+function drill() {
+  const c = DATA.coll;
+  if (!c || c.error) return "";
+  const ps = c.parties.filter((p, i) => i < 10 || c.sum.totals[p] > 0);
+  return `<div class="tw"><table><tr><th>${c.level == "nat" ? "Scope" : c.level.toUpperCase()}</th><th>PUs</th><th>Verified</th><th>Disputed</th>${ps.map((p) => "<th>" + p + "</th>").join("")}<th>Total</th></tr>${
+    c.rows
+      .map(
+        (r) =>
+          `<tr><td><b>${esc(r.key)}</b></td><td>${r.counts.pus}</td><td>${r.counts.verified}</td><td>${r.counts.disputed ? '<span class="pill r">' + r.counts.disputed + "</span>" : 0}</td>${ps.map((p) => "<td>" + (r.totals[p] || 0) + "</td>").join("")}<td><b>${r.total}</b></td></tr>`,
+      )
+      .join("") || "<tr><td colspan=30>No data</td></tr>"
   }</table></div>`;
 }
 const flt = (l) =>
@@ -250,13 +267,15 @@ const sv = (a, b) =>
   `<a target="_blank" rel="noopener" href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${a},${b}">🛣 Open Street View</a>`;
 let map,
   mgrp,
+  cv,
   hold = document.createElement("div");
 hold.id = "map";
 function mapMount() {
   const t = $("#mapSlot");
   if (!t || !MS || typeof L == "undefined") return;
   if (!map) {
-    map = L.map(hold).setView([9.08, 8.68], 6);
+    map = L.map(hold, { preferCanvas: true }).setView([12.0, 8.52], 9);
+    cv = L.canvas({ padding: 0.3 });
     const dk = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
         attribution: "&copy; OpenStreetMap &copy; CARTO",
         subdomains: "abcd",
@@ -287,12 +306,14 @@ function mapMount() {
   setTimeout(() => {
     map.invalidateSize();
     mgrp.clearLayers();
+    // canvas circle markers (mockup style: white dot, coloured ring) - fast with tens of thousands of observers
     const pts = [],
-      ic = (c) => L.divIcon({ className: "custom-marker " + c, iconSize: [16, 16] });
+      COL = { "": "#38a169", amber: "#d69e2e", grey: "#a0aec0", red: "#e53e3e", blue: "#2b6cb0", navy: "#1a365d" },
+      ic = (c) => ({ radius: 7, weight: 3, color: COL[c], fillColor: "#fff", fillOpacity: 1, renderer: cv });
     MS.l.forEach((o) => {
       if (o.lat == null) return;
       const s = st(o);
-      L.marker([o.lat, o.lng], { icon: ic(s == "Live" ? "" : s == "Idle" ? "amber" : "grey") })
+      L.circleMarker([o.lat, o.lng], ic(o.streaming ? "red" : s == "Live" ? "" : s == "Idle" ? "amber" : "grey"))
         .addTo(mgrp)
         .bindPopup(
           `<b>${esc(o.code)}</b><br>${esc(o.lga)} · PU ${esc(o.pu)}<br>${s}<br><a href="#" onclick="selObs('${o.code}');return false">Open feed / talkback</a><br>${sv(o.lat, o.lng)}`,
@@ -302,7 +323,7 @@ function mapMount() {
     MS.inc
       .filter((i) => i.status != "resolved" && i.lat != null)
       .forEach((i) => {
-        L.marker([i.lat, i.lng], { icon: ic("red") })
+        L.circleMarker([i.lat, i.lng], ic("red"))
           .addTo(mgrp)
           .bindPopup(
             "<b>🔴 " +
@@ -318,7 +339,7 @@ function mapMount() {
         pts.push([i.lat, i.lng]);
       });
     (MS.units || []).forEach((u) =>
-      L.marker([u.lat, u.lng], { icon: ic("blue") })
+      L.circleMarker([u.lat, u.lng], ic("blue"))
         .addTo(mgrp)
         .bindPopup("<b>🔵 " + esc(u.name) + "</b><br>" + u.st),
     );
@@ -326,9 +347,9 @@ function mapMount() {
       DATA.rooms.forEach((r) => {
         const l = DATA.obs.filter((o) => o.room_id == r.id && o.lat != null);
         if (l.length)
-          L.marker(
+          L.circleMarker(
             [l.reduce((a, o) => a + o.lat, 0) / l.length, l.reduce((a, o) => a + o.lng, 0) / l.length],
-            { icon: ic("navy") },
+            { ...ic("navy"), radius: 10 },
           )
             .addTo(mgrp)
             .bindPopup("<b>🏛 " + esc(r.name) + "</b><br>" + r.status);
@@ -340,7 +361,7 @@ function mapMount() {
   }, 60);
 }
 const cardMap = (l, x) =>
-  `<div class="card" style="flex:1"><div class="card-header"><h3><i class="fas fa-map-location-dot"></i> Live Tactical Map · Observer GPS</h3><span class="tag">${l.filter((o) => st(o) == "Live").length} Observers Live</span></div><div id="mapSlot"></div><div class="muted" style="margin-top:8px;display:flex;gap:14px;flex-wrap:wrap"><span>🟢 Observer</span><span>🟡 Idle</span><span>🔴 Incident</span>${x || ""}</div></div>`;
+  `<div class="card" style="flex:1"><div class="card-header"><h3><i class="fas fa-map-location-dot"></i> Live Tactical Map · Observer GPS</h3><span class="tag">${l.filter((o) => st(o) == "Live").length} Observers Live</span></div><div id="mapSlot"></div><div class="muted" style="margin-top:8px;display:flex;gap:14px;flex-wrap:wrap"><span>🟢 Observer</span><span>🟡 Idle</span><span>⚪ Offline</span><span>🔴 Incident / streaming</span>${x || ""}</div></div>`;
 function selObs(c) {
   SEL = c;
   if (A.role == "cmd" && TAB != "obs" && TAB != "drill") TAB = "obs";
@@ -353,8 +374,29 @@ vv.playsInline = true;
 vv.style.cssText = "width:100%;height:100%;object-fit:cover";
 function cardFeed(ro) {
   const o = DATA.obs.find((x) => x.code == SEL);
-  return `<div class="card"><div class="card-header"><h3><i class="fas fa-video"></i> Live Video Feed</h3><span class="tag">${o ? esc(o.code) + " · " + esc(o.lga) + " · PU " + esc(o.pu) + " · " + (o.streaming ? "🔴 streaming" : "not streaming") : "Select an observer"}</span></div><div class="video-container" id="vslot">${o ? "" : '<span style="opacity:.6">Click an observer marker or row</span>'}</div>
-${o && !ro ? `<div class="video-controls"><button class="btn btn-success" onclick="A.watch(SEL,vv,false)"><i class="fas fa-play"></i> Watch</button><button class="btn btn-outline" onclick="A.watch(SEL,vv,true)"><i class="fas fa-microphone"></i> Talkback (2-way audio)</button><button class="btn btn-outline" onclick="A.unwatch(SEL);vv.srcObject=null"><i class="fas fa-stop"></i> Stop</button><button class="btn btn-outline" onclick="msgTo('obs:'+SEL,'Please save your clip now','save')"><i class="fas fa-record-vinyl"></i> Save 60s Clip</button><button class="btn btn-outline" onclick="snapshot()"><i class="fas fa-camera"></i> Snapshot</button>${CFG.lk ? '<button class="btn btn-outline" onclick="restream()"><i class="fas fa-tower-broadcast"></i> Restream (YouTube/FB)</button><button class="btn btn-outline" onclick="restreamStop()">Stop restream</button>' : ""}<div class="share-dropdown"><button class="btn btn-primary" onclick="event.stopPropagation();$('#sm').classList.toggle('show')"><i class="fas fa-share-nodes"></i> Share Feed</button><div class="share-menu" id="sm">${["CP Command", "INEC", "NSCDC", "Dispatch", "Command Center"].map((x) => `<div onclick="shareTo('${x}')">${x}</div>`).join("")}</div></div></div>` : ""}</div>`;
+  return `<div class="card"><div class="card-header"><h3><i class="fas fa-video"></i> Live Video Feed</h3><span class="tag">${o ? esc(o.code) + " · " + esc(o.lga) + " · PU " + esc(o.pu) + " · " + (o.streaming ? "🔴 streaming" : o.live_req ? "⏳ live requested" : "not streaming") : "Select an observer"}</span></div><div class="video-container" id="vslot">${o ? "" : '<span style="opacity:.6">Click an observer marker or row</span>'}</div>
+${o && !ro ? `<div class="video-controls">${o.live_req ? `<button class="btn btn-danger" onclick="liveReq(SEL,false)"><i class="fas fa-video-slash"></i> End live video</button>` : `<button class="btn btn-danger" onclick="liveReq(SEL,true)"><i class="fas fa-video"></i> Request live video</button>`}<button class="btn btn-success" onclick="A.watch(SEL,vv,false)"><i class="fas fa-play"></i> Watch</button><button class="btn btn-outline" onclick="A.watch(SEL,vv,true)"><i class="fas fa-microphone"></i> Talkback (2-way audio)</button><button class="btn btn-outline" onclick="A.unwatch(SEL);vv.srcObject=null"><i class="fas fa-stop"></i> Stop</button><button class="btn btn-outline" onclick="msgTo('obs:'+SEL,'Please save your clip now','save')"><i class="fas fa-record-vinyl"></i> Save 60s Clip</button><button class="btn btn-outline" onclick="snapshot()"><i class="fas fa-camera"></i> Snapshot</button>${CFG.lk ? '<button class="btn btn-outline" onclick="restream()"><i class="fas fa-tower-broadcast"></i> Restream (YouTube/FB)</button><button class="btn btn-outline" onclick="restreamStop()">Stop restream</button>' : ""}<div class="share-dropdown"><button class="btn btn-primary" onclick="event.stopPropagation();$('#sm').classList.toggle('show')"><i class="fas fa-share-nodes"></i> Share Feed</button><div class="share-menu" id="sm">${["CP Command", "INEC", "NSCDC", "Dispatch", "Command Center"].map((x) => `<div onclick="shareTo('${x}')">${x}</div>`).join("")}</div></div></div>` : ""}</div>`;
+}
+// on-demand video: the observer phone starts its camera when asked and stops when ended (saves data + battery)
+async function liveReq(code, on) {
+  try {
+    const r = await A.post("obs/" + code + "/live", { on });
+    toast(on ? (r.delivered ? "📡 Live video requested - the phone is starting its camera." : "📡 Requested. The observer app is not open; it will start when the observer opens it.") : "⏹ Live video ended.");
+    if (on) setTimeout(() => A.watch(code, vv, false).catch(() => {}), 4000);
+    else A.unwatch(code);
+    loadAll();
+  } catch (e) {
+    toast("⚠️ " + e.message);
+  }
+}
+async function resetDev(code) {
+  if (!confirm("Reset the phone lock for " + code + "? The current phone is logged out; the next phone that logs in with this code (and a new PIN) takes it over.")) return;
+  try {
+    await A.post("obs/" + code + "/reset-device");
+    toast("🔓 Device lock reset for " + code);
+  } catch (e) {
+    toast("⚠️ " + e.message);
+  }
 }
 function snapshot() {
   if (!vv.videoWidth) return toast("No video yet.");
@@ -429,7 +471,107 @@ function cardColl(l) {
       ([k, n]) =>
         `<button class="btn btn-sm ${LVL == k ? "btn-primary" : "btn-outline"}" onclick="LVL='${k}';render()">${n}</button>`,
     )
-    .join("")}</div></div>${hist(l)}<div style="margin-top:12px">${drill(l, LVL)}</div></div>`;
+    .join("")}</div></div><div id="collSlot">${hist()}<div style="margin-top:12px">${drill()}</div></div></div>`;
+}
+// ---------- results & EC8A review (two observers per PU, supervisor resolves) ----------
+let PUF = "disputed",
+  PUS_ = null,
+  PUK = null,
+  RES = null;
+function pusQ() {
+  const p = new URLSearchParams();
+  if (PUF) p.set("status", PUF);
+  COLL_KEYS.forEach((x) => (x == "room" ? F.room || CR : F[x]) && p.set(x, x == "room" ? F.room || CR : F[x]));
+  return String(p);
+}
+async function loadPus() {
+  const p = pusQ();
+  PUK = p;
+  try {
+    PUS_ = await A.get("pus?" + p);
+  } catch (e) {
+    PUS_ = { count: 0, items: [], error: e.message };
+  }
+  refresh();
+}
+async function viewEc8a(id) {
+  try {
+    window.open(URL.createObjectURL(await A.get("ec8a/" + id + "/file")), "_blank");
+  } catch (e) {
+    toast("⚠️ " + e.message);
+  }
+}
+function tabResults(ro) {
+  if (!PUS_ || PUK !== pusQ()) setTimeout(loadPus, 0);
+  const l = PUS_?.items || [];
+  const form = (x) => {
+    const ps = [...new Set([...x.obs.flatMap((o) => Object.keys(o.t)), ...Object.keys(x.fig || {})])],
+      src = x.fig || x.obs.find((o) => Object.keys(o.t).length)?.t || {};
+    return `<div class="search-bar" style="flex-direction:column;align-items:stretch"><div class="muted">Enter the figures on the EC8A sheet (pre-filled from ${x.fig ? "the counted figures" : "the first observer"}). Add parties with 0 if needed.</div><div style="display:flex;gap:8px;flex-wrap:wrap">${CFG.parties
+      .filter((p) => ps.includes(p) || CFG.parties.indexOf(p) < 5)
+      .map((p) => `<label class="tag">${p} <input id="rf_${p}" type="number" min="0" style="width:80px" value="${src[p] ?? ""}"></label>`)
+      .join("")}</div><input id="rf_note" placeholder="Note (required), e.g. 'Matches EC8A photo; OBS-xxxx misheard PDP'"><div style="display:flex;gap:8px">${x.obs
+      .filter((o) => Object.keys(o.t).length)
+      .map((o) => `<button class="btn btn-sm btn-outline" onclick='fillRes(${JSON.stringify(o.t)})'>Use ${esc(o.code)}</button>`)
+      .join("")}<button class="btn btn-success btn-sm" onclick="saveRes()"><i class="fas fa-check"></i> Save final result</button><button class="btn btn-outline btn-sm" onclick="RES=null;render()">Cancel</button></div></div>`;
+  };
+  return `<div class="card"><div class="card-header"><h3><i class="fas fa-scale-balanced"></i> Results Review · 2 observers per PU · EC8A</h3><div style="display:flex;gap:6px;flex-wrap:wrap">${[
+    ["disputed", "Disputed"],
+    ["unverified", "Not verified"],
+    ["partial", "Entering"],
+    ["single", "Single"],
+    ["matched", "Matched"],
+    ["resolved", "Resolved"],
+    ["", "All"],
+  ]
+    .map(([v, n]) => `<button class="btn btn-sm ${PUF == v ? "btn-primary" : "btn-outline"}" onclick="PUF='${v}';PUS_=null;render()">${n}</button>`)
+    .join("")}<button class="btn btn-sm btn-outline" onclick="loadPus()"><i class="fas fa-rotate"></i></button></div></div><div class="muted" style="margin-bottom:10px">${PUS_ ? PUS_.count + " PU(s)" + (PUS_.count > 1000 ? " - showing first 1000; narrow with the search above" : "") : "Loading…"}. Disputed PUs are left out of the totals until ${ro ? "the Situation Room supervisor" : "you"} resolve${ro ? "s" : ""} them. A PU is verified when the figures match (or are resolved) and an EC8A photo is on file.</div><div class="incident-list">${
+    l
+      .map((x) => {
+        const ps = [...new Set(x.obs.flatMap((o) => Object.keys(o.t)))];
+        return `<div class="incident-item ${x.status == "disputed" || x.anomaly ? "" : x.verified ? "green" : x.status == "resolved" ? "blue" : "yellow"}" style="flex-direction:column;align-items:stretch"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px"><div class="incident-info"><div class="title">${esc(x.lga)} · ${esc(x.ward)} · PU ${esc(x.pu)}${x.pu_name ? " · " + esc(x.pu_name) : ""}</div><div class="meta">${x.room_id} · reg. ${x.reg} · counted total ${x.total}${x.res ? " · resolved by " + esc(x.res.by) + ": " + esc(x.res.note) : ""}</div></div><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${pillS(x.status)}${x.verified ? pillS("verified") : ""}${x.anomaly ? pillS("anomaly") : ""}${x.photos.map((p, i) => `<button class="btn btn-sm btn-outline" onclick="viewEc8a(${p.id})" title="SHA-256 ${p.sha256}"><i class="fas fa-file-image"></i> EC8A ${i + 1}</button>`).join("") || '<span class="pill s">No EC8A</span>'}${ro ? "" : `<button class="btn btn-sm btn-primary" onclick="RES='${esc(x.key)}';render()">${x.status == "resolved" ? "Edit result" : "Resolve"}</button>${x.status == "resolved" ? `<button class="btn btn-sm btn-outline" onclick='unRes(${JSON.stringify({ state: x.state, lga: x.lga, ward: x.ward, pu: x.pu })})'>Reopen</button>` : ""}`}</div></div><div class="tw" style="margin-top:8px"><table><tr><th>Observer</th>${ps.map((p) => "<th>" + p + "</th>").join("")}<th>Total</th></tr>${x.obs
+          .map((o) => {
+            const t = Object.values(o.t).reduce((a, b) => a + b, 0);
+            return `<tr><td class="mono">${esc(o.code)}${o.name ? " · " + esc(o.name) : ""}</td>${ps.map((p) => {
+              const vs = new Set(x.obs.filter((z) => p in z.t).map((z) => z.t[p]));
+              return `<td style="${vs.size > 1 ? "color:#e53e3e;font-weight:700" : ""}">${o.t[p] ?? "—"}</td>`;
+            }).join("")}<td>${t}</td></tr>`;
+          })
+          .join("")}${x.status == "resolved" ? `<tr><td><b>FINAL</b></td>${ps.map((p) => "<td><b>" + (x.fig[p] ?? "—") + "</b></td>").join("")}<td><b>${x.total}</b></td></tr>` : ""}</table></div>${RES == x.key && !ro ? form(x) : ""}</div>`;
+      })
+      .join("") || '<div class="muted">Nothing in this list.</div>'
+  }</div></div>`;
+}
+function fillRes(t) {
+  CFG.parties.forEach((p) => {
+    const e = $("#rf_" + p);
+    if (e) e.value = t[p] ?? "";
+  });
+}
+async function saveRes() {
+  const x = PUS_.items.find((z) => z.key == RES),
+    final = {};
+  CFG.parties.forEach((p) => {
+    const e = $("#rf_" + p);
+    if (e && e.value !== "") final[p] = parseInt(e.value, 10);
+  });
+  try {
+    await A.post("pus/resolve", { state: x.state, lga: x.lga, ward: x.ward, pu: x.pu, final, note: $("#rf_note").value, by: ME.room?.operator || ME.id });
+    toast("✅ Final result saved for PU " + x.pu);
+    RES = null;
+    loadPus();
+  } catch (e) {
+    toast("⚠️ " + e.message);
+  }
+}
+async function unRes(k) {
+  if (!confirm("Reopen this PU? It goes back to the observers' figures.")) return;
+  try {
+    await A.post("pus/unresolve", k);
+    loadPus();
+  } catch (e) {
+    toast("⚠️ " + e.message);
+  }
 }
 // ---------- dispatch / radio ----------
 function cardDispatch(rid, ro) {
@@ -478,6 +620,7 @@ async function addUnit() {
 const cardRadio = () =>
   `<div class="radio-module"><div style="display:flex;justify-content:space-between;align-items:center"><b><i class="fas fa-tower-broadcast"></i> Radio (SDR gateway · P25/TETRA/DMR)</b><button class="btn btn-sm btn-primary" onclick="radioKey()"><i class="fas fa-key"></i> Gateway key</button></div><div class="radio-log">${DATA.radio.map((x) => `<div><span class="time">${TM(x.ts)}</span><span class="${x.alert ? "alert" : ""}">${esc(x.text)}${x.freq ? " [" + esc(x.freq) + (x.talkgroup ? " TG " + esc(x.talkgroup) : "") + "]" : ""}</span>${x.has_audio ? ` <a href="#" style="color:#68d391" onclick="playRadio(${x.id});return false">▶ play</a>` : ""}</div>`).join("")}</div><div class="search-bar" style="margin:10px 0 0;background:#0d1117;border:0"><input id="rx" placeholder="Log transmission" style="background:#1a202c;color:#fff;border-color:#2d3748"><button class="btn btn-primary btn-sm" onclick="A.post('radio',{text:$('#rx').value})">PTT / Send</button></div></div>`;
 function roomDash(rid, ro) {
+  CR = ro ? rid : null;
   const all = DATA.obs.filter((o) => o.room_id == rid),
     l = flt(all);
   MS = {
@@ -490,8 +633,59 @@ function roomDash(rid, ro) {
 // ---------- contacts / data / audit ----------
 function tabContacts() {
   const room = A.role == "room";
-  return `<div class="dashboard-grid"><div class="card"><div class="card-header"><h3><i class="fas fa-address-book"></i> Add Contact</h3></div><input class="fi" id="cn" placeholder="Name"><input class="fi" id="cp" placeholder="Phone"><select class="fi" id="cr"><option>Emergency</option><option>Security</option><option>Supervisor</option></select><select class="fi" id="cv"><option>State</option><option>LGA</option><option>Ward</option><option>PU</option></select><select class="fi" id="cs">${CFG.states.map((s) => `<option ${room && s == ME.room.state ? "selected" : ""}>${s}</option>`).join("")}</select><input class="fi" id="cl" placeholder="LGA / Ward / PU (as applicable)"><button class="btn btn-primary" onclick="addCon()"><i class="fas fa-plus"></i> Add Contact</button>${room ? "" : '<div class="muted" style="margin-top:8px">Command contacts propagate to every Situation Room in that state.</div>'}</div>
+  return `<div class="dashboard-grid"><div class="card"><div class="card-header"><h3><i class="fas fa-address-book"></i> Add Contact</h3></div><input class="fi" id="cn" placeholder="Name"><input class="fi" id="cp" placeholder="Phone"><select class="fi" id="cr"><option>Emergency</option><option>Security</option><option>Supervisor</option></select><select class="fi" id="cv"><option>State</option><option>LGA</option><option>Ward</option><option>PU</option></select><select class="fi" id="cs">${CFG.states.map((s) => `<option ${room && s == ME.room.state ? "selected" : ""}>${s}</option>`).join("")}</select><input class="fi" id="cl" placeholder="LGA / Ward / PU (as applicable)"><button class="btn btn-primary" onclick="addCon()"><i class="fas fa-plus"></i> Add Contact</button><div class="card-header" style="margin-top:18px"><h3><i class="fas fa-file-import"></i> Bulk upload (Excel .xlsx / CSV / TXT)</h3><button class="btn btn-outline btn-sm" onclick="conTpl()"><i class="fas fa-download"></i> Template</button></div><div class="muted" style="margin-bottom:8px">Columns: <span class="mono">name, phone, role, level, state, lga, ward, pu</span> (role: Emergency / Security / Supervisor; level: State / LGA / Ward / PU). First row = headers. Up to 20,000 rows.</div><input class="fi" type="file" id="cf" accept=".xlsx,.csv,.txt"><button class="btn btn-success" onclick="bulkCon()"><i class="fas fa-upload"></i> Import contacts</button><div id="cfo" class="muted"></div>${room ? "" : '<div class="muted" style="margin-top:8px">Command contacts propagate to every Situation Room in that state.</div>'}</div>
 <div class="card"><div class="card-header"><h3><i class="fas fa-phone"></i> Contacts (${DATA.con.length})</h3></div><div class="contact-list">${DATA.con.map((c) => `<div class="contact-item"><div class="info"><div class="role">${esc(c.name)} · ${esc(c.role)}</div><div class="loc">${esc(c.state)} · ${esc(c.loc)} · ${esc(c.level)} level${c.room_id ? "" : " · Command"}</div></div><div><a class="btn btn-success btn-sm" href="tel:${esc(c.phone)}"><i class="fas fa-phone"></i> ${esc(c.phone)}</a> ${A.role == "cmd" || c.room_id ? `<button class="btn btn-sm btn-outline" onclick="A.del('contacts/${c.id}')"><i class="fas fa-trash"></i></button>` : ""}</div></div>`).join("") || '<div class="muted">No contacts.</div>'}</div></div></div>`;
+}
+function parseCSV(t) {
+  const first = t.split(/\r?\n/)[0],
+    d = [",", "\t", ";", "|"].sort((a, b) => first.split(b).length - first.split(a).length)[0],
+    rows = [];
+  let row = [],
+    f = "",
+    qq = false;
+  for (let i = 0; i < t.length; i++) {
+    const c = t[i];
+    if (qq) {
+      if (c == '"' && t[i + 1] == '"') (f += '"'), i++;
+      else if (c == '"') qq = false;
+      else f += c;
+    } else if (c == '"') qq = true;
+    else if (c == d) row.push(f), (f = "");
+    else if (c == "\n" || c == "\r") {
+      if (c == "\r" && t[i + 1] == "\n") i++;
+      row.push(f), rows.push(row), (row = []), (f = "");
+    } else f += c;
+  }
+  if (f || row.length) row.push(f), rows.push(row);
+  const h = (rows.shift() || []).map((x) => x.trim().toLowerCase());
+  return rows.filter((r) => r.some((x) => x.trim())).map((r) => Object.fromEntries(h.map((k, i) => [k, (r[i] || "").trim()])));
+}
+async function bulkCon() {
+  const f = $("#cf").files[0];
+  if (!f) return toast("Choose a file first.");
+  try {
+    let rows;
+    if (/\.xls$/i.test(f.name)) return toast("⚠️ Old .xls format: open it in Excel and Save As .xlsx or .csv.");
+    if (/\.xlsx$/i.test(f.name)) {
+      if (!window.readXlsxFile) return toast("⚠️ Excel reader not loaded. Save as CSV instead.");
+      const a = await readXlsxFile(f),
+        h = (a.shift() || []).map((x) => String(x ?? "").trim().toLowerCase());
+      rows = a.filter((r) => r.some((x) => x != null && x !== "")).map((r) => Object.fromEntries(h.map((k, i) => [k, String(r[i] ?? "")])));
+    } else rows = parseCSV(await f.text());
+    rows = rows.map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [String(k).trim().toLowerCase().replace(/[^a-z]/g, ""), String(v).trim()])));
+    rows = rows.map((r) => ({ ...r, phone: r.phone || r.phonenumber || r.mobile || r.tel, name: r.name || r.fullname || r.contactname }));
+    const r = await A.post("contacts/bulk", { rows });
+    $("#cfo").innerHTML = `✅ ${r.added} added · ${r.rejected} rejected${r.errors.length ? "<br>" + r.errors.map((e) => "Row " + e.row + ": " + esc(e.error)).join("<br>") : ""}`;
+    toast("✅ " + r.added + " contacts imported.");
+  } catch (e) {
+    toast("⚠️ " + e.message);
+  }
+}
+function conTpl() {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob(["name,phone,role,level,state,lga,ward,pu\nDPO Dala,+2348030000001,Security,LGA,Kano,Dala,,\nWard Supervisor,+2348030000002,Supervisor,Ward,Kano,Dala,Gwammaja,\n"], { type: "text/csv" }));
+  a.download = "contacts_template.csv";
+  a.click();
 }
 async function addCon() {
   const g = (i) => $("#" + i).value.trim();
@@ -534,6 +728,10 @@ async function loadAll() {
       ME.su ? g("tenants") : [],
     ]);
   else [DATA.radio, DATA.clips] = await Promise.all([g("radio"), g("clips")]);
+  if (A.role == "cmd") DATA.totp = await A.get("totp").catch(() => ({}));
+  if (A.role == "cmd" && ME.su) DATA.bk = await A.get("backups").catch(() => null);
+  if ($("#collSlot")) loadColl();
+  if (TAB == "res" && PUS_) loadPus();
   if (A.role == "room")
     A.get("me")
       .then((m) => (ME = m))
@@ -558,6 +756,7 @@ function render() {
   };
   if (!tb[TAB]) TAB = Object.keys(tb)[0];
   MS = null;
+  CR = null;
   $("#app").innerHTML =
     `<div class="mockup-container"><div class="topbar"><div class="brand"><i class="fas fa-shield-halved"></i><h1>${esc(CFG?.appName || "My Collation Center")} <span>· ${A.role == "cmd" ? esc(ME.tenant || "Command Center") : esc(ME.room.name)}</span></h1></div><div class="topbar-actions"><span class="tag"><i class="fas fa-circle" style="color:#38a169"></i> ${A.role == "cmd" ? DATA.rooms.filter((r) => r.status == "active").length + " rooms active" : "Activated by Command Center " + DT(ME.room.activated_at)}</span><span class="tag"><i class="fas fa-user-shield"></i> ${A.role == "cmd" ? esc(ME.name || "Command") : esc(ME.room.operator || ME.id)}</span><button class="btn btn-outline" onclick="logout()"><i class="fas fa-right-from-bracket"></i> Logout</button></div></div><div class="nav-tabs">${Object.entries(
       tb,
@@ -570,21 +769,24 @@ function render() {
   const s = $("#vslot");
   if (s && SEL) s.appendChild(vv);
   mapMount();
+  if ($("#collSlot") && DATA.collKey !== collKey()) loadColl();
 }
 function loginView(role) {
   $("#app").innerHTML =
-    `<div class="mockup-container"><div class="topbar"><div class="brand"><i class="fas fa-shield-halved"></i><h1>${esc(CFG?.appName || "My Collation Center")} <span>· ${role == "cmd" ? "Command Center" : "Situation Room"}</span></h1></div></div><div class="card" style="max-width:420px"><input class="fi" id="li" placeholder="${role == "room" ? "Room ID (e.g. SR-KN-AB3)" : "Operator name (e.g. admin)"}" value="${role == "room" ? "" : "admin"}"><input class="fi" id="lp" type="password" placeholder="${role == "cmd" ? "Command passcode" : "Room passcode"}" onkeydown="event.key=='Enter'&&doLogin()"><button class="btn btn-primary" onclick="doLogin()">Enter</button><div class="muted" style="margin-top:8px">${role == "cmd" ? "First login: operator <b>admin</b>; the passcode is printed once in the server console (or set COMMAND_PASSCODE)." : "Your room must be activated by Command Center. Passcode is issued by Command Center."}</div></div></div>`;
+    `<div class="mockup-container"><div class="topbar"><div class="brand"><i class="fas fa-shield-halved"></i><h1>${esc(CFG?.appName || "My Collation Center")} <span>· ${role == "cmd" ? "Command Center" : "Situation Room"}</span></h1></div></div><div class="card" style="max-width:420px"><input class="fi" id="li" placeholder="${role == "room" ? "Room ID (e.g. SR-KN-AB3)" : "Operator name (e.g. admin)"}" value="${role == "room" ? "" : "admin"}"><input class="fi" id="lp" type="password" placeholder="${role == "cmd" ? "Command passcode" : "Room passcode"}" onkeydown="event.key=='Enter'&&doLogin()">${role == "cmd" ? `<input class="fi" id="lo" inputmode="numeric" maxlength="6" placeholder="6-digit code (only if two-step login is on)" onkeydown="event.key=='Enter'&&doLogin()">` : ""}<button class="btn btn-primary" onclick="doLogin()">Enter</button><div class="muted" style="margin-top:8px">${role == "cmd" ? "First login: operator <b>admin</b>; the passcode is printed once in the server console (or set COMMAND_PASSCODE)." : "Your room must be activated by Command Center. Passcode is issued by Command Center."}</div></div></div>`;
 }
 async function doLogin() {
   try {
     const r = await A.post("login/" + (A.role == "cmd" ? "command" : "room"), {
       id: $("#li")?.value.trim(),
       pass: $("#lp").value,
+      otp: $("#lo")?.value.trim(),
     });
     sessionStorage.setItem("t", r.token);
     start(A.role, TABS);
   } catch (e) {
     toast("❌ " + e.message);
+    if (/6-digit/.test(e.message)) $("#lo")?.focus();
   }
 }
 async function start(role, tabsFn) {
@@ -604,5 +806,5 @@ async function start(role, tabsFn) {
   }
   A.ws((m) => (m.type == "changed" ? debLoad() : A.sig(m)));
   await loadAll();
-  setInterval(() => A.tok && loadAll(), 15000);
+  setInterval(() => A.tok && document.visibilityState == "visible" && loadAll(), 10000);
 }

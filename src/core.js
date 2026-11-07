@@ -179,6 +179,7 @@ ${[
   )
   .join("\n")}`;
 const app = express();
+app.use(require("compression")());
 app.set("trust proxy", 1);
 app.use(
   express.json({

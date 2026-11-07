@@ -8,10 +8,10 @@
     <title>Observer · My Collation Center</title>
     <link
       rel="stylesheet"
-      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
+      href="/vendor/fa/css/all.min.css"
     />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      href="/shared/fonts.css"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/shared/style.css" />
@@ -19,8 +19,8 @@
   <body>
     <div class="toast" id="toast"></div>
     <div id="app"></div>
-    <script src="https://cdn.jsdelivr.net/npm/livekit-client@2.23.0/dist/livekit-client.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/vosk-browser@0.0.8/dist/vosk.js"></script>
+    <script src="/vendor/livekit-client.umd.js"></script>
+    <script src="/vendor/vosk.js"></script>
     <script src="/shared/ui.js"></script>
     <script>
       let lk = null,
@@ -41,7 +41,64 @@
         lng = null,
         taps = [],
         lastN = -1,
-        busy = false;
+        busy = false,
+        LIVEREQ = false,
+        EC = [],
+        BQ = 0;
+      // device id: random, kept on this phone; the server locks the observer code to it on first login
+      const DEV = (() => {
+        let d = localStorage.getItem("dev");
+        if (!d) {
+          d = Array.from(crypto.getRandomValues(new Uint8Array(24)), (b) => b.toString(16).padStart(2, "0")).join("");
+          localStorage.setItem("dev", d);
+        }
+        return d;
+      })();
+      // ---------- offline queue for photos / video clips (IndexedDB survives app restarts) ----------
+      const idb = () =>
+        new Promise((ok, no) => {
+          const r = indexedDB.open("mcc", 1);
+          r.onupgradeneeded = () => r.result.createObjectStore("q", { keyPath: "id", autoIncrement: true });
+          r.onsuccess = () => ok(r.result);
+          r.onerror = () => no(r.error);
+        });
+      const tx = async (mode, f) => {
+        const d = await idb();
+        return new Promise((ok, no) => {
+          const t = d.transaction("q", mode),
+            r = f(t.objectStore("q"));
+          t.oncomplete = () => ok(r?.result);
+          t.onerror = () => no(t.error);
+        });
+      };
+      async function sendBlob(path, blob, type) {
+        try {
+          if (!navigator.onLine) throw new TypeError("offline");
+          return await A.f(path, { method: "POST", body: blob, headers: { "Content-Type": type } });
+        } catch (e) {
+          if (!(e instanceof TypeError)) throw e;
+          await tx("readwrite", (st) => st.add({ path, type, blob, code: OB.code }));
+          BQ++;
+          toast("📴 Offline — saved on the phone, will upload automatically.");
+          render();
+          return { queued: 1 };
+        }
+      }
+      async function flushBlobs() {
+        const all = (await tx("readonly", (st) => st.getAll()).catch(() => [])) || [];
+        BQ = all.filter((x) => x.code == OB.code).length;
+        for (const x of all) {
+          if (x.code != OB.code || !navigator.onLine) continue;
+          try {
+            await A.f(x.path, { method: "POST", body: x.blob, headers: { "Content-Type": x.type } });
+            await tx("readwrite", (st) => st.delete(x.id));
+            BQ--;
+          } catch (e) {
+            if (e instanceof TypeError) break;
+            await tx("readwrite", (st) => st.delete(x.id)); // rejected by the server: drop
+          }
+        }
+      }
       const pv = document.createElement("video");
       pv.muted = true;
       pv.playsInline = true;
@@ -109,11 +166,13 @@
       // ---------- login ----------
       function loginV() {
         $("#app").innerHTML =
-          `<div class="observer-layout"><div class="phone-mockup"><div class="notch"></div><div class="phone-screen"><div class="app-header"><span>Observer</span></div><div class="app-content" style="justify-content:center"><div style="text-align:center;font-size:22px;font-weight:700">${esc(CFG?.appName || "My Collation Center")}</div><div style="text-align:center;color:#a0aec0;font-size:13px">Enter the code from your Situation Room</div><input id="lc" class="dk" style="flex:none;padding:14px" placeholder="OBS-0456-PU012-KN" autocapitalize="characters" onkeydown="event.key=='Enter'&&go()"><button class="btn btn-primary" style="padding:14px" onclick="go()">Login</button></div></div></div></div>`;
+          `<div class="observer-layout"><div class="phone-mockup"><div class="notch"></div><div class="phone-screen"><div class="app-header"><span>Observer</span></div><div class="app-content" style="justify-content:center"><div style="text-align:center;font-size:22px;font-weight:700">${esc(CFG?.appName || "My Collation Center")}</div><div style="text-align:center;color:#a0aec0;font-size:13px">Enter the code from your Situation Room</div><input id="lc" class="dk" style="flex:none;padding:14px" placeholder="OBS-0456-PU012-KN" autocapitalize="characters" value="${esc(localStorage.getItem("lastcode") || "")}"><input id="lpin" class="dk" style="flex:none;padding:14px" type="password" inputmode="numeric" maxlength="8" placeholder="PIN (4-8 digits)" onkeydown="event.key=='Enter'&&go()"><div style="color:#a0aec0;font-size:12px">First login on this phone: choose a PIN and remember it. The code then works only on this phone, with this PIN.</div><button class="btn btn-primary" style="padding:14px" onclick="go()">Login</button></div></div></div></div>`;
       }
       async function go() {
         try {
-          const r = await A.post("login/observer", { code: $("#lc").value });
+          const code = $("#lc").value.trim().toUpperCase();
+          const r = await A.post("login/observer", { code, pin: $("#lpin").value.trim(), device: DEV });
+          localStorage.setItem("lastcode", code);
           sessionStorage.setItem("t", r.token);
           boot();
         } catch (e) {
@@ -130,12 +189,13 @@
             dynacast: true,
             publishDefaults: {
               simulcast: true,
-              videoSimulcastLayers: [VideoPresets.h360, VideoPresets.h180],
-              videoEncoding: { maxBitrate: 900000, maxFramerate: 15 },
+              // 360p main layer + 180p fallback: watchable on 3G, ~0.5 Mbps at most (WhatsApp-call class)
+              videoSimulcastLayers: [VideoPresets.h180],
+              videoEncoding: { maxBitrate: 500000, maxFramerate: 15 },
             },
             videoCaptureDefaults: {
               facingMode: "environment",
-              resolution: { width: 1280, height: 720, frameRate: 15 },
+              resolution: { width: 640, height: 360, frameRate: 15 },
             },
           });
           lk.on(RoomEvent.TrackSubscribed, (t) => {
@@ -211,11 +271,7 @@
         const s = segs.splice(0);
         for (const b of s) {
           try {
-            await A.f("clip?kind=" + encodeURIComponent(kind), {
-              method: "POST",
-              body: b,
-              headers: { "Content-Type": "video/webm" },
-            });
+            await sendBlob("clip?kind=" + encodeURIComponent(kind), b, "video/webm");
           } catch (e) {
             toast("⚠️ Clip upload failed: " + e.message);
           }
@@ -270,7 +326,14 @@
       // ---------- GPS + heartbeat ----------
       function hb() {
         if (navigator.onLine)
-          A.post("observer/heartbeat", { lat, lng, streaming, pend: OB ? Q().length : 0 }).catch(() => {});
+          A.post("observer/heartbeat", { lat, lng, streaming, pend: OB ? Q().length + BQ : 0 })
+            .then((r) => {
+              if (r.live != LIVEREQ) {
+                LIVEREQ = r.live;
+                render();
+              }
+            })
+            .catch(() => {});
       }
       // ---------- voice tally ----------
       async function setTally(p, v, src) {
@@ -286,11 +349,15 @@
           toast("⚠️ " + e.message);
         }
       }
+      // spoken names for codes that are too short / ambiguous to say as letters
+      const ALIAS = { A: ["ACCORD"], BP: ["BOOT PARTY", "BOOT"], YP: ["YOUTH PARTY"], LP: ["LABOUR", "LABOR"], ZLP: ["ZENITH"], AA: ["ACTION ALLIANCE"] };
       function parseVoice(s) {
         s = w2n(s).toUpperCase();
         $("#tr") && ($("#tr").textContent = "“" + s + "”");
         CFG.parties.forEach((p) => {
-          const re = new RegExp("\\b" + p.split("").join("\\s?") + "\\b\\D{0,8}?(\\d[\\d, ]*)", "gi");
+          const alt = [...(p.length > 1 ? [p.split("").join("\\s?")] : []), ...(ALIAS[p] || [])];
+          if (!alt.length) return;
+          const re = new RegExp("\\b(?:" + alt.join("|") + ")\\b\\D{0,8}?(\\d[\\d, ]*)", "gi");
           let m;
           while ((m = re.exec(s)))
             if (!TL[p]) setTally(p, parseInt(m[1].replace(/\D/g, ""), 10), "voice");
@@ -520,6 +587,29 @@
           load();
         }
       }
+      // ---------- EC8A photo: resized to max 2400 px JPEG before upload (readable, ~0.5-1.5 MB) ----------
+      async function ec8a(inp) {
+        const f = inp.files[0];
+        inp.value = "";
+        if (!f) return;
+        try {
+          const img = await createImageBitmap(f),
+            k = Math.min(1, 2400 / Math.max(img.width, img.height)),
+            c = document.createElement("canvas");
+          c.width = Math.round(img.width * k);
+          c.height = Math.round(img.height * k);
+          c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+          const b = await new Promise((r) => c.toBlob(r, "image/jpeg", 0.88));
+          const r = await sendBlob("observer/ec8a", b, "image/jpeg");
+          if (!r.queued) {
+            toast("✅ EC8A photo uploaded.");
+            EC = await A.get("observer/ec8a").catch(() => EC);
+          }
+          render();
+        } catch (e) {
+          toast("⚠️ " + e.message);
+        }
+      }
       // ---------- incident ----------
       async function reportInc(silent) {
         const note = $("#note")?.value || "";
@@ -563,8 +653,8 @@
             .join("") ||
           '<div style="color:#a0aec0;font-size:13px">No tallies yet. Tap Mic and say e.g. “APC 251”.</div>';
         $("#app").innerHTML =
-          `<div class="observer-layout"><div class="phone-mockup"><div class="notch"></div><div class="phone-screen"><div class="app-header"><span style="color:${on ? "#68d391" : "#fc8181"}"><i class="fas fa-circle" style="font-size:8px"></i> ${!on ? "Offline" : pend ? "Syncing " + pend : "Online"}</span><span class="mono">${esc(OB.code)}</span><span><i class="fas fa-location-dot"></i> PU ${esc(OB.pu)}</span></div>
-<div class="app-content"><div style="font-size:12px;color:#a0aec0"><i class="fas fa-link"></i> Bound to <b style="color:#fff">${esc(OB.room_name || OB.room_id)}</b> · ${esc(OB.lga)} LGA · ${esc(OB.ward)}</div>
+          `<div class="observer-layout"><div class="phone-mockup"><div class="notch"></div><div class="phone-screen"><div class="app-header"><span style="color:${on ? "#68d391" : "#fc8181"}"><i class="fas fa-circle" style="font-size:8px"></i> ${!on ? "Offline" + (pend + BQ ? " · " + (pend + BQ) + " queued" : "") : pend + BQ ? "Syncing " + (pend + BQ) : "Online"}</span><span class="mono">${esc(OB.code)}</span><span><i class="fas fa-location-dot"></i> PU ${esc(OB.pu)}</span></div>
+<div class="app-content">${LIVEREQ && !streaming ? `<button class="btn-report" style="background:#e53e3e" onclick="startStream()"><i class="fas fa-video"></i> Situation Room requests LIVE VIDEO — tap to start</button>` : ""}<div style="font-size:12px;color:#a0aec0"><i class="fas fa-link"></i> Bound to <b style="color:#fff">${esc(OB.room_name || OB.room_id)}</b> · ${esc(OB.lga)} LGA · ${esc(OB.ward)}</div>
 <div class="camera-view" id="camSlot"><div class="camera-overlay"><span style="color:${streaming ? "#fc8181" : "#fff"}">${streaming ? "● LIVE Streaming" : "Ready"}</span><span>${lat != null ? lat.toFixed(4) + ", " + lng.toFixed(4) : "GPS…"}</span></div><div class="stream-controls">${streaming ? '<button style="background:#e53e3e;color:#fff" onclick="stopStream()">⏹ Stop Stream</button>' : '<button style="background:#38a169;color:#fff" onclick="startStream()">▶ Start Stream</button>'}</div></div>
 <div class="tally-panel"><div class="tally-title"><span>VOICE TALLY · tap a row to correct once</span><button class="btn btn-sm ${mic ? "btn-danger" : "btn-primary"}" onclick="toggleMic()"><i class="fas fa-microphone"></i> ${mic ? (fbMode ? "Listening (server)" : "Listening") : "Mic"}</button></div>${rows}<div id="tr" style="margin-top:8px;color:#a0aec0;font-size:12px"></div>
 ${CORR ? `<div class="correction-controls"><input id="mi" type="number" inputmode="numeric" value="${t[CORR].v}"><button style="background:#38a169" onclick="saveCorr()">✓</button><button style="background:#e53e3e" onclick="CORR=null;render()">✕</button></div>` : ""}
@@ -574,6 +664,7 @@ ${CORR ? `<div class="correction-controls"><input id="mi" type="number" inputmod
             .join(
               "",
             )}</select><input id="mv" class="dk" type="number" inputmode="numeric" placeholder="votes"><button style="background:#2b6cb0" onclick="manualAdd()">+</button></div></div>
+<div class="tally-panel"><div class="tally-title"><span>EC8A RESULT SHEET</span><span>${EC.length ? '<span style="color:#68d391">' + EC.length + " uploaded ✓</span>" : '<span style="color:#fc8181">not uploaded</span>'}</span></div><label class="btn btn-primary" style="width:100%;padding:12px;cursor:pointer"><i class="fas fa-camera"></i> Photograph EC8A<input type="file" accept="image/*" capture="environment" style="display:none" onchange="ec8a(this)"></label><div style="color:#a0aec0;font-size:11px;margin-top:6px">Whole sheet, flat, in good light. Your room uses it to settle any difference between the two observers.</div></div>
 <div class="tally-panel"><div class="tally-title">MESSAGES FROM ROOM / COMMAND</div>${
             ms
               .filter((m) => !m.cmd)
@@ -609,7 +700,24 @@ ${CORR ? `<div class="correction-controls"><input id="mi" type="number" inputmod
           return loginV();
         }
         A.role = "obs";
-        A.ws((m) => (m.type == "changed" ? load() : A.sig(m)));
+        A.ws((m) => {
+          if (m.type == "changed") return load();
+          if (m.type == "live") {
+            LIVEREQ = m.on;
+            if (m.on && !streaming) {
+              toast("📡 Situation Room requested live video.");
+              navigator.vibrate?.([200, 100, 200]);
+              startStream();
+            } else if (!m.on && streaming) stopStream();
+            return render();
+          }
+          if (m.type == "reset") {
+            toast("This code was moved to another phone.");
+            return setTimeout(logout, 1500);
+          }
+          A.sig(m);
+        });
+        EC = await A.get("observer/ec8a").catch(() => []);
         if (navigator.geolocation)
           navigator.geolocation.watchPosition(
             (p) => {
@@ -622,6 +730,7 @@ ${CORR ? `<div class="correction-controls"><input id="mi" type="number" inputmod
         setInterval(() => {
           hb();
           flush();
+          flushBlobs().catch(() => {});
         }, 5000);
         setInterval(() => {
           const c = $("#clk");

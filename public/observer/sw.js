@@ -1,3 +1,3 @@
-const C='obs-v1';self.addEventListener('install',()=>self.skipWaiting());self.addEventListener('activate',e=>e.waitUntil(clients.claim()));
+const C='obs-v2';self.addEventListener('install',()=>self.skipWaiting());self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!=C).map(x=>caches.delete(x)))).then(()=>clients.claim())));
 self.addEventListener('fetch',e=>{const u=new URL(e.request.url);if(e.request.method!='GET'||u.pathname.startsWith('/api/')||u.pathname=='/ws'||u.pathname.startsWith('/lk')||e.request.headers.has('range')||/basemaps|arcgis|openstreetmap/.test(u.host))return;
 e.respondWith(caches.open(C).then(async c=>{const hit=await c.match(e.request);if(hit&&u.pathname.startsWith('/models/'))return hit;const net=fetch(e.request).then(r=>{if(r.ok)c.put(e.request,r.clone());return r}).catch(()=>hit);return hit||net}))});

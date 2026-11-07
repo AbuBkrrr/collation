@@ -203,8 +203,8 @@ app.get(
   "/api/totp",
   auth("cmd"),
   h(async (req, res) => {
-    const [c] = await q("select totp is not null on from cmd_users where lower(name)=lower($1)", [req.u.name]);
-    res.json({ on: !!c?.on });
+    const [c] = await q("select (totp is not null) enabled from cmd_users where lower(name)=lower($1)", [req.u.name]);
+    res.json({ on: !!c?.enabled });
   }),
 );
 app.post(

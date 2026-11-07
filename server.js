@@ -1,7 +1,23 @@
 const {qsys,qx,RLS,hit,LK,als,express,jwt,bcrypt,http,https,fs,path,crypto,E,PORT,SECRET,DATA,PARTIES,STATES,pool,q,rnd,abbr,aud,h,SCHEMA,app,rate,auth,su,own,mine,tnOf,cfgTenant,roomScope,getS,setS,appName,clean,bus} = require("./src/core");
 const { loadLocations, SEED } = require("./src/locations");
 for (const r of ["auth", "tenants", "rooms", "observers", "ops", "messages", "contacts", "data", "settings", "media", "radio", "locations", "results", "admin"]) require("./src/routes/" + r);
-app.use(express.static(path.join(__dirname, "public"), { extensions: ["html"] }));
+// front-end libraries are served from this PC (no CDN dependency on election day)
+const V = { maxAge: "7d", immutable: true };
+for (const [u, d] of [
+  ["/vendor/leaflet", "leaflet/dist"],
+  ["/vendor/fa", "@fortawesome/fontawesome-free"],
+  ["/vendor/fonts/inter", "@fontsource/inter"],
+  ["/vendor/fonts/jetbrains-mono", "@fontsource/jetbrains-mono"],
+])
+  app.use(u, express.static(path.join(__dirname, "node_modules", d), V));
+for (const [u, f] of [
+  ["/vendor/livekit-client.umd.js", "livekit-client/dist/livekit-client.umd.js"],
+  ["/vendor/vosk.js", "vosk-browser/dist/vosk.js"],
+  ["/vendor/qrcode.js", "qrcode-generator/qrcode.js"],
+  ["/vendor/read-excel-file.min.js", "read-excel-file/bundle/read-excel-file.min.js"],
+])
+  app.get(u, (req, res) => res.sendFile(path.join(__dirname, "node_modules", f), V));
+app.use(express.static(path.join(__dirname, "public"), { extensions: ["html"], maxAge: "5m" }));
 app.get("/", (req, res) =>
   res.send(
     '<link rel=stylesheet href=/shared/style.css><body style="padding:40px"><div class=card style="max-width:420px;gap:12px"><h3>My Collation Center</h3><a class="btn btn-primary" href=/command/>Command Center</a><a class="btn btn-primary" href=/room/>Situation Room</a><a class="btn btn-primary" href=/observer/>Observer App</a></div>',
