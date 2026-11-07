@@ -1,4 +1,4 @@
-const {LK,als,express,jwt,bcrypt,http,https,fs,path,crypto,E,PORT,SECRET,DATA,PARTIES,STATES,pool,q,rnd,abbr,aud,h,SCHEMA,app,rate,auth,su,own,mine,tnOf,cfgTenant,roomScope,getS,setS,appName,clean,bus} = require("./core");
+const {qsys,qx,RLS,hit,LK,als,express,jwt,bcrypt,http,https,fs,path,crypto,E,PORT,SECRET,DATA,PARTIES,STATES,pool,q,rnd,abbr,aud,h,SCHEMA,app,rate,auth,su,own,mine,tnOf,cfgTenant,roomScope,getS,setS,appName,clean,bus} = require("./core");
 const { WebSocketServer } = require("ws");
 const server =
   E.HTTPS_KEY && E.HTTPS_CERT && fs.existsSync(E.HTTPS_KEY)
@@ -6,10 +6,27 @@ const server =
     : http.createServer(app);
 const wss = new WebSocketServer({ server, path: "/ws" });
 bus.notify = notify;
+// "changed" pushes are coalesced: at most one per Command Center every 1.5 s, however many writes happen
+const pend = new Map();
 function notify(tn) {
-  wss.clients.forEach(
-    (c) => c.readyState == 1 && (!tn || !c.tn || c.tn == tn) && c.send('{"type":"changed"}'),
+  const k = tn || "*";
+  if (pend.has(k)) return;
+  pend.set(
+    k,
+    setTimeout(() => {
+      pend.delete(k);
+      wss.clients.forEach(
+        (c) => c.readyState == 1 && (!tn || !c.tn || c.tn == tn) && c.send('{"type":"changed"}'),
+      );
+    }, 1500),
   );
+}
+// direct push to matching sockets (e.g. "start live video" to one observer phone); returns how many got it
+function push(pred, m) {
+  let n = 0;
+  const s = JSON.stringify(m);
+  wss.clients.forEach((c) => c.readyState == 1 && c.u && pred(c) && (c.send(s), n++));
+  return n;
 }
 wss.on("connection", (ws, req) => {
   let u;
@@ -18,6 +35,7 @@ wss.on("connection", (ws, req) => {
   } catch {
     return ws.close();
   }
+  if (u.role == "obs" && !u.dh) return ws.close();
   ws.u = u;
   ws.id = crypto.randomUUID();
   tnOf(u)
@@ -59,4 +77,4 @@ wss.on("connection", (ws, req) => {
     } catch (e) {}
   });
 });
-module.exports = { server, wss };
+module.exports = { server, wss, push };

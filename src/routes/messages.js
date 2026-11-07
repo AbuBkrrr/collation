@@ -1,15 +1,17 @@
-const {LK,als,express,jwt,bcrypt,http,https,fs,path,crypto,E,PORT,SECRET,DATA,PARTIES,STATES,pool,q,rnd,abbr,aud,h,SCHEMA,app,rate,auth,su,own,mine,tnOf,cfgTenant,roomScope,getS,setS,appName,clean,bus} = require("../core");
+const {qsys,qx,RLS,hit,LK,als,express,jwt,bcrypt,http,https,fs,path,crypto,E,PORT,SECRET,DATA,PARTIES,STATES,pool,q,rnd,abbr,aud,h,SCHEMA,app,rate,auth,su,own,mine,tnOf,cfgTenant,roomScope,getS,setS,appName,clean,bus} = require("../core");
 // ---- messages (isolation enforced here) ----
 app.get(
   "/api/messages",
   auth(),
   h(async (req, res) => {
     const u = req.u;
-    let codes = [];
-    if (u.role == "room")
-      codes = (await q("select code from observers where room_id=$1", [u.id])).map((x) => x.code);
+    const codes = await roomCodes(u);
     const all = await q("select * from messages where tenant=$1 order by id desc limit 300", [u.tn]);
-    const ok = (m) =>
+    res.json(all.filter((m) => canSee(u, m, codes)));
+  }),
+);
+// who may see a message (also used to authorise acknowledgements)
+const canSee = (u, m, codes) =>
       u.role == "cmd"
         ? m.from_id == "CMD" || m.to_scope == "CMD"
         : u.role == "room"
@@ -24,9 +26,8 @@ app.get(
             m.to_scope == "obs:" + u.id ||
             m.to_scope == "robs:" + u.room ||
             m.from_id == u.id;
-    res.json(all.filter(ok));
-  }),
-);
+const roomCodes = async (u) =>
+  u.role == "room" ? (await q("select code from observers where room_id=$1", [u.id])).map((x) => x.code) : [];
 async function tenantTarget(u, to) {
   if (to == "ALL_ROOMS" || to == "ALL_OBS") return true;
   if (to.startsWith("room:")) return mine(u, to.slice(5));
@@ -78,6 +79,8 @@ app.post(
   "/api/messages/:id/ack",
   auth(),
   h(async (req, res) => {
+    const [m] = await q("select * from messages where id=$1 and tenant=$2", [+req.params.id || 0, req.u.tn]);
+    if (!m || !canSee(req.u, m, await roomCodes(req.u))) return res.sendStatus(404);
     await q("update messages set ack=ack||to_jsonb($2::text) where id=$1 and not ack @> to_jsonb($2::text)", [
       req.params.id,
       req.u.id,

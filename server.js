@@ -1,6 +1,6 @@
-const {LK,als,express,jwt,bcrypt,http,https,fs,path,crypto,E,PORT,SECRET,DATA,PARTIES,STATES,pool,q,rnd,abbr,aud,h,SCHEMA,app,rate,auth,su,own,mine,tnOf,cfgTenant,roomScope,getS,setS,appName,clean,bus} = require("./src/core");
+const {qsys,qx,RLS,hit,LK,als,express,jwt,bcrypt,http,https,fs,path,crypto,E,PORT,SECRET,DATA,PARTIES,STATES,pool,q,rnd,abbr,aud,h,SCHEMA,app,rate,auth,su,own,mine,tnOf,cfgTenant,roomScope,getS,setS,appName,clean,bus} = require("./src/core");
 const { loadLocations, SEED } = require("./src/locations");
-for (const r of ["auth", "tenants", "rooms", "observers", "ops", "messages", "contacts", "data", "settings", "media", "radio", "locations"]) require("./src/routes/" + r);
+for (const r of ["auth", "tenants", "rooms", "observers", "ops", "messages", "contacts", "data", "settings", "media", "radio", "locations", "results", "admin"]) require("./src/routes/" + r);
 app.use(express.static(path.join(__dirname, "public"), { extensions: ["html"] }));
 app.get("/", (req, res) =>
   res.send(
@@ -10,6 +10,7 @@ app.get("/", (req, res) =>
 const { server } = require("./src/ws");
 (async () => {
   await pool.query(SCHEMA);
+  await pool.query(RLS);
   await q("insert into tenants values('CC-MAIN','Main Command Center') on conflict do nothing");
   for (const t of ["rooms", "contacts", "messages", "audit", "cmd_users"])
     await q("update " + t + " set tenant='CC-MAIN' where tenant is null");
@@ -17,7 +18,7 @@ const { server } = require("./src/ws");
     "update cmd_users set su=true where id=(select min(id) from cmd_users) and not exists(select 1 from cmd_users where su)",
   );
   const [lc] = await q("select count(*)::int n from locations");
-  if (!lc.n && fs.existsSync(SEED)) {
+  if (!lc.n && E.SEED_LOCATIONS != "0" && fs.existsSync(SEED)) {
     try {
       console.log(
         "Loaded bundled location dataset:",

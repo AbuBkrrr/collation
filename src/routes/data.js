@@ -1,4 +1,4 @@
-const {LK,als,express,jwt,bcrypt,http,https,fs,path,crypto,E,PORT,SECRET,DATA,PARTIES,STATES,pool,q,rnd,abbr,aud,h,SCHEMA,app,rate,auth,su,own,mine,tnOf,cfgTenant,roomScope,getS,setS,appName,clean,bus} = require("../core");
+const {qsys,qx,RLS,hit,LK,als,express,jwt,bcrypt,http,https,fs,path,crypto,E,PORT,SECRET,DATA,PARTIES,STATES,pool,q,rnd,abbr,aud,h,SCHEMA,app,rate,auth,su,own,mine,tnOf,cfgTenant,roomScope,getS,setS,appName,clean,bus} = require("../core");
 // ---- export & clips ----
 app.get(
   "/api/export/:fmt",
@@ -9,7 +9,9 @@ app.get(
     if (rid && u.role == "cmd" && !(await mine(u, rid))) return res.sendStatus(403);
     const rs = rid ? "room_id=$1" : "room_id in (select id from rooms where tenant=$1)",
       pa = [rid || u.tn],
-      o = await q("select * from observers where " + rs + " order by code", pa),
+      o = (await q("select * from observers where " + rs + " order by code", pa)).map(
+        ({ device_hash, pin_hash, ...x }) => x,
+      ),
       t = await q("select * from tallies where code=any($1)", [o.map((x) => x.code)]),
       inc = await q("select * from incidents where " + rs, pa);
     aud(u.id, "Exported " + req.params.fmt);
@@ -76,8 +78,8 @@ app.get(
 );
 app.post(
   "/api/clip",
-  auth("obs"),
   express.raw({ type: "*/*", limit: "300mb" }),
+  auth("obs"),
   h(async (req, res) => {
     if (!req.body?.length) return res.status(400).json({ error: "Empty" });
     const d = path.join(DATA, "clips", req.u.room);
@@ -125,8 +127,8 @@ app.get(
 );
 app.post(
   "/api/stt",
-  auth("obs"),
   express.raw({ type: "*/*", limit: "10mb" }),
+  auth("obs"),
   h(async (req, res) => {
     if (!E.STT_URL) return res.status(501).json({ error: "No offline STT service configured (STT_URL)" });
     const r = await fetch(E.STT_URL, {

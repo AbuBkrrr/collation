@@ -1,4 +1,4 @@
-const {LK,als,express,jwt,bcrypt,http,https,fs,path,crypto,E,PORT,SECRET,DATA,PARTIES,STATES,pool,q,rnd,abbr,aud,h,SCHEMA,app,rate,auth,su,own,mine,tnOf,cfgTenant,roomScope,getS,setS,appName,clean,bus} = require("../core");
+const {qsys,qx,RLS,hit,LK,als,express,jwt,bcrypt,http,https,fs,path,crypto,E,PORT,SECRET,DATA,PARTIES,STATES,pool,q,rnd,abbr,aud,h,SCHEMA,app,rate,auth,su,own,mine,tnOf,cfgTenant,roomScope,getS,setS,appName,clean,bus} = require("../core");
 // ---- observers ----
 app.get(
   "/api/obs",
@@ -11,7 +11,12 @@ app.get(
           : u.role == "obs"
             ? ["code=$1", u.id]
             : ["room_id in (select id from rooms where tenant=$1)", u.tn];
-    const o = await q("select * from observers where " + w[0] + " order by code", [w[1]]);
+    const o = await q(
+      "select code,room_id,name,state,lga,ward,pu,pu_name,reg,active,lat,lng,seen,streaming,pend,live_req,(device_hash is not null) bound from observers where " +
+        w[0] +
+        " order by code",
+      [w[1]],
+    );
     const t = await q("select code,party,v,edits,hist from tallies where code=any($1)", [
         o.map((x) => x.code),
       ]),
@@ -64,12 +69,16 @@ app.post(
   "/api/observer/heartbeat",
   auth("obs"),
   h(async (req, res) => {
-    const b = req.body;
-    await q(
-      "update observers set seen=now(),lat=coalesce($2,lat),lng=coalesce($3,lng),streaming=coalesce($4,streaming),pend=coalesce($5,pend) where code=$1",
-      [req.u.id, b.lat ?? null, b.lng ?? null, b.streaming ?? null, Number.isInteger(b.pend) ? b.pend : null],
+    const b = req.body,
+      lat = Number.isFinite(b.lat) && Math.abs(b.lat) <= 90 ? b.lat : null,
+      lng = Number.isFinite(b.lng) && Math.abs(b.lng) <= 180 ? b.lng : null;
+    const [r] = await q(
+      "update observers o set seen=now(),lat=coalesce($2,o.lat),lng=coalesce($3,o.lng),streaming=coalesce($4,o.streaming),pend=coalesce($5,o.pend) from (select streaming old from observers where code=$1) p where o.code=$1 returning p.old,o.streaming,o.live_req",
+      [req.u.id, lat, lng, typeof b.streaming == "boolean" ? b.streaming : null, Number.isInteger(b.pend) ? b.pend : null],
     );
-    res.json({ ok: 1 });
+    // only a change of streaming state is pushed at once; GPS moves reach dashboards on their 10 s refresh
+    if (r && !!r.old != !!r.streaming) bus.notify(req.u.tn);
+    res.json({ ok: 1, live: !!r?.live_req });
   }),
 );
 app.post(
@@ -79,7 +88,7 @@ app.post(
     const { party, v } = req.body;
     if (!PARTIES.includes(party) || !Number.isInteger(v) || v < 0)
       return res.status(400).json({ error: "Invalid party or number" });
-    const r = await pool.query(
+    const r = await qx(
       "insert into tallies(code,party,v,hist) values($1,$2,$3,$4) on conflict do nothing",
       [req.u.id, party, v, JSON.stringify([{ v, ts: Date.now(), src: req.body.src || "manual" }])],
     );
@@ -99,7 +108,7 @@ app.post(
     const { party, v } = req.body;
     if (!PARTIES.includes(party) || !Number.isInteger(v) || v < 0)
       return res.status(400).json({ error: "Invalid party or number" });
-    const r = await pool.query(
+    const r = await qx(
       "update tallies set v=$3,edits=1,hist=hist||$4::jsonb where code=$1 and party=$2 and edits=0",
       [req.u.id, party, v, JSON.stringify([{ v, ts: Date.now(), src: "edit" }])],
     );

@@ -19,9 +19,21 @@ const express = require("express"),
   { WebSocketServer } = require("ws");
 const E = process.env,
   PORT = +E.PORT || 3000,
-  SECRET = E.JWT_SECRET || crypto.randomBytes(32).toString("hex"),
   DATA = path.resolve(E.DATA_DIR || "./data");
-const PARTIES = (E.PARTIES || "APC,PDP,NNPP,ADC,NDC,LP,SDP,APGA,YPP,AA").split(",").map((s) => s.trim());
+fs.mkdirSync(DATA, { recursive: true });
+// JWT secret: env, else a random secret persisted on this PC so restarts keep sessions valid
+const SECRET =
+  E.JWT_SECRET ||
+  (() => {
+    const f = path.join(DATA, ".jwt_secret");
+    if (!fs.existsSync(f)) fs.writeFileSync(f, crypto.randomBytes(48).toString("hex"), { mode: 0o600 });
+    return fs.readFileSync(f, "utf8").trim();
+  })();
+// Mockup order first, then the other registered parties. Override with PARTIES=... (comma separated codes).
+const PARTIES = (E.PARTIES || "APC,PDP,NNPP,ADC,NDC,LP,SDP,APGA,YPP,AA,A,AAC,ADP,APM,APP,BP,NRM,PRP,YP,ZLP")
+  .split(",")
+  .map((s) => s.trim().toUpperCase())
+  .filter(Boolean);
 const STATES = [
   "Abia",
   "Adamawa",
@@ -64,12 +76,41 @@ const STATES = [
 const pool = new Pool({
   connectionString: E.DATABASE_URL || "postgres://postgres:postgres@localhost:5432/collation",
 });
-const q = (s, a) => pool.query(s, a).then((r) => r.rows);
+// qsys: system query (owner role, bypasses row-level security) - logins, boot, platform admin, jobs.
+const qsys = (s, a) => pool.query(s, a).then((r) => r.rows);
+// qx/q: inside an authenticated request the query runs as the restricted role "collation_app" with the
+// caller's Command Center (and room) set, so PostgreSQL row-level security enforces isolation as a
+// second wall behind the per-route checks.
+async function qx(s, a) {
+  const st = als.getStore();
+  if (!st || !st.tn) return pool.query(s, a);
+  const c = await pool.connect();
+  try {
+    await c.query(
+      "begin; set local role collation_app; select set_config('app.tenant'," +
+        c.escapeLiteral(st.tn) +
+        ",true),set_config('app.room'," +
+        c.escapeLiteral(st.room || "") +
+        ",true)",
+    );
+    const r = await c.query(s, a);
+    await c.query("commit");
+    return r;
+  } catch (e) {
+    await c.query("rollback").catch(() => {});
+    throw e;
+  } finally {
+    c.release();
+  }
+}
+const q = (s, a) => qx(s, a).then((r) => r.rows);
 const rnd = (n) => {
   const c = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   return Array.from(crypto.randomBytes(n), (b) => c[b % c.length]).join("");
 };
-const abbr = (s) => (s == "FCT" ? "FC" : String(s).slice(0, 2).toUpperCase());
+// INEC two-letter state codes (unique: Kano KN, Kaduna KD, Katsina KT, Kebbi KB ...)
+const SCODE = { Abia: "AB", Adamawa: "AD", "Akwa Ibom": "AK", Anambra: "AN", Bauchi: "BA", Bayelsa: "BY", Benue: "BE", Borno: "BO", "Cross River": "CR", Delta: "DE", Ebonyi: "EB", Edo: "ED", Ekiti: "EK", Enugu: "EN", FCT: "FC", Gombe: "GO", Imo: "IM", Jigawa: "JI", Kaduna: "KD", Kano: "KN", Katsina: "KT", Kebbi: "KB", Kogi: "KG", Kwara: "KW", Lagos: "LA", Nasarawa: "NA", Niger: "NI", Ogun: "OG", Ondo: "ON", Osun: "OS", Oyo: "OY", Plateau: "PL", Rivers: "RI", Sokoto: "SO", Taraba: "TA", Yobe: "YO", Zamfara: "ZA" };
+const abbr = (s) => SCODE[s] || String(s).slice(0, 2).toUpperCase();
 const aud = (w, a, tn) => {
   const st = als.getStore();
   return q(
@@ -101,7 +142,42 @@ create table if not exists radio_keys(room_id text primary key,key_hash text);
 create table if not exists tenants(id text primary key,name text,active bool default true);
 alter table cmd_users add column if not exists tenant text,add column if not exists su bool default false;
 alter table rooms add column if not exists tenant text;alter table contacts add column if not exists tenant text;alter table messages add column if not exists tenant text;alter table audit add column if not exists tenant text;
-alter table radio add column if not exists freq text,add column if not exists talkgroup text,add column if not exists unit text,add column if not exists audio_path text,add column if not exists code text;`;
+alter table radio add column if not exists freq text,add column if not exists talkgroup text,add column if not exists unit text,add column if not exists audio_path text,add column if not exists code text;
+alter table observers add column if not exists device_hash text,add column if not exists pin_hash text,add column if not exists live_req bool default false;
+alter table cmd_users add column if not exists totp text,add column if not exists totp_pending text;
+create table if not exists pu_results(room_id text references rooms(id),state text,lga text,ward text,pu text,final jsonb,by_who text,note text,src text,ts timestamptz default now(),primary key(room_id,state,lga,ward,pu));
+create table if not exists ec8a(id serial primary key,code text,room_id text,state text,lga text,ward text,pu text,path text,sha256 text,ts timestamptz default now());
+create index if not exists obs_room_i on observers(room_id);create index if not exists obs_pu_i on observers(state,lga,ward,pu);
+create index if not exists tal_code_i on tallies(code);create index if not exists inc_room_i on incidents(room_id);
+create index if not exists clip_room_i on clips(room_id);create index if not exists radio_room_i on radio(room_id,id);
+create index if not exists msg_tn_i on messages(tenant,id);create index if not exists aud_tn_i on audit(tenant,id);
+create index if not exists ec8a_room_i on ec8a(room_id,state,lga,ward,pu);`;
+// Row-level security: applied to the restricted role used inside authenticated requests.
+const RLS = `do $$ begin if not exists(select 1 from pg_roles where rolname='collation_app') then create role collation_app nologin; end if; end $$;
+do $$ begin execute format('grant collation_app to %I', current_user); exception when others then null; end $$;
+grant usage on schema public to collation_app;
+grant select,insert,update,delete on all tables in schema public to collation_app;
+grant usage,select on all sequences in schema public to collation_app;
+create or replace function app_tn() returns text language sql stable as $f$ select nullif(current_setting('app.tenant',true),'') $f$;
+create or replace function app_room() returns text language sql stable as $f$ select nullif(current_setting('app.room',true),'') $f$;
+${[
+  ["rooms", "tenant=app_tn() and (app_room() is null or id=app_room())"],
+  ["tenants", "id=app_tn()"],
+  ["cmd_users", "tenant=app_tn()"],
+  ["messages", "tenant=app_tn()"],
+  ["audit", "tenant=app_tn()"],
+  ["contacts", "tenant=app_tn() and (app_room() is null or room_id is null or room_id=app_room())"],
+  ...["observers", "incidents", "units", "clips", "radio", "radio_keys", "pu_results", "ec8a"].map((t) => [
+    t,
+    "room_id in (select id from rooms)",
+  ]),
+  ["tallies", "code in (select code from observers)"],
+]
+  .map(
+    ([t, p]) =>
+      `alter table ${t} enable row level security;drop policy if exists iso on ${t};create policy iso on ${t} to collation_app using (${p}) with check (${p});`,
+  )
+  .join("\n")}`;
 const app = express();
 app.set("trust proxy", 1);
 app.use(
@@ -112,13 +188,42 @@ app.use(
   }),
 );
 app.use(express.text({ type: "text/csv", limit: "100mb" }));
-const lim = {};
+app.use((req, res, next) => {
+  res.set({
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "SAMEORIGIN",
+    "Referrer-Policy": "same-origin",
+    "Permissions-Policy": "camera=(self), microphone=(self), geolocation=(self)",
+  });
+  if (req.path.startsWith("/api/")) res.set("Cache-Control", "no-store");
+  next();
+});
+// Login rate limit: 15 attempts/min per IP and 8 per account (code / operator / room id).
+const lim = new Map();
+const hit = (k, max, win) => {
+  const n = Date.now(),
+    a = (lim.get(k) || []).filter((t) => n - t < win);
+  a.push(n);
+  lim.set(k, a);
+  return a.length > max;
+};
+setInterval(() => {
+  const n = Date.now();
+  for (const [k, a] of lim) if (!a.length || n - a[a.length - 1] > 900000) lim.delete(k);
+}, 60000).unref();
+// counts FAILED attempts only, so many observers behind one mobile-carrier IP are not blocked
 const rate = (req, res, next) => {
-  const k = req.ip,
-    n = Date.now();
-  lim[k] = (lim[k] || []).filter((t) => n - t < 60000);
-  if (lim[k].length >= 15) return res.status(429).json({ error: "Too many attempts, wait a minute" });
-  lim[k].push(n);
+  const acct = String(req.body?.code || req.body?.user || req.body?.id || "").toUpperCase(),
+    n = Date.now(),
+    cnt = (k, win) => (lim.get(k) || []).filter((t) => n - t < win).length;
+  if (cnt("ip:" + req.ip, 60000) >= 60 || (acct && cnt("ac:" + acct, 300000) >= 8))
+    return res.status(429).json({ error: "Too many failed attempts, wait a few minutes" });
+  res.on("finish", () => {
+    if (res.statusCode == 401 || res.statusCode == 403) {
+      hit("ip:" + req.ip, 1e9, 60000);
+      if (acct) hit("ac:" + acct, 1e9, 300000);
+    }
+  });
   next();
 };
 const auth =
@@ -138,23 +243,27 @@ const auth =
           return res.status(401).json({ error: "Operator or Command Center disabled" });
         u.tn = c.tenant;
         u.su = c.su;
-        als.enterWith({ name: u.name, tn: u.tn });
       }
       if (u.role == "room") {
         const [r] = await q("update rooms set last_seen=now() where id=$1 returning status,tenant", [u.id]);
         if (!r || r.status != "active") return res.status(401).json({ error: "Room not active" });
         u.tn = r.tenant;
+        u.room = u.id;
       }
       if (u.role == "obs") {
         const [o] = await q(
-          "select o.active,r.status,r.tenant from observers o join rooms r on r.id=o.room_id where code=$1",
+          "select o.active,o.device_hash,o.room_id,r.status,r.tenant from observers o join rooms r on r.id=o.room_id where code=$1",
           [u.id],
         );
         if (!o || !o.active || o.status != "active") return res.status(401).json({ error: "Access revoked" });
+        // a device reset by the room ends sessions on the old phone
+        if (!u.dh || !o.device_hash || !o.device_hash.startsWith(u.dh))
+          return res.status(401).json({ error: "Session ended: this code was reset to another device" });
+        u.room = o.room_id;
         u.tn = o.tenant;
       }
       req.u = u;
-      next();
+      als.run({ name: u.name, tn: u.tn, room: u.role == "cmd" ? "" : u.room }, () => next());
     } catch (e) {
       res.status(401).json({ error: "Unauthorized" });
     }
@@ -182,9 +291,14 @@ const tnOf = async (u) =>
       : (
           await q("select r.tenant from observers o join rooms r on r.id=o.room_id where o.code=$1", [u.id])
         )[0]?.tenant;
-const bus = { notify: () => {} };
+const bus = { notify: () => {}, dirty: () => {} };
 app.use("/api", (req, res, next) => {
-  if (req.method != "GET") res.on("finish", () => bus.notify(req.u && req.u.tn));
+  if (req.method != "GET" && !req.path.startsWith("/observer/heartbeat"))
+    res.on("finish", () => {
+      if (res.statusCode >= 400) return;
+      bus.dirty();
+      bus.notify(req.u && req.u.tn);
+    });
   next();
 });
 const cfgTenant = async (req) => {
@@ -205,4 +319,4 @@ const getS = async (k) => (await q("select v from settings where k=$1", [k]))[0]
 const appName = async (tn) =>
   (tn && (await getS("app_name:" + tn))) || (await getS("app_name")) || E.APP_NAME || "My Collation Center";
 const clean = (v) => (v == null ? null : String(v).slice(0, 40));
-module.exports = {LK,als,express,jwt,bcrypt,http,https,fs,path,crypto,E,PORT,SECRET,DATA,PARTIES,STATES,pool,q,rnd,abbr,aud,h,SCHEMA,app,rate,auth,su,own,mine,tnOf,cfgTenant,roomScope,getS,setS,appName,clean,bus};
+module.exports = {qsys,qx,RLS,hit,LK,als,express,jwt,bcrypt,http,https,fs,path,crypto,E,PORT,SECRET,DATA,PARTIES,STATES,pool,q,rnd,abbr,aud,h,SCHEMA,app,rate,auth,su,own,mine,tnOf,cfgTenant,roomScope,getS,setS,appName,clean,bus};

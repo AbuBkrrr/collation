@@ -1,10 +1,10 @@
-const {LK,als,express,jwt,bcrypt,http,https,fs,path,crypto,E,PORT,SECRET,DATA,PARTIES,STATES,pool,q,rnd,abbr,aud,h,SCHEMA,app,rate,auth,su,own,mine,tnOf,cfgTenant,roomScope,getS,setS,appName,clean,bus} = require("../core");
+const {qsys,qx,RLS,hit,LK,als,express,jwt,bcrypt,http,https,fs,path,crypto,E,PORT,SECRET,DATA,PARTIES,STATES,pool,q,rnd,abbr,aud,h,SCHEMA,app,rate,auth,su,own,mine,tnOf,cfgTenant,roomScope,getS,setS,appName,clean,bus} = require("../core");
 const { loadLocations, SEED } = require("../locations");
 app.post(
   "/api/locations/import",
+  express.json({ limit: "100mb" }),
   auth("cmd"),
   su,
-  express.json({ limit: "100mb" }),
   h(async (req, res) => {
     let d = req.body;
     if (typeof d == "string") {
