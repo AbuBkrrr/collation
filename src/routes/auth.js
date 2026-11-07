@@ -36,6 +36,7 @@ app.get(
       loc: c.n > 0,
       appName: await appName(await cfgTenant(req)),
       lk: !!(LK && E.LIVEKIT_URL && E.LIVEKIT_API_KEY),
+      apk: fs.existsSync(path.join(DATA, "observer.apk")),
     });
   }),
 );

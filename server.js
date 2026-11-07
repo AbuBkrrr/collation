@@ -18,11 +18,14 @@ for (const [u, f] of [
 ])
   app.get(u, (req, res) => res.sendFile(path.join(__dirname, "node_modules", f), V));
 app.use(express.static(path.join(__dirname, "public"), { extensions: ["html"], maxAge: "5m" }));
-app.get("/", (req, res) =>
-  res.send(
-    '<link rel=stylesheet href=/shared/style.css><body style="padding:40px"><div class=card style="max-width:420px;gap:12px"><h3>My Collation Center</h3><a class="btn btn-primary" href=/command/>Command Center</a><a class="btn btn-primary" href=/room/>Situation Room</a><a class="btn btn-primary" href=/observer/>Observer App</a></div>',
-  ),
-);
+// Observer Android APK: drop the built file at DATA_DIR/observer.apk on the server; it then appears on the
+// landing page with a download button and a QR code.
+const APK = path.join(DATA, "observer.apk");
+app.get("/download/app", (req, res) => {
+  if (!fs.existsSync(APK)) return res.status(404).type("text").send("The Android app has not been uploaded yet.");
+  res.download(APK, "collation-observer.apk");
+});
+app.get("/", (req, res) => res.sendFile(path.join(__dirname, "public", "landing", "index.html")));
 const { server } = require("./src/ws");
 (async () => {
   await pool.query(SCHEMA);
