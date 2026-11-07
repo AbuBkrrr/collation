@@ -1,1 +1,10 @@
-{"appId":"org.collation.observer","appName":"Collation Observer","webDir":"www","server":{"url":"https://YOUR-DOMAIN/observer/","cleartext":false}}
+{
+  "appId": "ng.com.mysituationroom.observer",
+  "appName": "Collation Observer",
+  "webDir": "www",
+  "android": { "allowMixedContent": false },
+  "server": { "androidScheme": "https" },
+  "plugins": {
+    "SplashScreen": { "launchShowDuration": 800, "backgroundColor": "#1a365d", "showSpinner": false }
+  }
+}

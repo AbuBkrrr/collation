@@ -269,3 +269,27 @@ test("one room per LGA, LGA scope, EC8A voter figures, CORS for the Android app,
   assert.equal(evil.headers.get("access-control-allow-origin"), null);
   assert.deepEqual(ok(await api("maps", { tok })), [], "no Google/Mapbox key configured");
 });
+
+test("radio: Rdio Scanner / trunk-recorder call upload reaches the room", async () => {
+  const key = ok(await api("radio/key", { tok: S.RA.tok, body: {} })).key;
+  // trunk-recorder posts multipart/form-data; build one by hand
+  const boundary = "----mcc" + Math.random().toString(16).slice(2);
+  const parts = [];
+  const field = (n, v) => parts.push(`--${boundary}\r\nContent-Disposition: form-data; name="${n}"\r\n\r\n${v}\r\n`);
+  field("key", key); field("talkgroup", "101"); field("talkgroupLabel", "Kano Command"); field("frequency", "154350000"); field("source", "4021"); field("dateTime", String(Math.floor(Date.now() / 1000)));
+  const audio = Buffer.from("fake-m4a-bytes-".repeat(50));
+  const head = Buffer.from(parts.join("") + `--${boundary}\r\nContent-Disposition: form-data; name="audio"; filename="call.m4a"\r\nContent-Type: audio/mp4\r\n\r\n`);
+  const tail = Buffer.from(`\r\n--${boundary}--\r\n`);
+  const r = await fetch(BASE + "/api/call-upload", { method: "POST", headers: { "Content-Type": "multipart/form-data; boundary=" + boundary }, body: Buffer.concat([head, audio, tail]) });
+  assert.equal(r.status, 200);
+  assert.match(await r.text(), /imported/i);
+  // bad key is refused in the Rdio Scanner way (plain text)
+  const bad = await fetch(BASE + "/api/call-upload", { method: "POST", headers: { "Content-Type": "multipart/form-data; boundary=" + boundary }, body: Buffer.concat([Buffer.from(parts.join("").replace(key, "GW.SR-XX-NOPE.AAAA") + `--${boundary}--\r\n`)]) });
+  assert.equal(bad.status, 401);
+  // the call shows up in this room's radio log, with audio, and not in another room
+  const log = ok(await api("radio", { tok: S.RA.tok }));
+  const call = log.find((x) => x.talkgroup == "101");
+  assert.ok(call && call.has_audio && /Kano Command/.test(call.text) && call.freq == "154.3500");
+  const other = ok(await api("radio", { tok: S.RA2.tok }));
+  assert.equal(other.some((x) => x.talkgroup == "101"), false, "radio stays within the room");
+});

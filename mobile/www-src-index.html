@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1a365d"><title>Collation Observer</title>
+<link rel="stylesheet" href="/vendor/fa/css/all.min.css"><link rel="stylesheet" href="/shared/fonts.css">
+<style>
+*{box-sizing:border-box;margin:0;font-family:Inter,system-ui,sans-serif}
+body{background:#1a202c;color:#fff;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+.box{width:100%;max-width:420px;display:flex;flex-direction:column;gap:14px}
+.logo{text-align:center;margin-bottom:6px}.logo i{font-size:44px;color:#2b6cb0}
+h1{font-size:22px;text-align:center}.muted{color:#a0aec0;font-size:13px;text-align:center;line-height:1.5}
+input{padding:15px;border-radius:12px;border:1px solid #2d3748;background:#2d3748;color:#fff;font-size:16px;outline:none}
+button{padding:15px;border-radius:12px;border:none;background:#2b6cb0;color:#fff;font-weight:700;font-size:16px}
+button:disabled{opacity:.5}.err{color:#fc8181;font-size:13px;text-align:center;min-height:18px}
+</style>
+</head>
+<body>
+<div class="box">
+<div class="logo"><i class="fas fa-shield-halved"></i></div>
+<h1 id="title">Collation Observer</h1>
+<p class="muted">Enter the Command Center web address your Situation Room gave you. You set this once.</p>
+<input id="url" type="url" inputmode="url" autocapitalize="none" autocomplete="url" placeholder="https://collation.example.com">
+<button id="go" onclick="save()">Connect</button>
+<div class="err" id="err"></div>
+<p class="muted" id="cur"></p>
+</div>
+<script>
+var saved=localStorage.getItem('mcc_base')||'';
+if(saved && location.search.indexOf('setup')<0){location.replace('app.html');}
+if(saved){document.getElementById('url').value=saved;document.getElementById('cur').textContent='Saved: '+saved;}
+function norm(u){u=u.trim().replace(/\/+$/,'');if(u&&!/^https?:\/\//i.test(u))u='https://'+u;return u;}
+async function save(){
+  var u=norm(document.getElementById('url').value),e=document.getElementById('err'),b=document.getElementById('go');
+  if(!u){e.textContent='Enter the address.';return;}
+  b.disabled=true;e.textContent='Checking…';
+  try{
+    var c=new AbortController(),t=setTimeout(()=>c.abort(),12000);
+    var r=await fetch(u+'/api/config',{signal:c.signal});clearTimeout(t);
+    if(!r.ok)throw new Error('Server answered '+r.status);
+    var j=await r.json();if(!j.parties)throw new Error('That is not a Collation Center server.');
+    localStorage.setItem('mcc_base',u);
+    document.title=j.appName||'Observer';
+    location.replace('app.html');
+  }catch(err){
+    e.textContent=err.name=='AbortError'?'No response. Check the address and your internet.':err.message;
+    b.disabled=false;
+  }
+}
+// if already saved and reachable, the user still taps Connect (lets them change servers). Auto-skip if launched before:
+</script>
+</body>
+</html>

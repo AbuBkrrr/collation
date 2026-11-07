@@ -27,7 +27,7 @@ Command Center ──activates──▶ Situation Rooms ──issue codes──�
   - Issue observer codes (two per PU), lock and reset observers' phones, revoke codes.
   - Live map of its observers' GPS positions.
   - On-demand live video with talkback, share and restream.
-  - Real-time collation, plus the **Results & EC8A** review where the supervisor settles disagreements.
+  - Real-time collation (parties ordered by votes collated, highest first, updating live), plus the **Results & EC8A** review where the supervisor settles disagreements.
   - Dispatch queue with nearest free unit, radio log and recordings, messages, contacts, downloads.
 - **Observer app:**
   - Start or stop the camera; it also starts by itself when the room asks for live video.
@@ -49,7 +49,7 @@ Command Center ──activates──▶ Situation Rooms ──issue codes──�
 | **disputed** | the observers disagree on a figure | **no**, until resolved |
 | resolved | the room supervisor saved the final figures, with a note | yes |
 
-**Verified** means the PU is matched or resolved **and** has an EC8A photo on file. Each photo's SHA-256 hash is kept as tamper evidence. Totals above the registered voters are flagged.
+**Verified** means the PU is matched or resolved **and** has an EC8A photo on file. Each photo's SHA-256 hash is kept as tamper evidence. The observer also reads the **voters on register** and **accredited (BVAS)** figures off the EC8A; votes above the accredited figure (over-voting, which voids a PU under INEC rules) are flagged, as is a disagreement between the two observers on those figures.
 
 ## Security model
 
@@ -92,12 +92,12 @@ On a local network only (testing), give the LAN IP. Caddy then uses its own cert
 1. Install on the Command Center PC (above). Open `https://<domain>/command/` and log in as `admin` with the printed passcode.
 2. App Settings: change the passcode, **turn on two-step login**, add one operator per person (each with two-step login).
 3. Locations: the bundled list has all 44 Kano LGAs, their wards and PU names. If you have INEC's PU register (with real PU codes and registered voters), import it as CSV: `state,lga,ward,pu,reg,name`.
-4. Create the Situation Rooms (for example one per LGA or federal constituency) and give each operator their room ID and passcode.
+4. Create the Situation Rooms. For Kano, use **Situation Rooms → One room per LGA → Kano** to create all 44 at once; the passcodes download as a CSV. Each room can only issue observer codes inside its own LGA. Give each operator their room ID and passcode.
 5. Contacts: upload the security, emergency and supervisor numbers in bulk (download the template in Contacts).
 
 **Three days before**
 6. Each room issues **two codes per PU**, sets the registered voters, and hands each observer their code.
-7. Each observer opens `https://<domain>/observer/`, installs the app ("Add to Home screen"), logs in once and chooses a PIN. The code is now locked to that phone. Ask observers to allow camera, microphone and location, and to open the app once on Wi-Fi so the offline speech model downloads (about 40 MB).
+7. Each observer installs the **Android app** (`mobile/`, see `mobile/README.md`) or opens `https://<domain>/observer/` and adds it to the home screen, enters the Command Center address once, logs in and chooses a PIN. The code is now locked to that phone. Ask observers to allow camera, microphone and location, and to open the app once on Wi-Fi so the offline speech model downloads (about 40 MB).
 8. Rehearse: each room requests live video from a few observers, observers send test tallies and an EC8A photo, and a supervisor resolves a test dispute. Then revoke the test codes or reset their tallies by issuing fresh codes.
 9. Command: App Settings → Backups → **Back up now**, then copy `./data/app` to an external drive. Automatic backups run every 30 minutes (`BACKUP_MINS`).
 
@@ -131,6 +131,9 @@ Downloads: Situation Room → Data Download (its own room), and Command Center �
 | `COMMAND_PASSCODE` | random | first `admin` passcode, printed once |
 | `LIVEKIT_*`, `TURN_*` | set by `start.sh` | video server and relay |
 | `STT_URL` | – | optional server speech-to-text (phones use on-device Vosk when offline) |
+| `GOOGLE_MAPS_KEY` | – | Google Map Tiles API key: adds Google satellite/roadmap layers |
+| `MAPBOX_TOKEN` | – | Mapbox token: adds Mapbox satellite/streets layers |
+| `CORS_ORIGINS` | – | extra web origins allowed to call the API (the Android app's `https://localhost` is always allowed) |
 | `PG_POOL` | 40 | database connections |
 
 ## Several Command Centers on one server
@@ -143,19 +146,19 @@ A phone cannot receive VHF/UHF radio. A listening post near the area does:
 1. Hardware: RTL-SDR dongle, an antenna for the band (VHF 136–174 MHz, UHF 400–470 MHz), and a mini PC or Raspberry Pi.
 2. In the Situation Room, open Radio → **Gateway key** (shown once).
 3. Analog voice: `radio-gateway/analog-record.sh <freq MHz> <dir>` (one dongle per channel). For many channels on one dongle, use trunk-recorder's analog conventional mode. Digital trunked systems need a decoder such as GopherTrunk or SDRTrunk.
-4. Run `SERVER=https://<domain> GATEWAY_KEY=GW.xxx WATCH_DIR=<dir> node radio-gateway/forward.js`. Each transmission then appears in the room's Radio panel with a play button.
+4. Send calls to the room. Easiest: point **trunk-recorder**'s `rdioscanner_uploader` plugin straight at `https://<domain>/api/call-upload` with the gateway key — the same format OpenMHz and Broadcastify Calls use. Or run the folder-watcher `node radio-gateway/forward.js`. Each transmission appears in the room's Radio panel with a play button.
 
-Encrypted channels (TETRA and others) cannot be decoded, only detected. Tools can also POST text events to `/api/radio/ingest` (header `X-Gateway-Key`). Observers' frequency reports go to `/api/observer/spectrum`.
+Full setup and hardware list: `radio-gateway/README.md`. Encrypted channels (TETRA and others) cannot be decoded, only detected.
 
 ## Android app
 
-The observer web app installs from the browser and works offline (service worker plus IndexedDB queue). For a store APK, `mobile/` holds a Capacitor shell:
+`mobile/` is a complete Capacitor Android project. It bundles the observer UI (instant start, offline) and points at your Command Center, with background GPS (foreground service), keep-awake while streaming, and camera/mic/location/notification permissions wired up. Build it in Android Studio:
 
 ```bash
-cd mobile && npm i @capacitor/core @capacitor/cli @capacitor/android && npx cap add android
+cd mobile && npm install && npm run sync && npm run open
 ```
 
-Then set your domain in `capacitor.config.json`, add the CAMERA, RECORD_AUDIO and ACCESS_FINE_LOCATION permissions, and build in Android Studio.
+Full steps, including a signed release APK, are in `mobile/README.md`. Observers who cannot install the app use `https://<domain>/observer/` in Chrome.
 
 ## Development and tests
 
@@ -186,7 +189,7 @@ Code map:
 
 ## Known limits
 
-- Map tiles (dark map and satellite) come from CARTO and Esri over the internet. Everything else is served from this PC.
-- Google Street View links open Google Maps. They show historical imagery, not live. The live view is the observer's camera.
+- Map imagery: the free Esri satellite and CARTO dark layers work with no key. For sharper city imagery, set `GOOGLE_MAPS_KEY` (Google Map Tiles API) or `MAPBOX_TOKEN`; those layers and the **Pinpoint** button (zoom to an observer at street level) then appear. This is the same class of imagery ride-hailing apps use — Google, Mapbox and Maxar/Esri. Tiles are fetched from those providers over the internet; everything else is served from this PC. Each observer marker also shows a GPS-accuracy ring.
+- A live street-level view of a polling unit is the observer's **camera**. Satellite and Street View imagery everywhere is months or years old; no provider offers live aerial video.
 - Live video runs on one LiveKit server. Plan about 100–150 simultaneous 360p streams per 4-core server, and add LiveKit nodes for more.
 - Background GPS while the app is closed needs the native Android build. The web app sends GPS while it is open.

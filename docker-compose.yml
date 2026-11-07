@@ -46,6 +46,9 @@ services:
       LIVEKIT_API_KEY: ${LK_KEY}
       LIVEKIT_API_SECRET: ${LK_SECRET}
       STT_URL: ${STT_URL:-}
+      GOOGLE_MAPS_KEY: ${GOOGLE_MAPS_KEY:-}
+      MAPBOX_TOKEN: ${MAPBOX_TOKEN:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
       APP_NAME: ${APP_NAME:-My Collation Center}
       DATA_DIR: /data
       BACKUP_MINS: ${BACKUP_MINS:-30}
