@@ -1,85 +1,608 @@
-const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';'),TM=t=>new Date(t).toLocaleTimeString(),DT=t=>new Date(t).toLocaleString();
-let tt;function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('show'),3500)}
-const A={pcs:{},get tok(){return sessionStorage.getItem('t')},
-async f(p,o={}){const h={...(A.tok?{Authorization:'Bearer '+A.tok}:{}),...(o.headers||{})};let b=o.body;if(b&&typeof b=='object'&&!(b instanceof Blob)&&!(b instanceof ArrayBuffer)){b=JSON.stringify(b);h['Content-Type']='application/json'}
-const r=await fetch('/api/'+p,{method:o.method||(b?'POST':'GET'),headers:h,body:b});const j=(r.headers.get('content-type')||'').includes('json')?await r.json():await r.blob();
-if(r.status==401&&A.tok&&!p.startsWith('login')){logout();throw new Error('Session ended')}if(!r.ok)throw new Error(j.error||r.statusText);return j},
-get:p=>A.f(p),post:(p,b)=>A.f(p,{method:'POST',body:b||{}}),del:p=>A.f(p,{method:'DELETE'}),
-async dl(p,name){const b=await A.get(p);const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click()},
-ws(on){const open=()=>{const s=new WebSocket((location.protocol=='https:'?'wss://':'ws://')+location.host+'/ws?t='+A.tok);A.sock=s;s.onmessage=e=>on(JSON.parse(e.data));s.onclose=()=>A.tok&&setTimeout(open,2000)};open()},
-send(o){A.sock?.readyState==1&&A.sock.send(JSON.stringify(o))},
-async sig(m){const pc=A.pcs[m.code];if(m.type=='answer'&&pc)await pc.setRemoteDescription(m.sdp);if(m.type=='ice'&&pc)pc.addIceCandidate(m.cand).catch(()=>{});if(m.type=='nostream')toast('Observer is not streaming right now.')},
-async lkWatch(code,el,talk){const{Room,RoomEvent,Track}=LivekitClient,r=await A.post('livekit/token',{code}),room=new Room({adaptiveStream:true,dynacast:true});room.on(RoomEvent.TrackSubscribed,t=>{if(t.kind==Track.Kind.Video||t.kind==Track.Kind.Audio)t.attach(el)});await room.connect(r.url,r.token);A.pcs[code]={close:()=>room.disconnect()};if(talk)await room.localParticipant.setMicrophoneEnabled(true).catch(()=>toast('Microphone unavailable — listen only'));if(!room.remoteParticipants.size)toast('Connected — waiting for the observer to start streaming…')},
-async watch(code,el,talk){A.unwatch(code);if(CFG.lk)return A.lkWatch(code,el,talk);const pc=new RTCPeerConnection({iceServers:CFG.ice});let mic=null;pc.addTransceiver('video',{direction:'recvonly'});
-if(talk){try{mic=await navigator.mediaDevices.getUserMedia({audio:true});mic.getTracks().forEach(t=>pc.addTrack(t,mic));pc.mic=mic}catch{toast('Microphone unavailable — listen only')}}if(!mic)pc.addTransceiver('audio',{direction:'recvonly'});
-pc.ontrack=e=>{el.srcObject=e.streams[0];el.play().catch(()=>{})};pc.onicecandidate=e=>e.candidate&&A.send({type:'ice',code,cand:e.candidate});A.pcs[code]=pc;await pc.setLocalDescription(await pc.createOffer());A.send({type:'offer',code,sdp:pc.localDescription})},
-unwatch(code){const pc=A.pcs[code];if(pc){pc.mic?.getTracks().forEach(t=>t.stop());pc.close();delete A.pcs[code]}}};
-function logout(){sessionStorage.removeItem('t');Object.keys(A.pcs).forEach(A.unwatch);location.reload()}
+const $ = (s) => document.querySelector(s),
+  esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => "&#" + c.charCodeAt(0) + ";"),
+  TM = (t) => new Date(t).toLocaleTimeString(),
+  DT = (t) => new Date(t).toLocaleString();
+let tt;
+function toast(m) {
+  const t = $("#toast");
+  t.textContent = m;
+  t.classList.add("show");
+  clearTimeout(tt);
+  tt = setTimeout(() => t.classList.remove("show"), 3500);
+}
+const A = {
+  pcs: {},
+  get tok() {
+    return sessionStorage.getItem("t");
+  },
+  async f(p, o = {}) {
+    const h = { ...(A.tok ? { Authorization: "Bearer " + A.tok } : {}), ...(o.headers || {}) };
+    let b = o.body;
+    if (b && typeof b == "object" && !(b instanceof Blob) && !(b instanceof ArrayBuffer)) {
+      b = JSON.stringify(b);
+      h["Content-Type"] = "application/json";
+    }
+    const r = await fetch("/api/" + p, { method: o.method || (b ? "POST" : "GET"), headers: h, body: b });
+    const j = (r.headers.get("content-type") || "").includes("json") ? await r.json() : await r.blob();
+    if (r.status == 401 && A.tok && !p.startsWith("login")) {
+      logout();
+      throw new Error("Session ended");
+    }
+    if (!r.ok) throw new Error(j.error || r.statusText);
+    return j;
+  },
+  get: (p) => A.f(p),
+  post: (p, b) => A.f(p, { method: "POST", body: b || {} }),
+  del: (p) => A.f(p, { method: "DELETE" }),
+  async dl(p, name) {
+    const b = await A.get(p);
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(b);
+    a.download = name;
+    a.click();
+  },
+  ws(on) {
+    const open = () => {
+      const s = new WebSocket(
+        (location.protocol == "https:" ? "wss://" : "ws://") + location.host + "/ws?t=" + A.tok,
+      );
+      A.sock = s;
+      s.onmessage = (e) => on(JSON.parse(e.data));
+      s.onclose = () => A.tok && setTimeout(open, 2000);
+    };
+    open();
+  },
+  send(o) {
+    A.sock?.readyState == 1 && A.sock.send(JSON.stringify(o));
+  },
+  async sig(m) {
+    const pc = A.pcs[m.code];
+    if (m.type == "answer" && pc) await pc.setRemoteDescription(m.sdp);
+    if (m.type == "ice" && pc) pc.addIceCandidate(m.cand).catch(() => {});
+    if (m.type == "nostream") toast("Observer is not streaming right now.");
+  },
+  async lkWatch(code, el, talk) {
+    const { Room, RoomEvent, Track } = LivekitClient,
+      r = await A.post("livekit/token", { code }),
+      room = new Room({ adaptiveStream: true, dynacast: true });
+    room.on(RoomEvent.TrackSubscribed, (t) => {
+      if (t.kind == Track.Kind.Video || t.kind == Track.Kind.Audio) t.attach(el);
+    });
+    await room.connect(r.url, r.token);
+    A.pcs[code] = { close: () => room.disconnect() };
+    if (talk)
+      await room.localParticipant
+        .setMicrophoneEnabled(true)
+        .catch(() => toast("Microphone unavailable — listen only"));
+    if (!room.remoteParticipants.size) toast("Connected — waiting for the observer to start streaming…");
+  },
+  async watch(code, el, talk) {
+    A.unwatch(code);
+    if (CFG.lk) return A.lkWatch(code, el, talk);
+    const pc = new RTCPeerConnection({ iceServers: CFG.ice });
+    let mic = null;
+    pc.addTransceiver("video", { direction: "recvonly" });
+    if (talk) {
+      try {
+        mic = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mic.getTracks().forEach((t) => pc.addTrack(t, mic));
+        pc.mic = mic;
+      } catch {
+        toast("Microphone unavailable — listen only");
+      }
+    }
+    if (!mic) pc.addTransceiver("audio", { direction: "recvonly" });
+    pc.ontrack = (e) => {
+      el.srcObject = e.streams[0];
+      el.play().catch(() => {});
+    };
+    pc.onicecandidate = (e) => e.candidate && A.send({ type: "ice", code, cand: e.candidate });
+    A.pcs[code] = pc;
+    await pc.setLocalDescription(await pc.createOffer());
+    A.send({ type: "offer", code, sdp: pc.localDescription });
+  },
+  unwatch(code) {
+    const pc = A.pcs[code];
+    if (pc) {
+      pc.mic?.getTracks().forEach((t) => t.stop());
+      pc.close();
+      delete A.pcs[code];
+    }
+  },
+};
+function logout() {
+  sessionStorage.removeItem("t");
+  Object.keys(A.pcs).forEach(A.unwatch);
+  location.reload();
+}
 // ---------- state ----------
-let CFG,ME,TABS={},TAB=null,F={},SEL=null,DRILL=null,LVL='nat',MS=null,fit=true,NEWPASS=null;const DATA={obs:[],inc:[],msg:[],con:[],units:[],rooms:[],radio:[],clips:[],aud:[],bc:[],set:{},cu:[],tn:[]};
-const PCOL=['#2b6cb0','#e53e3e','#38a169','#d69e2e','#805ad5','#dd6b20','#319795','#b83280','#718096','#2d3748'];
-const st=o=>{const a=Date.now()-(o.seen?new Date(o.seen):0);return !o.seen?'Offline':a<30000?'Live':a<300000?'Idle':'Offline'};
-const pill=s=>`<span class="pill ${{Live:'g',Idle:'a',Offline:'s',active:'g',inactive:'s',suspended:'a',Online:'g'}[s]||'s'}">${s}</span>`;
-const tot=o=>Object.values(o.t||{}).reduce((a,x)=>a+x.v,0),anom=o=>tot(o)>o.reg;
-const hav=(a,b,c,d)=>{const r=Math.PI/180,x=Math.sin((c-a)*r/2)**2+Math.cos(a*r)*Math.cos(c*r)*Math.sin((d-b)*r/2)**2;return 12742*Math.asin(Math.sqrt(x))};
-function agg(l){const r={};CFG.parties.forEach(p=>r[p]=0);let ver=0;l.forEach(o=>{let any=0;CFG.parties.forEach(p=>{if(o.t[p]){r[p]+=o.t[p].v;any=1}});if(any&&!anom(o))ver++});return{r,ver,n:l.length,total:Object.values(r).reduce((a,b)=>a+b,0)}}
-function hist(l){const a=agg(l);return `<div class="muted" style="margin-bottom:10px">${a.ver}/${a.n} PUs verified · ${a.total} votes · ${l.filter(anom).length} anomalies</div>`+CFG.parties.map((p,i)=>{const pc=a.total?Math.round(a.r[p]/a.total*100):0;return `<div class="histogram-row"><div class="party-name">${p}</div><div class="bar-bg"><div class="bar-fill" style="width:${pc}%;background:${PCOL[i%10]}"></div></div><div class="pct">${a.r[p]} · ${pc}%</div></div>`}).join('')}
-function drill(l,lvl){const g={};l.forEach(o=>{const k=lvl=='nat'?'National':lvl=='pu'?[o.state,o.lga,o.ward,o.pu].join('/'):o[lvl];(g[k]=g[k]||[]).push(o)});return `<div class="tw"><table><tr><th>${lvl=='nat'?'Scope':lvl.toUpperCase()}</th><th>PUs</th><th>Verified</th>${CFG.parties.map(p=>'<th>'+p+'</th>').join('')}<th>Total</th></tr>${Object.entries(g).sort().map(([k,v])=>{const a=agg(v);return `<tr><td><b>${esc(k)}</b></td><td>${a.n}</td><td>${a.ver}</td>${CFG.parties.map(p=>'<td>'+a.r[p]+'</td>').join('')}<td><b>${a.total}</b></td></tr>`}).join('')||'<tr><td colspan=20>No data</td></tr>'}</table></div>`}
-const flt=l=>l.filter(o=>(!F.state||o.state==F.state)&&(!F.lga||o.lga==F.lga)&&(!F.ward||o.ward==F.ward)&&(!F.pu||o.pu==F.pu)&&(!F.room||o.room_id==F.room)&&(!F.q||(o.code+(o.name||'')+o.pu+o.ward+o.lga+o.state+o.room_id).toLowerCase().includes(F.q.toLowerCase())));
-function setF(k,v){const lv=['state','lga','ward','pu'],i=lv.indexOf(k);F[k]=v;if(i>=0)lv.slice(i+1).forEach(x=>F[x]='');fit=true;render()}
-function cardSearch(cmd,all){const lv=['state','lga','ward','pu'];const sel=lv.map((k,i)=>{let p=all;for(let j=0;j<i;j++)if(F[lv[j]])p=p.filter(o=>o[lv[j]]==F[lv[j]]);const v=[...new Set(p.map(o=>o[k]))].sort();return `<select onchange="setF('${k}',this.value)"><option value="">${k.toUpperCase()}: All</option>${v.map(x=>`<option ${F[k]==x?'selected':''}>${esc(x)}</option>`).join('')}</select>`}).join('');
-return `<div class="card"><div class="card-header"><h3><i class="fas fa-sitemap"></i> Hierarchical Search</h3><span class="tag">State → LGA → Ward → PU → Observer</span></div><div class="search-bar">${sel}${cmd?`<select onchange="setF('room',this.value)"><option value="">ROOM: All</option>${DATA.rooms.map(r=>`<option value="${r.id}" ${F.room==r.id?'selected':''}>${esc(r.name)}</option>`).join('')}</select>`:''}<input placeholder="Code, name, PU, ward…" value="${esc(F.q||'')}" onchange="setF('q',this.value)"><button class="btn btn-outline" onclick="F={};fit=true;render()"><i class="fas fa-xmark"></i> Clear</button></div></div>`}
+let CFG,
+  ME,
+  TABS = {},
+  TAB = null,
+  F = {},
+  SEL = null,
+  DRILL = null,
+  LVL = "nat",
+  MS = null,
+  fit = true,
+  NEWPASS = null;
+const DATA = {
+  obs: [],
+  inc: [],
+  msg: [],
+  con: [],
+  units: [],
+  rooms: [],
+  radio: [],
+  clips: [],
+  aud: [],
+  bc: [],
+  set: {},
+  cu: [],
+  tn: [],
+};
+const PCOL = [
+  "#2b6cb0",
+  "#e53e3e",
+  "#38a169",
+  "#d69e2e",
+  "#805ad5",
+  "#dd6b20",
+  "#319795",
+  "#b83280",
+  "#718096",
+  "#2d3748",
+];
+const st = (o) => {
+  const a = Date.now() - (o.seen ? new Date(o.seen) : 0);
+  return !o.seen ? "Offline" : a < 30000 ? "Live" : a < 300000 ? "Idle" : "Offline";
+};
+const pill = (s) =>
+  `<span class="pill ${{ Live: "g", Idle: "a", Offline: "s", active: "g", inactive: "s", suspended: "a", Online: "g" }[s] || "s"}">${s}</span>`;
+const tot = (o) => Object.values(o.t || {}).reduce((a, x) => a + x.v, 0),
+  anom = (o) => tot(o) > o.reg;
+const hav = (a, b, c, d) => {
+  const r = Math.PI / 180,
+    x =
+      Math.sin(((c - a) * r) / 2) ** 2 + Math.cos(a * r) * Math.cos(c * r) * Math.sin(((d - b) * r) / 2) ** 2;
+  return 12742 * Math.asin(Math.sqrt(x));
+};
+function agg(l) {
+  const r = {};
+  CFG.parties.forEach((p) => (r[p] = 0));
+  let ver = 0;
+  l.forEach((o) => {
+    let any = 0;
+    CFG.parties.forEach((p) => {
+      if (o.t[p]) {
+        r[p] += o.t[p].v;
+        any = 1;
+      }
+    });
+    if (any && !anom(o)) ver++;
+  });
+  return { r, ver, n: l.length, total: Object.values(r).reduce((a, b) => a + b, 0) };
+}
+function hist(l) {
+  const a = agg(l);
+  return (
+    `<div class="muted" style="margin-bottom:10px">${a.ver}/${a.n} PUs verified · ${a.total} votes · ${l.filter(anom).length} anomalies</div>` +
+    CFG.parties
+      .map((p, i) => {
+        const pc = a.total ? Math.round((a.r[p] / a.total) * 100) : 0;
+        return `<div class="histogram-row"><div class="party-name">${p}</div><div class="bar-bg"><div class="bar-fill" style="width:${pc}%;background:${PCOL[i % 10]}"></div></div><div class="pct">${a.r[p]} · ${pc}%</div></div>`;
+      })
+      .join("")
+  );
+}
+function drill(l, lvl) {
+  const g = {};
+  l.forEach((o) => {
+    const k = lvl == "nat" ? "National" : lvl == "pu" ? [o.state, o.lga, o.ward, o.pu].join("/") : o[lvl];
+    (g[k] = g[k] || []).push(o);
+  });
+  return `<div class="tw"><table><tr><th>${lvl == "nat" ? "Scope" : lvl.toUpperCase()}</th><th>PUs</th><th>Verified</th>${CFG.parties.map((p) => "<th>" + p + "</th>").join("")}<th>Total</th></tr>${
+    Object.entries(g)
+      .sort()
+      .map(([k, v]) => {
+        const a = agg(v);
+        return `<tr><td><b>${esc(k)}</b></td><td>${a.n}</td><td>${a.ver}</td>${CFG.parties.map((p) => "<td>" + a.r[p] + "</td>").join("")}<td><b>${a.total}</b></td></tr>`;
+      })
+      .join("") || "<tr><td colspan=20>No data</td></tr>"
+  }</table></div>`;
+}
+const flt = (l) =>
+  l.filter(
+    (o) =>
+      (!F.state || o.state == F.state) &&
+      (!F.lga || o.lga == F.lga) &&
+      (!F.ward || o.ward == F.ward) &&
+      (!F.pu || o.pu == F.pu) &&
+      (!F.room || o.room_id == F.room) &&
+      (!F.q ||
+        (o.code + (o.name || "") + o.pu + o.ward + o.lga + o.state + o.room_id)
+          .toLowerCase()
+          .includes(F.q.toLowerCase())),
+  );
+function setF(k, v) {
+  const lv = ["state", "lga", "ward", "pu"],
+    i = lv.indexOf(k);
+  F[k] = v;
+  if (i >= 0) lv.slice(i + 1).forEach((x) => (F[x] = ""));
+  fit = true;
+  render();
+}
+function cardSearch(cmd, all) {
+  const lv = ["state", "lga", "ward", "pu"];
+  const sel = lv
+    .map((k, i) => {
+      let p = all;
+      for (let j = 0; j < i; j++) if (F[lv[j]]) p = p.filter((o) => o[lv[j]] == F[lv[j]]);
+      const v = [...new Set(p.map((o) => o[k]))].sort();
+      return `<select onchange="setF('${k}',this.value)"><option value="">${k.toUpperCase()}: All</option>${v.map((x) => `<option ${F[k] == x ? "selected" : ""}>${esc(x)}</option>`).join("")}</select>`;
+    })
+    .join("");
+  return `<div class="card"><div class="card-header"><h3><i class="fas fa-sitemap"></i> Hierarchical Search</h3><span class="tag">State → LGA → Ward → PU → Observer</span></div><div class="search-bar">${sel}${cmd ? `<select onchange="setF('room',this.value)"><option value="">ROOM: All</option>${DATA.rooms.map((r) => `<option value="${r.id}" ${F.room == r.id ? "selected" : ""}>${esc(r.name)}</option>`).join("")}</select>` : ""}<input placeholder="Code, name, PU, ward…" value="${esc(F.q || "")}" onchange="setF('q',this.value)"><button class="btn btn-outline" onclick="F={};fit=true;render()"><i class="fas fa-xmark"></i> Clear</button></div></div>`;
+}
 // ---------- map ----------
-const sv=(a,b)=>`<a target="_blank" rel="noopener" href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${a},${b}">🛣 Open Street View</a>`;
-let map,mgrp,hold=document.createElement('div');hold.id='map';
-function mapMount(){const t=$('#mapSlot');if(!t||!MS||typeof L=='undefined')return;if(!map){map=L.map(hold).setView([9.08,8.68],6);const dk=L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{attribution:'&copy; OpenStreetMap &copy; CARTO',subdomains:'abcd',maxZoom:19}),sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{attribution:'Tiles &copy; Esri',maxZoom:19});dk.addTo(map);L.control.layers({'Dark map':dk,'Satellite (Esri)':sat}).addTo(map);mgrp=L.layerGroup().addTo(map);map.on('click',e=>L.popup().setLatLng(e.latlng).setContent('📍 '+e.latlng.lat.toFixed(5)+', '+e.latlng.lng.toFixed(5)+'<br>'+sv(e.latlng.lat,e.latlng.lng)).openOn(map))}
-t.appendChild(hold);setTimeout(()=>{map.invalidateSize();mgrp.clearLayers();const pts=[],ic=c=>L.divIcon({className:'custom-marker '+c,iconSize:[16,16]});
-MS.l.forEach(o=>{if(o.lat==null)return;const s=st(o);L.marker([o.lat,o.lng],{icon:ic(s=='Live'?'':s=='Idle'?'amber':'grey')}).addTo(mgrp).bindPopup(`<b>${esc(o.code)}</b><br>${esc(o.lga)} · PU ${esc(o.pu)}<br>${s}<br><a href="#" onclick="selObs('${o.code}');return false">Open feed / talkback</a><br>${sv(o.lat,o.lng)}`);pts.push([o.lat,o.lng])});
-MS.inc.filter(i=>i.status!='resolved'&&i.lat!=null).forEach(i=>{L.marker([i.lat,i.lng],{icon:ic('red')}).addTo(mgrp).bindPopup('<b>🔴 '+esc(i.type)+'</b><br>'+esc(i.lga)+' · PU '+esc(i.pu)+'<br>'+sv(i.lat,i.lng));L.circle([i.lat,i.lng],{color:'#e53e3e',fillOpacity:.1,radius:800}).addTo(mgrp);pts.push([i.lat,i.lng])});
-(MS.units||[]).forEach(u=>L.marker([u.lat,u.lng],{icon:ic('blue')}).addTo(mgrp).bindPopup('<b>🔵 '+esc(u.name)+'</b><br>'+u.st));
-if(MS.rooms)DATA.rooms.forEach(r=>{const l=DATA.obs.filter(o=>o.room_id==r.id&&o.lat!=null);if(l.length)L.marker([l.reduce((a,o)=>a+o.lat,0)/l.length,l.reduce((a,o)=>a+o.lng,0)/l.length],{icon:ic('navy')}).addTo(mgrp).bindPopup('<b>🏛 '+esc(r.name)+'</b><br>'+r.status)});
-if(pts.length&&fit){map.fitBounds(pts,{maxZoom:14,padding:[30,30]});fit=false}},60)}
-const cardMap=(l,x)=>`<div class="card" style="flex:1"><div class="card-header"><h3><i class="fas fa-map-location-dot"></i> Live Tactical Map · Observer GPS</h3><span class="tag">${l.filter(o=>st(o)=='Live').length} Observers Live</span></div><div id="mapSlot"></div><div class="muted" style="margin-top:8px;display:flex;gap:14px;flex-wrap:wrap"><span>🟢 Observer</span><span>🟡 Idle</span><span>🔴 Incident</span>${x||''}</div></div>`;
-function selObs(c){SEL=c;if(A.role=='cmd'&&TAB!='obs'&&TAB!='drill')TAB='obs';render()}
+const sv = (a, b) =>
+  `<a target="_blank" rel="noopener" href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${a},${b}">🛣 Open Street View</a>`;
+let map,
+  mgrp,
+  hold = document.createElement("div");
+hold.id = "map";
+function mapMount() {
+  const t = $("#mapSlot");
+  if (!t || !MS || typeof L == "undefined") return;
+  if (!map) {
+    map = L.map(hold).setView([9.08, 8.68], 6);
+    const dk = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+        attribution: "&copy; OpenStreetMap &copy; CARTO",
+        subdomains: "abcd",
+        maxZoom: 19,
+      }),
+      sat = L.tileLayer(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        { attribution: "Tiles &copy; Esri", maxZoom: 19 },
+      );
+    dk.addTo(map);
+    L.control.layers({ "Dark map": dk, "Satellite (Esri)": sat }).addTo(map);
+    mgrp = L.layerGroup().addTo(map);
+    map.on("click", (e) =>
+      L.popup()
+        .setLatLng(e.latlng)
+        .setContent(
+          "📍 " +
+            e.latlng.lat.toFixed(5) +
+            ", " +
+            e.latlng.lng.toFixed(5) +
+            "<br>" +
+            sv(e.latlng.lat, e.latlng.lng),
+        )
+        .openOn(map),
+    );
+  }
+  t.appendChild(hold);
+  setTimeout(() => {
+    map.invalidateSize();
+    mgrp.clearLayers();
+    const pts = [],
+      ic = (c) => L.divIcon({ className: "custom-marker " + c, iconSize: [16, 16] });
+    MS.l.forEach((o) => {
+      if (o.lat == null) return;
+      const s = st(o);
+      L.marker([o.lat, o.lng], { icon: ic(s == "Live" ? "" : s == "Idle" ? "amber" : "grey") })
+        .addTo(mgrp)
+        .bindPopup(
+          `<b>${esc(o.code)}</b><br>${esc(o.lga)} · PU ${esc(o.pu)}<br>${s}<br><a href="#" onclick="selObs('${o.code}');return false">Open feed / talkback</a><br>${sv(o.lat, o.lng)}`,
+        );
+      pts.push([o.lat, o.lng]);
+    });
+    MS.inc
+      .filter((i) => i.status != "resolved" && i.lat != null)
+      .forEach((i) => {
+        L.marker([i.lat, i.lng], { icon: ic("red") })
+          .addTo(mgrp)
+          .bindPopup(
+            "<b>🔴 " +
+              esc(i.type) +
+              "</b><br>" +
+              esc(i.lga) +
+              " · PU " +
+              esc(i.pu) +
+              "<br>" +
+              sv(i.lat, i.lng),
+          );
+        L.circle([i.lat, i.lng], { color: "#e53e3e", fillOpacity: 0.1, radius: 800 }).addTo(mgrp);
+        pts.push([i.lat, i.lng]);
+      });
+    (MS.units || []).forEach((u) =>
+      L.marker([u.lat, u.lng], { icon: ic("blue") })
+        .addTo(mgrp)
+        .bindPopup("<b>🔵 " + esc(u.name) + "</b><br>" + u.st),
+    );
+    if (MS.rooms)
+      DATA.rooms.forEach((r) => {
+        const l = DATA.obs.filter((o) => o.room_id == r.id && o.lat != null);
+        if (l.length)
+          L.marker(
+            [l.reduce((a, o) => a + o.lat, 0) / l.length, l.reduce((a, o) => a + o.lng, 0) / l.length],
+            { icon: ic("navy") },
+          )
+            .addTo(mgrp)
+            .bindPopup("<b>🏛 " + esc(r.name) + "</b><br>" + r.status);
+      });
+    if (pts.length && fit) {
+      map.fitBounds(pts, { maxZoom: 14, padding: [30, 30] });
+      fit = false;
+    }
+  }, 60);
+}
+const cardMap = (l, x) =>
+  `<div class="card" style="flex:1"><div class="card-header"><h3><i class="fas fa-map-location-dot"></i> Live Tactical Map · Observer GPS</h3><span class="tag">${l.filter((o) => st(o) == "Live").length} Observers Live</span></div><div id="mapSlot"></div><div class="muted" style="margin-top:8px;display:flex;gap:14px;flex-wrap:wrap"><span>🟢 Observer</span><span>🟡 Idle</span><span>🔴 Incident</span>${x || ""}</div></div>`;
+function selObs(c) {
+  SEL = c;
+  if (A.role == "cmd" && TAB != "obs" && TAB != "drill") TAB = "obs";
+  render();
+}
 // ---------- feed (WebRTC) ----------
-const vv=document.createElement('video');vv.autoplay=true;vv.playsInline=true;vv.style.cssText='width:100%;height:100%;object-fit:cover';
-function cardFeed(ro){const o=DATA.obs.find(x=>x.code==SEL);return `<div class="card"><div class="card-header"><h3><i class="fas fa-video"></i> Live Video Feed</h3><span class="tag">${o?esc(o.code)+' · '+esc(o.lga)+' · PU '+esc(o.pu)+' · '+(o.streaming?'🔴 streaming':'not streaming'):'Select an observer'}</span></div><div class="video-container" id="vslot">${o?'':'<span style="opacity:.6">Click an observer marker or row</span>'}</div>
-${o&&!ro?`<div class="video-controls"><button class="btn btn-success" onclick="A.watch(SEL,vv,false)"><i class="fas fa-play"></i> Watch</button><button class="btn btn-outline" onclick="A.watch(SEL,vv,true)"><i class="fas fa-microphone"></i> Talkback (2-way audio)</button><button class="btn btn-outline" onclick="A.unwatch(SEL);vv.srcObject=null"><i class="fas fa-stop"></i> Stop</button><button class="btn btn-outline" onclick="msgTo('obs:'+SEL,'Please save your clip now','save')"><i class="fas fa-record-vinyl"></i> Save 60s Clip</button><button class="btn btn-outline" onclick="snapshot()"><i class="fas fa-camera"></i> Snapshot</button>${CFG.lk?'<button class="btn btn-outline" onclick="restream()"><i class="fas fa-tower-broadcast"></i> Restream (YouTube/FB)</button><button class="btn btn-outline" onclick="restreamStop()">Stop restream</button>':''}<div class="share-dropdown"><button class="btn btn-primary" onclick="event.stopPropagation();$('#sm').classList.toggle('show')"><i class="fas fa-share-nodes"></i> Share Feed</button><div class="share-menu" id="sm">${['CP Command','INEC','NSCDC','Dispatch','Command Center'].map(x=>`<div onclick="shareTo('${x}')">${x}</div>`).join('')}</div></div></div>`:''}</div>`}
-function snapshot(){if(!vv.videoWidth)return toast('No video yet.');const c=document.createElement('canvas');c.width=vv.videoWidth;c.height=vv.videoHeight;c.getContext('2d').drawImage(vv,0,0);const a=document.createElement('a');a.href=c.toDataURL('image/jpeg',.9);a.download=SEL+'_'+Date.now()+'.jpg';a.click()}
-async function restream(){const u=prompt('RTMP URL + stream key, e.g. rtmp://a.rtmp.youtube.com/live2/XXXX-XXXX-XXXX');if(!u)return;try{await A.post('restream',{code:SEL,url:u.trim()});toast('📡 Restream started.')}catch(e){toast('⚠️ '+e.message)}}
-const restreamStop=()=>A.post('restream/stop',{code:SEL}).then(()=>toast('Restream stopped.')).catch(e=>toast('⚠️ '+e.message));
-const tallyCell=o=>Object.entries(o.t||{}).map(([p,x])=>`<span class="tag" title="${esc((x.hist||[]).map(h=>h.v+' ('+h.src+' '+TM(h.ts)+')').join(' → '))}">${p} ${x.v}${x.edits?' ✎':''}</span>`).join(' ')||'—';
-async function shareTo(x){await A.post('share',{code:SEL,to:x});toast('📤 Feed '+SEL+' shared to '+x+' (logged).')}
-addEventListener('click',()=>$('#sm')?.classList.remove('show'));
+const vv = document.createElement("video");
+vv.autoplay = true;
+vv.playsInline = true;
+vv.style.cssText = "width:100%;height:100%;object-fit:cover";
+function cardFeed(ro) {
+  const o = DATA.obs.find((x) => x.code == SEL);
+  return `<div class="card"><div class="card-header"><h3><i class="fas fa-video"></i> Live Video Feed</h3><span class="tag">${o ? esc(o.code) + " · " + esc(o.lga) + " · PU " + esc(o.pu) + " · " + (o.streaming ? "🔴 streaming" : "not streaming") : "Select an observer"}</span></div><div class="video-container" id="vslot">${o ? "" : '<span style="opacity:.6">Click an observer marker or row</span>'}</div>
+${o && !ro ? `<div class="video-controls"><button class="btn btn-success" onclick="A.watch(SEL,vv,false)"><i class="fas fa-play"></i> Watch</button><button class="btn btn-outline" onclick="A.watch(SEL,vv,true)"><i class="fas fa-microphone"></i> Talkback (2-way audio)</button><button class="btn btn-outline" onclick="A.unwatch(SEL);vv.srcObject=null"><i class="fas fa-stop"></i> Stop</button><button class="btn btn-outline" onclick="msgTo('obs:'+SEL,'Please save your clip now','save')"><i class="fas fa-record-vinyl"></i> Save 60s Clip</button><button class="btn btn-outline" onclick="snapshot()"><i class="fas fa-camera"></i> Snapshot</button>${CFG.lk ? '<button class="btn btn-outline" onclick="restream()"><i class="fas fa-tower-broadcast"></i> Restream (YouTube/FB)</button><button class="btn btn-outline" onclick="restreamStop()">Stop restream</button>' : ""}<div class="share-dropdown"><button class="btn btn-primary" onclick="event.stopPropagation();$('#sm').classList.toggle('show')"><i class="fas fa-share-nodes"></i> Share Feed</button><div class="share-menu" id="sm">${["CP Command", "INEC", "NSCDC", "Dispatch", "Command Center"].map((x) => `<div onclick="shareTo('${x}')">${x}</div>`).join("")}</div></div></div>` : ""}</div>`;
+}
+function snapshot() {
+  if (!vv.videoWidth) return toast("No video yet.");
+  const c = document.createElement("canvas");
+  c.width = vv.videoWidth;
+  c.height = vv.videoHeight;
+  c.getContext("2d").drawImage(vv, 0, 0);
+  const a = document.createElement("a");
+  a.href = c.toDataURL("image/jpeg", 0.9);
+  a.download = SEL + "_" + Date.now() + ".jpg";
+  a.click();
+}
+async function restream() {
+  const u = prompt("RTMP URL + stream key, e.g. rtmp://a.rtmp.youtube.com/live2/XXXX-XXXX-XXXX");
+  if (!u) return;
+  try {
+    await A.post("restream", { code: SEL, url: u.trim() });
+    toast("📡 Restream started.");
+  } catch (e) {
+    toast("⚠️ " + e.message);
+  }
+}
+const restreamStop = () =>
+  A.post("restream/stop", { code: SEL })
+    .then(() => toast("Restream stopped."))
+    .catch((e) => toast("⚠️ " + e.message));
+const tallyCell = (o) =>
+  Object.entries(o.t || {})
+    .map(
+      ([p, x]) =>
+        `<span class="tag" title="${esc((x.hist || []).map((h) => h.v + " (" + h.src + " " + TM(h.ts) + ")").join(" → "))}">${p} ${x.v}${x.edits ? " ✎" : ""}</span>`,
+    )
+    .join(" ") || "—";
+async function shareTo(x) {
+  await A.post("share", { code: SEL, to: x });
+  toast("📤 Feed " + SEL + " shared to " + x + " (logged).");
+}
+addEventListener("click", () => $("#sm")?.classList.remove("show"));
 // ---------- messages ----------
-async function msgTo(to,text,cmd){if(!text)return toast('Type a message first.');try{await A.post('messages',{to,text,cmd});toast('📨 Sent.')}catch(e){toast('⚠️ '+e.message)}}
-const ackMsg=id=>A.post('messages/'+id+'/ack');
-function cardMsgs(targets){return `<div class="card"><div class="card-header"><h3><i class="fas fa-comments"></i> Messages</h3></div>${targets?`<div class="search-bar"><select id="mt">${targets.map(([v,l])=>`<option value="${esc(v)}">${esc(l)}</option>`).join('')}</select><input id="mx" placeholder="Message / talkback (spoken on observer device)"><button class="btn btn-primary" onclick="msgTo($('#mt').value,$('#mx').value)">Send</button></div>`:''}<div class="contact-list">${DATA.msg.filter(m=>!m.cmd).slice(0,10).map(m=>`<div class="contact-item"><div class="info"><div class="role">${esc(m.from_id)} → ${esc(m.to_scope)}</div><div>${esc(m.text)}</div><div class="loc">${TM(m.ts)} · ${m.ack.length} ack</div></div>${m.from_id!=ME.id&&!m.ack.includes(ME.id)&&A.role!='cmd'?`<button class="btn btn-sm btn-success" onclick="ackMsg(${m.id})">Acknowledge</button>`:''}</div>`).join('')||'<div class="muted">No messages.</div>'}</div></div>`}
+async function msgTo(to, text, cmd) {
+  if (!text) return toast("Type a message first.");
+  try {
+    await A.post("messages", { to, text, cmd });
+    toast("📨 Sent.");
+  } catch (e) {
+    toast("⚠️ " + e.message);
+  }
+}
+const ackMsg = (id) => A.post("messages/" + id + "/ack");
+function cardMsgs(targets) {
+  return `<div class="card"><div class="card-header"><h3><i class="fas fa-comments"></i> Messages</h3></div>${targets ? `<div class="search-bar"><select id="mt">${targets.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join("")}</select><input id="mx" placeholder="Message / talkback (spoken on observer device)"><button class="btn btn-primary" onclick="msgTo($('#mt').value,$('#mx').value)">Send</button></div>` : ""}<div class="contact-list">${
+    DATA.msg
+      .filter((m) => !m.cmd)
+      .slice(0, 10)
+      .map(
+        (m) =>
+          `<div class="contact-item"><div class="info"><div class="role">${esc(m.from_id)} → ${esc(m.to_scope)}</div><div>${esc(m.text)}</div><div class="loc">${TM(m.ts)} · ${m.ack.length} ack</div></div>${m.from_id != ME.id && !m.ack.includes(ME.id) && A.role != "cmd" ? `<button class="btn btn-sm btn-success" onclick="ackMsg(${m.id})">Acknowledge</button>` : ""}</div>`,
+      )
+      .join("") || '<div class="muted">No messages.</div>'
+  }</div></div>`;
+}
 // ---------- collation ----------
-function cardColl(l){return `<div class="card"><div class="card-header"><h3><i class="fas fa-chart-column"></i> Real-Time Collation</h3><div style="display:flex;gap:6px;flex-wrap:wrap">${[['nat','All'],['state','State'],['lga','LGA'],['ward','Ward'],['pu','PU']].map(([k,n])=>`<button class="btn btn-sm ${LVL==k?'btn-primary':'btn-outline'}" onclick="LVL='${k}';render()">${n}</button>`).join('')}</div></div>${hist(l)}<div style="margin-top:12px">${drill(l,LVL)}</div></div>`}
+function cardColl(l) {
+  return `<div class="card"><div class="card-header"><h3><i class="fas fa-chart-column"></i> Real-Time Collation</h3><div style="display:flex;gap:6px;flex-wrap:wrap">${[
+    ["nat", "All"],
+    ["state", "State"],
+    ["lga", "LGA"],
+    ["ward", "Ward"],
+    ["pu", "PU"],
+  ]
+    .map(
+      ([k, n]) =>
+        `<button class="btn btn-sm ${LVL == k ? "btn-primary" : "btn-outline"}" onclick="LVL='${k}';render()">${n}</button>`,
+    )
+    .join("")}</div></div>${hist(l)}<div style="margin-top:12px">${drill(l, LVL)}</div></div>`;
+}
 // ---------- dispatch / radio ----------
-function cardDispatch(rid,ro){const inc=DATA.inc.filter(i=>i.room_id==rid),us=DATA.units.filter(u=>u.room_id==rid);return `<div class="card"><div class="card-header"><h3><i class="fas fa-triangle-exclamation"></i> Dispatch Queue</h3>${ro?'':'<button class="btn btn-outline btn-sm" onclick="addUnit()"><i class="fas fa-plus"></i> Unit</button>'}</div><div class="incident-list">${inc.map(i=>{const n=us.filter(u=>u.st=='free'&&i.lat!=null).map(u=>({u,d:hav(u.lat,u.lng,i.lat,i.lng)})).sort((a,b)=>a.d-b.d)[0];return `<div class="incident-item ${i.status=='resolved'?'green':i.status=='dispatched'?'blue':''}"><div class="incident-info"><div class="title">${esc(i.type)} · ${esc(i.code)}</div><div class="meta">${esc(i.lga)} · PU ${esc(i.pu)} · ${DT(i.ts)} · ${i.status}${i.note?' · '+esc(i.note):''}</div><div class="meta">${i.status=='new'?(n?'Nearest: '+esc(n.u.name)+' · ETA '+Math.max(1,Math.round(n.d/40*60))+' min':'No free unit'):esc(i.unit||'')}</div></div>${ro?'':`<div style="display:flex;gap:6px">${i.status=='new'?`<button class="btn btn-danger btn-sm" onclick="A.post('incidents/${i.id}/dispatch',{unit:'${n?esc(n.u.name):''}'})">Dispatch</button>`:''}${i.status!='resolved'?`<button class="btn btn-success btn-sm" onclick="A.post('incidents/${i.id}/resolve')">Resolve</button>`:''}<button class="btn btn-outline btn-sm" onclick="selObs('${i.code}')">Feed</button></div>`}</div>`}).join('')||'<div class="muted">No incidents.</div>'}</div></div>`}
-async function radioKey(){if(!confirm('Generate a NEW gateway key? The previous key stops working.'))return;try{const r=await A.post('radio/key');prompt('Copy this key into the gateway PC (shown once):',r.key)}catch(e){toast('⚠️ '+e.message)}}
-async function playRadio(id){try{const b=await A.get('radio/'+id+'/audio'),a=new Audio(URL.createObjectURL(b));a.play()}catch(e){toast('⚠️ '+e.message)}}
-async function addUnit(){const v=prompt('Unit name, latitude, longitude (e.g. Patrol 9, 12.01, 8.52):');if(!v)return;const [name,lat,lng]=v.split(',').map(x=>x.trim());try{await A.post('units',{name,lat,lng})}catch(e){toast('⚠️ '+e.message)}}
-const cardRadio=()=>`<div class="radio-module"><div style="display:flex;justify-content:space-between;align-items:center"><b><i class="fas fa-tower-broadcast"></i> Radio (SDR gateway · P25/TETRA/DMR)</b><button class="btn btn-sm btn-primary" onclick="radioKey()"><i class="fas fa-key"></i> Gateway key</button></div><div class="radio-log">${DATA.radio.map(x=>`<div><span class="time">${TM(x.ts)}</span><span class="${x.alert?'alert':''}">${esc(x.text)}${x.freq?' ['+esc(x.freq)+(x.talkgroup?' TG '+esc(x.talkgroup):'')+']':''}</span>${x.has_audio?` <a href="#" style="color:#68d391" onclick="playRadio(${x.id});return false">▶ play</a>`:''}</div>`).join('')}</div><div class="search-bar" style="margin:10px 0 0;background:#0d1117;border:0"><input id="rx" placeholder="Log transmission" style="background:#1a202c;color:#fff;border-color:#2d3748"><button class="btn btn-primary btn-sm" onclick="A.post('radio',{text:$('#rx').value})">PTT / Send</button></div></div>`;
-function roomDash(rid,ro){const all=DATA.obs.filter(o=>o.room_id==rid),l=flt(all);MS={l,inc:DATA.inc.filter(i=>i.room_id==rid),units:DATA.units.filter(u=>u.room_id==rid)};
-return `<div class="dashboard-grid"><div class="col">${cardSearch(0,all)}${cardMap(l,'<span>🔵 Patrol Unit</span>')}${cardDispatch(rid,ro)}</div><div class="col">${cardFeed(ro)}${cardColl(l)}${ro?'':cardRadio()}${cardMsgs(ro?null:[['robs:'+rid,'All my observers'],...all.map(o=>['obs:'+o.code,o.code]),['CMD','Command Center']])}</div></div>`}
+function cardDispatch(rid, ro) {
+  const inc = DATA.inc.filter((i) => i.room_id == rid),
+    us = DATA.units.filter((u) => u.room_id == rid);
+  return `<div class="card"><div class="card-header"><h3><i class="fas fa-triangle-exclamation"></i> Dispatch Queue</h3>${ro ? "" : '<button class="btn btn-outline btn-sm" onclick="addUnit()"><i class="fas fa-plus"></i> Unit</button>'}</div><div class="incident-list">${
+    inc
+      .map((i) => {
+        const n = us
+          .filter((u) => u.st == "free" && i.lat != null)
+          .map((u) => ({ u, d: hav(u.lat, u.lng, i.lat, i.lng) }))
+          .sort((a, b) => a.d - b.d)[0];
+        return `<div class="incident-item ${i.status == "resolved" ? "green" : i.status == "dispatched" ? "blue" : ""}"><div class="incident-info"><div class="title">${esc(i.type)} · ${esc(i.code)}</div><div class="meta">${esc(i.lga)} · PU ${esc(i.pu)} · ${DT(i.ts)} · ${i.status}${i.note ? " · " + esc(i.note) : ""}</div><div class="meta">${i.status == "new" ? (n ? "Nearest: " + esc(n.u.name) + " · ETA " + Math.max(1, Math.round((n.d / 40) * 60)) + " min" : "No free unit") : esc(i.unit || "")}</div></div>${ro ? "" : `<div style="display:flex;gap:6px">${i.status == "new" ? `<button class="btn btn-danger btn-sm" onclick="A.post('incidents/${i.id}/dispatch',{unit:'${n ? esc(n.u.name) : ""}'})">Dispatch</button>` : ""}${i.status != "resolved" ? `<button class="btn btn-success btn-sm" onclick="A.post('incidents/${i.id}/resolve')">Resolve</button>` : ""}<button class="btn btn-outline btn-sm" onclick="selObs('${i.code}')">Feed</button></div>`}</div>`;
+      })
+      .join("") || '<div class="muted">No incidents.</div>'
+  }</div></div>`;
+}
+async function radioKey() {
+  if (!confirm("Generate a NEW gateway key? The previous key stops working.")) return;
+  try {
+    const r = await A.post("radio/key");
+    prompt("Copy this key into the gateway PC (shown once):", r.key);
+  } catch (e) {
+    toast("⚠️ " + e.message);
+  }
+}
+async function playRadio(id) {
+  try {
+    const b = await A.get("radio/" + id + "/audio"),
+      a = new Audio(URL.createObjectURL(b));
+    a.play();
+  } catch (e) {
+    toast("⚠️ " + e.message);
+  }
+}
+async function addUnit() {
+  const v = prompt("Unit name, latitude, longitude (e.g. Patrol 9, 12.01, 8.52):");
+  if (!v) return;
+  const [name, lat, lng] = v.split(",").map((x) => x.trim());
+  try {
+    await A.post("units", { name, lat, lng });
+  } catch (e) {
+    toast("⚠️ " + e.message);
+  }
+}
+const cardRadio = () =>
+  `<div class="radio-module"><div style="display:flex;justify-content:space-between;align-items:center"><b><i class="fas fa-tower-broadcast"></i> Radio (SDR gateway · P25/TETRA/DMR)</b><button class="btn btn-sm btn-primary" onclick="radioKey()"><i class="fas fa-key"></i> Gateway key</button></div><div class="radio-log">${DATA.radio.map((x) => `<div><span class="time">${TM(x.ts)}</span><span class="${x.alert ? "alert" : ""}">${esc(x.text)}${x.freq ? " [" + esc(x.freq) + (x.talkgroup ? " TG " + esc(x.talkgroup) : "") + "]" : ""}</span>${x.has_audio ? ` <a href="#" style="color:#68d391" onclick="playRadio(${x.id});return false">▶ play</a>` : ""}</div>`).join("")}</div><div class="search-bar" style="margin:10px 0 0;background:#0d1117;border:0"><input id="rx" placeholder="Log transmission" style="background:#1a202c;color:#fff;border-color:#2d3748"><button class="btn btn-primary btn-sm" onclick="A.post('radio',{text:$('#rx').value})">PTT / Send</button></div></div>`;
+function roomDash(rid, ro) {
+  const all = DATA.obs.filter((o) => o.room_id == rid),
+    l = flt(all);
+  MS = {
+    l,
+    inc: DATA.inc.filter((i) => i.room_id == rid),
+    units: DATA.units.filter((u) => u.room_id == rid),
+  };
+  return `<div class="dashboard-grid"><div class="col">${cardSearch(0, all)}${cardMap(l, "<span>🔵 Patrol Unit</span>")}${cardDispatch(rid, ro)}</div><div class="col">${cardFeed(ro)}${cardColl(l)}${ro ? "" : cardRadio()}${cardMsgs(ro ? null : [["robs:" + rid, "All my observers"], ...all.map((o) => ["obs:" + o.code, o.code]), ["CMD", "Command Center"]])}</div></div>`;
+}
 // ---------- contacts / data / audit ----------
-function tabContacts(){const room=A.role=='room';return `<div class="dashboard-grid"><div class="card"><div class="card-header"><h3><i class="fas fa-address-book"></i> Add Contact</h3></div><input class="fi" id="cn" placeholder="Name"><input class="fi" id="cp" placeholder="Phone"><select class="fi" id="cr"><option>Emergency</option><option>Security</option><option>Supervisor</option></select><select class="fi" id="cv"><option>State</option><option>LGA</option><option>Ward</option><option>PU</option></select><select class="fi" id="cs">${CFG.states.map(s=>`<option ${room&&s==ME.room.state?'selected':''}>${s}</option>`).join('')}</select><input class="fi" id="cl" placeholder="LGA / Ward / PU (as applicable)"><button class="btn btn-primary" onclick="addCon()"><i class="fas fa-plus"></i> Add Contact</button>${room?'':'<div class="muted" style="margin-top:8px">Command contacts propagate to every Situation Room in that state.</div>'}</div>
-<div class="card"><div class="card-header"><h3><i class="fas fa-phone"></i> Contacts (${DATA.con.length})</h3></div><div class="contact-list">${DATA.con.map(c=>`<div class="contact-item"><div class="info"><div class="role">${esc(c.name)} · ${esc(c.role)}</div><div class="loc">${esc(c.state)} · ${esc(c.loc)} · ${esc(c.level)} level${c.room_id?'':' · Command'}</div></div><div><a class="btn btn-success btn-sm" href="tel:${esc(c.phone)}"><i class="fas fa-phone"></i> ${esc(c.phone)}</a> ${A.role=='cmd'||c.room_id?`<button class="btn btn-sm btn-outline" onclick="A.del('contacts/${c.id}')"><i class="fas fa-trash"></i></button>`:''}</div></div>`).join('')||'<div class="muted">No contacts.</div>'}</div></div></div>`}
-async function addCon(){const g=i=>$('#'+i).value.trim();try{await A.post('contacts',{name:g('cn'),phone:g('cp'),role:g('cr'),level:g('cv'),state:g('cs'),loc:g('cl')});toast('✅ Contact added.')}catch(e){toast('⚠️ '+e.message)}}
-const tabData=()=>`<div class="dashboard-grid"><div class="card"><div class="card-header"><h3><i class="fas fa-file-arrow-down"></i> Text Data ${A.role=='room'?'(this room)':'(ALL rooms)'}</h3></div><div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn btn-primary" onclick="A.dl('export/csv','tallies.csv')"><i class="fas fa-file-csv"></i> Tallies CSV</button><button class="btn btn-primary" onclick="A.dl('export/json','collation.json')"><i class="fas fa-file-code"></i> ${A.role=='room'?'Room JSON':'Full Archive JSON'}</button></div><div class="muted" style="margin-top:12px">All data is stored in the PostgreSQL database and video on the disk of the server PC. Every export is audit-logged.</div></div><div class="card"><div class="card-header"><h3><i class="fas fa-film"></i> Video Recordings</h3><button class="btn btn-outline btn-sm" onclick="DATA.clips.forEach((c,i)=>setTimeout(()=>A.dl('clips/'+c.id+'/file',c.code+'_'+c.id+'.webm'),i*400))">Download all</button></div><div class="contact-list">${DATA.clips.map(c=>`<div class="contact-item"><div class="info"><div class="role">${esc(c.code)} · ${esc(c.kind)}</div><div class="loc">${DT(c.ts)}</div></div><button class="btn btn-sm btn-primary" onclick="A.dl('clips/${c.id}/file','${c.code}_${c.id}.webm')"><i class="fas fa-download"></i></button></div>`).join('')||'<div class="muted">No clips yet. Observers save clips on incidents, on stop, or on request.</div>'}</div></div></div>`;
-const tabAudit=()=>`<div class="card"><div class="card-header"><h3><i class="fas fa-clipboard-list"></i> Audit Log</h3></div><div class="tw"><table><tr><th>Time</th><th>Who</th><th>Action</th></tr>${DATA.aud.map(a=>`<tr><td>${DT(a.ts)}</td><td>${esc(a.who)}</td><td>${esc(a.action)}</td></tr>`).join('')}</table></div></div>`;
+function tabContacts() {
+  const room = A.role == "room";
+  return `<div class="dashboard-grid"><div class="card"><div class="card-header"><h3><i class="fas fa-address-book"></i> Add Contact</h3></div><input class="fi" id="cn" placeholder="Name"><input class="fi" id="cp" placeholder="Phone"><select class="fi" id="cr"><option>Emergency</option><option>Security</option><option>Supervisor</option></select><select class="fi" id="cv"><option>State</option><option>LGA</option><option>Ward</option><option>PU</option></select><select class="fi" id="cs">${CFG.states.map((s) => `<option ${room && s == ME.room.state ? "selected" : ""}>${s}</option>`).join("")}</select><input class="fi" id="cl" placeholder="LGA / Ward / PU (as applicable)"><button class="btn btn-primary" onclick="addCon()"><i class="fas fa-plus"></i> Add Contact</button>${room ? "" : '<div class="muted" style="margin-top:8px">Command contacts propagate to every Situation Room in that state.</div>'}</div>
+<div class="card"><div class="card-header"><h3><i class="fas fa-phone"></i> Contacts (${DATA.con.length})</h3></div><div class="contact-list">${DATA.con.map((c) => `<div class="contact-item"><div class="info"><div class="role">${esc(c.name)} · ${esc(c.role)}</div><div class="loc">${esc(c.state)} · ${esc(c.loc)} · ${esc(c.level)} level${c.room_id ? "" : " · Command"}</div></div><div><a class="btn btn-success btn-sm" href="tel:${esc(c.phone)}"><i class="fas fa-phone"></i> ${esc(c.phone)}</a> ${A.role == "cmd" || c.room_id ? `<button class="btn btn-sm btn-outline" onclick="A.del('contacts/${c.id}')"><i class="fas fa-trash"></i></button>` : ""}</div></div>`).join("") || '<div class="muted">No contacts.</div>'}</div></div></div>`;
+}
+async function addCon() {
+  const g = (i) => $("#" + i).value.trim();
+  try {
+    await A.post("contacts", {
+      name: g("cn"),
+      phone: g("cp"),
+      role: g("cr"),
+      level: g("cv"),
+      state: g("cs"),
+      loc: g("cl"),
+    });
+    toast("✅ Contact added.");
+  } catch (e) {
+    toast("⚠️ " + e.message);
+  }
+}
+const tabData = () =>
+  `<div class="dashboard-grid"><div class="card"><div class="card-header"><h3><i class="fas fa-file-arrow-down"></i> Text Data ${A.role == "room" ? "(this room)" : "(ALL rooms)"}</h3></div><div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn btn-primary" onclick="A.dl('export/csv','tallies.csv')"><i class="fas fa-file-csv"></i> Tallies CSV</button><button class="btn btn-primary" onclick="A.dl('export/json','collation.json')"><i class="fas fa-file-code"></i> ${A.role == "room" ? "Room JSON" : "Full Archive JSON"}</button></div><div class="muted" style="margin-top:12px">All data is stored in the PostgreSQL database and video on the disk of the server PC. Every export is audit-logged.</div></div><div class="card"><div class="card-header"><h3><i class="fas fa-film"></i> Video Recordings</h3><button class="btn btn-outline btn-sm" onclick="DATA.clips.forEach((c,i)=>setTimeout(()=>A.dl('clips/'+c.id+'/file',c.code+'_'+c.id+'.webm'),i*400))">Download all</button></div><div class="contact-list">${DATA.clips.map((c) => `<div class="contact-item"><div class="info"><div class="role">${esc(c.code)} · ${esc(c.kind)}</div><div class="loc">${DT(c.ts)}</div></div><button class="btn btn-sm btn-primary" onclick="A.dl('clips/${c.id}/file','${c.code}_${c.id}.webm')"><i class="fas fa-download"></i></button></div>`).join("") || '<div class="muted">No clips yet. Observers save clips on incidents, on stop, or on request.</div>'}</div></div></div>`;
+const tabAudit = () =>
+  `<div class="card"><div class="card-header"><h3><i class="fas fa-clipboard-list"></i> Audit Log</h3></div><div class="tw"><table><tr><th>Time</th><th>Who</th><th>Action</th></tr>${DATA.aud.map((a) => `<tr><td>${DT(a.ts)}</td><td>${esc(a.who)}</td><td>${esc(a.action)}</td></tr>`).join("")}</table></div></div>`;
 // ---------- shell ----------
-async function loadAll(){const g=p=>A.get(p).catch(()=>[]);[DATA.obs,DATA.inc,DATA.msg,DATA.con,DATA.units]=await Promise.all([g('obs'),g('incidents'),g('messages'),g('contacts'),g('units')]);
-if(A.role=='cmd')[DATA.rooms,DATA.clips,DATA.bc,DATA.aud,DATA.set,DATA.cu,DATA.tn]=await Promise.all([g('rooms'),g('clips'),g('broadcasts'),g('audit'),g('settings'),g('cmdusers'),ME.su?g('tenants'):[]]);else[DATA.radio,DATA.clips]=await Promise.all([g('radio'),g('clips')]);if(A.role=='room')A.get('me').then(m=>ME=m).catch(()=>{});refresh()}
-let dl_;const debLoad=()=>{clearTimeout(dl_);dl_=setTimeout(loadAll,300)};
-function refresh(){if(/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName))return;render()}
-function render(){const tb={...TABS(),...(A.role=='cmd'&&DRILL?{drill:['Room: '+DRILL+' (read-only)','eye',()=>roomDash(DRILL,true)]}:{})};if(!tb[TAB])TAB=Object.keys(tb)[0];MS=null;
-$('#app').innerHTML=`<div class="mockup-container"><div class="topbar"><div class="brand"><i class="fas fa-shield-halved"></i><h1>${esc(CFG?.appName||'My Collation Center')} <span>· ${A.role=='cmd'?esc(ME.tenant||'Command Center'):esc(ME.room.name)}</span></h1></div><div class="topbar-actions"><span class="tag"><i class="fas fa-circle" style="color:#38a169"></i> ${A.role=='cmd'?DATA.rooms.filter(r=>r.status=='active').length+' rooms active':'Activated by Command Center '+DT(ME.room.activated_at)}</span><span class="tag"><i class="fas fa-user-shield"></i> ${A.role=='cmd'?esc(ME.name||'Command'):esc(ME.room.operator||ME.id)}</span><button class="btn btn-outline" onclick="logout()"><i class="fas fa-right-from-bracket"></i> Logout</button></div></div><div class="nav-tabs">${Object.entries(tb).map(([k,[l,i]])=>`<div class="nav-tab ${k==TAB?'active':''}" onclick="TAB='${k}';fit=true;render()"><i class="fas fa-${i}"></i> ${l}</div>`).join('')}</div><div class="view">${tb[TAB][2]()}</div></div>`;
-const s=$('#vslot');if(s&&SEL)s.appendChild(vv);mapMount()}
-function loginView(role){$('#app').innerHTML=`<div class="mockup-container"><div class="topbar"><div class="brand"><i class="fas fa-shield-halved"></i><h1>${esc(CFG?.appName||'My Collation Center')} <span>· ${role=='cmd'?'Command Center':'Situation Room'}</span></h1></div></div><div class="card" style="max-width:420px"><input class="fi" id="li" placeholder="${role=='room'?'Room ID (e.g. SR-KN-AB3)':'Operator name (e.g. admin)'}" value="${role=='room'?'':'admin'}"><input class="fi" id="lp" type="password" placeholder="${role=='cmd'?'Command passcode':'Room passcode'}" onkeydown="event.key=='Enter'&&doLogin()"><button class="btn btn-primary" onclick="doLogin()">Enter</button><div class="muted" style="margin-top:8px">${role=='cmd'?'First login: operator <b>admin</b>; the passcode is printed once in the server console (or set COMMAND_PASSCODE).':'Your room must be activated by Command Center. Passcode is issued by Command Center.'}</div></div></div>`}
-async function doLogin(){try{const r=await A.post('login/'+(A.role=='cmd'?'command':'room'),{id:$('#li')?.value.trim(),pass:$('#lp').value,});sessionStorage.setItem('t',r.token);start(A.role,TABS)}catch(e){toast('❌ '+e.message)}}
-async function start(role,tabsFn){A.role=role;TABS=tabsFn;try{CFG=await A.get('config');document.title=CFG.appName+' · '+(role=='cmd'?'Command Center':'Situation Room')}catch{}if(!A.tok)return loginView(role);try{ME=await A.get('me');CFG=await A.get('config')}catch{sessionStorage.removeItem('t');return loginView(role)}
-A.ws(m=>m.type=='changed'?debLoad():A.sig(m));await loadAll();setInterval(()=>A.tok&&loadAll(),15000)}
+async function loadAll() {
+  const g = (p) => A.get(p).catch(() => []);
+  [DATA.obs, DATA.inc, DATA.msg, DATA.con, DATA.units] = await Promise.all([
+    g("obs"),
+    g("incidents"),
+    g("messages"),
+    g("contacts"),
+    g("units"),
+  ]);
+  if (A.role == "cmd")
+    [DATA.rooms, DATA.clips, DATA.bc, DATA.aud, DATA.set, DATA.cu, DATA.tn] = await Promise.all([
+      g("rooms"),
+      g("clips"),
+      g("broadcasts"),
+      g("audit"),
+      g("settings"),
+      g("cmdusers"),
+      ME.su ? g("tenants") : [],
+    ]);
+  else [DATA.radio, DATA.clips] = await Promise.all([g("radio"), g("clips")]);
+  if (A.role == "room")
+    A.get("me")
+      .then((m) => (ME = m))
+      .catch(() => {});
+  refresh();
+}
+let dl_;
+const debLoad = () => {
+  clearTimeout(dl_);
+  dl_ = setTimeout(loadAll, 300);
+};
+function refresh() {
+  if (/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
+  render();
+}
+function render() {
+  const tb = {
+    ...TABS(),
+    ...(A.role == "cmd" && DRILL
+      ? { drill: ["Room: " + DRILL + " (read-only)", "eye", () => roomDash(DRILL, true)] }
+      : {}),
+  };
+  if (!tb[TAB]) TAB = Object.keys(tb)[0];
+  MS = null;
+  $("#app").innerHTML =
+    `<div class="mockup-container"><div class="topbar"><div class="brand"><i class="fas fa-shield-halved"></i><h1>${esc(CFG?.appName || "My Collation Center")} <span>· ${A.role == "cmd" ? esc(ME.tenant || "Command Center") : esc(ME.room.name)}</span></h1></div><div class="topbar-actions"><span class="tag"><i class="fas fa-circle" style="color:#38a169"></i> ${A.role == "cmd" ? DATA.rooms.filter((r) => r.status == "active").length + " rooms active" : "Activated by Command Center " + DT(ME.room.activated_at)}</span><span class="tag"><i class="fas fa-user-shield"></i> ${A.role == "cmd" ? esc(ME.name || "Command") : esc(ME.room.operator || ME.id)}</span><button class="btn btn-outline" onclick="logout()"><i class="fas fa-right-from-bracket"></i> Logout</button></div></div><div class="nav-tabs">${Object.entries(
+      tb,
+    )
+      .map(
+        ([k, [l, i]]) =>
+          `<div class="nav-tab ${k == TAB ? "active" : ""}" onclick="TAB='${k}';fit=true;render()"><i class="fas fa-${i}"></i> ${l}</div>`,
+      )
+      .join("")}</div><div class="view">${tb[TAB][2]()}</div></div>`;
+  const s = $("#vslot");
+  if (s && SEL) s.appendChild(vv);
+  mapMount();
+}
+function loginView(role) {
+  $("#app").innerHTML =
+    `<div class="mockup-container"><div class="topbar"><div class="brand"><i class="fas fa-shield-halved"></i><h1>${esc(CFG?.appName || "My Collation Center")} <span>· ${role == "cmd" ? "Command Center" : "Situation Room"}</span></h1></div></div><div class="card" style="max-width:420px"><input class="fi" id="li" placeholder="${role == "room" ? "Room ID (e.g. SR-KN-AB3)" : "Operator name (e.g. admin)"}" value="${role == "room" ? "" : "admin"}"><input class="fi" id="lp" type="password" placeholder="${role == "cmd" ? "Command passcode" : "Room passcode"}" onkeydown="event.key=='Enter'&&doLogin()"><button class="btn btn-primary" onclick="doLogin()">Enter</button><div class="muted" style="margin-top:8px">${role == "cmd" ? "First login: operator <b>admin</b>; the passcode is printed once in the server console (or set COMMAND_PASSCODE)." : "Your room must be activated by Command Center. Passcode is issued by Command Center."}</div></div></div>`;
+}
+async function doLogin() {
+  try {
+    const r = await A.post("login/" + (A.role == "cmd" ? "command" : "room"), {
+      id: $("#li")?.value.trim(),
+      pass: $("#lp").value,
+    });
+    sessionStorage.setItem("t", r.token);
+    start(A.role, TABS);
+  } catch (e) {
+    toast("❌ " + e.message);
+  }
+}
+async function start(role, tabsFn) {
+  A.role = role;
+  TABS = tabsFn;
+  try {
+    CFG = await A.get("config");
+    document.title = CFG.appName + " · " + (role == "cmd" ? "Command Center" : "Situation Room");
+  } catch {}
+  if (!A.tok) return loginView(role);
+  try {
+    ME = await A.get("me");
+    CFG = await A.get("config");
+  } catch {
+    sessionStorage.removeItem("t");
+    return loginView(role);
+  }
+  A.ws((m) => (m.type == "changed" ? debLoad() : A.sig(m)));
+  await loadAll();
+  setInterval(() => A.tok && loadAll(), 15000);
+}

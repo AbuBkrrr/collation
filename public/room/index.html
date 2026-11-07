@@ -1,13 +1,92 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Situation Room · My Collation Center</title>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css"><link rel="stylesheet" href="/shared/style.css"></head>
-<body><div class="toast" id="toast"></div><div id="app"></div><script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script><script src="https://cdn.jsdelivr.net/npm/livekit-client@2.23.0/dist/livekit-client.umd.min.js"></script><script src="/shared/ui.js"></script>
-<script>
-const rObs=()=>{const all=DATA.obs;setTimeout(()=>locLoad('lga'),60);return `<div style="display:grid;grid-template-columns:1fr 2fr;gap:20px"><div class="card"><div class="card-header"><h3><i class="fas fa-key"></i> Generate Observer Code</h3></div><select class="fi" id="gs" onchange="locLoad('lga')">${CFG.states.map(s=>`<option ${s==ME.room.state?'selected':''}>${s}</option>`).join('')}</select><input class="fi" id="gl" list="dl-lga" placeholder="LGA" onchange="locLoad('ward')"><datalist id="dl-lga"></datalist><input class="fi" id="gw" list="dl-ward" placeholder="Ward" onchange="locLoad('pu')"><datalist id="dl-ward"></datalist><input class="fi" id="gp" list="dl-pu" placeholder="PU code (e.g. 012)" onchange="puReg()"><datalist id="dl-pu"></datalist><input class="fi" id="gr" type="number" placeholder="Registered voters (default 500)"><input class="fi" id="gn" placeholder="Observer name (optional)"><button class="btn btn-primary" onclick="genCode()"><i class="fas fa-key"></i> Generate Code</button><div class="muted" style="margin-top:8px">The code is the ONLY login link. It binds one observer to this room and one PU.</div></div>
-<div class="card"><div class="card-header"><h3><i class="fas fa-users"></i> Observers (${all.length})</h3></div><div class="tw"><table><tr><th>Code</th><th>Name</th><th>Location</th><th>Reg.</th><th>Status</th><th>Tallies (hover = edit history)</th><th>Actions</th></tr>${all.map(o=>`<tr><td class="mono">${esc(o.code)}</td><td>${esc(o.name)}</td><td>${esc(o.state)}/${esc(o.lga)}/${esc(o.ward)}/PU ${esc(o.pu)}</td><td>${o.reg}</td><td>${o.active?pill(st(o)):'<span class="pill r">Revoked</span>'}</td><td>${tallyCell(o)}</td><td><button class="btn btn-sm btn-outline" onclick="SEL='${o.code}';TAB='dash';render()">Feed</button> <button class="btn btn-sm btn-outline" onclick="navigator.clipboard?.writeText('${o.code}');toast('Copied')">Copy</button> <button class="btn btn-sm ${o.active?'btn-danger':'btn-success'}" onclick="A.post('obs/${o.code}/toggle')">${o.active?'Revoke':'Activate'}</button></td></tr>`).join('')}</table></div></div></div>`};
-let PUS=[];async function locLoad(next){if(!CFG.loc)return;const s=$('#gs').value,l=$('#gl')?.value,w=$('#gw')?.value;try{if(next=='lga'){$('#dl-lga').innerHTML=(await A.get('locations?state='+encodeURIComponent(s))).map(x=>`<option>${esc(x.lga)}`).join('')}
-if(next=='ward')$('#dl-ward').innerHTML=(await A.get('locations?state='+encodeURIComponent(s)+'&lga='+encodeURIComponent(l))).map(x=>`<option>${esc(x.ward)}`).join('');
-if(next=='pu'){PUS=await A.get('locations?state='+encodeURIComponent(s)+'&lga='+encodeURIComponent(l)+'&ward='+encodeURIComponent(w));$('#dl-pu').innerHTML=PUS.map(x=>`<option value="${esc(x.pu)}" label="${esc(x.name||'')}">`).join('')}}catch{}}
-const puReg=()=>{const p=PUS.find(x=>x.pu==$('#gp').value);if(p)$('#gr').value=p.reg};
-async function genCode(){const g=i=>$('#'+i).value.trim();try{const r=await A.post('room/obs',{state:g('gs'),lga:g('gl'),ward:g('gw'),pu:g('gp'),reg:g('gr'),name:g('gn')});prompt('✅ Observer code generated — copy it and give it to the observer:',r.code)}catch(e){toast('⚠️ '+e.message)}}
-start('room',()=>({dash:['Situation Room Dashboard','building-columns',()=>roomDash(ME.id,false)],obs:['Observer Manager','user-gear',rObs],con:['Contacts','address-book',tabContacts],dat:['Data Download','download',tabData]}));
-</script></body></html>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Situation Room · My Collation Center</title>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+    <link rel="stylesheet" href="/shared/style.css" />
+  </head>
+  <body>
+    <div class="toast" id="toast"></div>
+    <div id="app"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/livekit-client@2.23.0/dist/livekit-client.umd.min.js"></script>
+    <script src="/shared/ui.js"></script>
+    <script>
+      const rObs = () => {
+        const all = DATA.obs;
+        setTimeout(() => locLoad("lga"), 60);
+        return `<div style="display:grid;grid-template-columns:1fr 2fr;gap:20px"><div class="card"><div class="card-header"><h3><i class="fas fa-key"></i> Generate Observer Code</h3></div><select class="fi" id="gs" onchange="locLoad('lga')">${CFG.states.map((s) => `<option ${s == ME.room.state ? "selected" : ""}>${s}</option>`).join("")}</select><input class="fi" id="gl" list="dl-lga" placeholder="LGA" onchange="locLoad('ward')"><datalist id="dl-lga"></datalist><input class="fi" id="gw" list="dl-ward" placeholder="Ward" onchange="locLoad('pu')"><datalist id="dl-ward"></datalist><input class="fi" id="gp" list="dl-pu" placeholder="PU code (e.g. 012)" onchange="puReg()"><datalist id="dl-pu"></datalist><input class="fi" id="gr" type="number" placeholder="Registered voters (default 500)"><input class="fi" id="gn" placeholder="Observer name (optional)"><button class="btn btn-primary" onclick="genCode()"><i class="fas fa-key"></i> Generate Code</button><div class="muted" style="margin-top:8px">The code is the ONLY login link. It binds one observer to this room and one PU.</div></div>
+<div class="card"><div class="card-header"><h3><i class="fas fa-users"></i> Observers (${all.length})</h3></div><div class="tw"><table><tr><th>Code</th><th>Name</th><th>Location</th><th>Reg.</th><th>Status</th><th>Tallies (hover = edit history)</th><th>Actions</th></tr>${all.map((o) => `<tr><td class="mono">${esc(o.code)}</td><td>${esc(o.name)}</td><td>${esc(o.state)}/${esc(o.lga)}/${esc(o.ward)}/PU ${esc(o.pu)}</td><td>${o.reg}</td><td>${o.active ? pill(st(o)) : '<span class="pill r">Revoked</span>'}</td><td>${tallyCell(o)}</td><td><button class="btn btn-sm btn-outline" onclick="SEL='${o.code}';TAB='dash';render()">Feed</button> <button class="btn btn-sm btn-outline" onclick="navigator.clipboard?.writeText('${o.code}');toast('Copied')">Copy</button> <button class="btn btn-sm ${o.active ? "btn-danger" : "btn-success"}" onclick="A.post('obs/${o.code}/toggle')">${o.active ? "Revoke" : "Activate"}</button></td></tr>`).join("")}</table></div></div></div>`;
+      };
+      let PUS = [];
+      async function locLoad(next) {
+        if (!CFG.loc) return;
+        const s = $("#gs").value,
+          l = $("#gl")?.value,
+          w = $("#gw")?.value;
+        try {
+          if (next == "lga") {
+            $("#dl-lga").innerHTML = (await A.get("locations?state=" + encodeURIComponent(s)))
+              .map((x) => `<option>${esc(x.lga)}`)
+              .join("");
+          }
+          if (next == "ward")
+            $("#dl-ward").innerHTML = (
+              await A.get("locations?state=" + encodeURIComponent(s) + "&lga=" + encodeURIComponent(l))
+            )
+              .map((x) => `<option>${esc(x.ward)}`)
+              .join("");
+          if (next == "pu") {
+            PUS = await A.get(
+              "locations?state=" +
+                encodeURIComponent(s) +
+                "&lga=" +
+                encodeURIComponent(l) +
+                "&ward=" +
+                encodeURIComponent(w),
+            );
+            $("#dl-pu").innerHTML = PUS.map(
+              (x) => `<option value="${esc(x.pu)}" label="${esc(x.name || "")}">`,
+            ).join("");
+          }
+        } catch {}
+      }
+      const puReg = () => {
+        const p = PUS.find((x) => x.pu == $("#gp").value);
+        if (p) $("#gr").value = p.reg;
+      };
+      async function genCode() {
+        const g = (i) => $("#" + i).value.trim();
+        try {
+          const r = await A.post("room/obs", {
+            state: g("gs"),
+            lga: g("gl"),
+            ward: g("gw"),
+            pu: g("gp"),
+            reg: g("gr"),
+            name: g("gn"),
+          });
+          prompt("✅ Observer code generated — copy it and give it to the observer:", r.code);
+        } catch (e) {
+          toast("⚠️ " + e.message);
+        }
+      }
+      start("room", () => ({
+        dash: ["Situation Room Dashboard", "building-columns", () => roomDash(ME.id, false)],
+        obs: ["Observer Manager", "user-gear", rObs],
+        con: ["Contacts", "address-book", tabContacts],
+        dat: ["Data Download", "download", tabData],
+      }));
+    </script>
+  </body>
+</html>
