@@ -102,7 +102,7 @@
         }
       }
       const cCol = () =>
-        cardSearch(1, DATA.obs) + '<div style="margin-top:20px">' + cardColl(flt(DATA.obs)) + "</div>";
+        cardSearch(1, DATA.obs) + '<div style="margin-top:20px">' + cardColl() + "</div>";
       const cLoc =
         () => `<div class="card" style="max-width:760px"><div class="card-header"><h3><i class="fas fa-map"></i> States · LGAs · Wards · Polling Units</h3></div><div class="muted" style="margin-bottom:12px">Status: ${CFG.loc ? "dataset loaded — rooms pick State → LGA → Ward → PU from cascading lists" : "no dataset yet (rooms type locations manually)"}.</div>
 <button class="btn btn-primary" onclick="locFetch('')"><i class="fas fa-database"></i> Load bundled national dataset</button><div class="muted" style="margin:6px 0 14px">37 states, 774 LGAs, ~8,800 wards and ~118,500 PU names (no INEC PU codes or voter counts: PUs are numbered within each ward and registered voters default to 500; set the real figure per observer).</div>

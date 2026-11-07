@@ -1,7 +1,13 @@
 {$DOMAIN} {
 	{$CADDY_TLS}
+	# LiveKit signalling (wss) and media negotiation
 	handle_path /lk/* {
 		reverse_proxy livekit:7880
 	}
+	# app: REST API, the /ws live-updates WebSocket, and the three web apps
 	reverse_proxy app:3000
+	encode gzip
+	request_body {
+		max_size 320MB
+	}
 }

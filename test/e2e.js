@@ -75,10 +75,14 @@ const watch = (pg, name) => {
     const cp = await cc.newPage(); watch(cp, "command");
     await cp.goto(B + "/command/"); await cp.fill("#lp", "adminpass1"); await cp.click("button:has-text('Enter')");
     await cp.waitForSelector("text=Situation Rooms ("); await cp.screenshot({ path: path.join(OUT, "command-rooms.png"), fullPage: true });
-    for (const t of ["Observers & Map", "Global Collation", "Results Review", "App Settings", "Broadcast", "Export & Archive"]) {
-      await cp.click(`.nav-tab:has-text('${t}')`); await cp.waitForTimeout(1200);
-      await cp.screenshot({ path: path.join(OUT, "command-" + t.split(" ")[0].toLowerCase() + ".png"), fullPage: true });
+    // click through EVERY Command Center tab; any pageerror/console error fails the run
+    const tabs = await cp.$$eval(".nav-tab", (els) => els.map((e) => e.textContent.trim()));
+    for (const t of tabs) {
+      await cp.click(`.nav-tab:text-is(${JSON.stringify(t)})`).catch(() => cp.click(`.nav-tab:has-text(${JSON.stringify(t.split(" ").slice(-1)[0])})`));
+      await cp.waitForTimeout(900);
+      await cp.screenshot({ path: path.join(OUT, "command-" + t.replace(/[^a-z]/gi, "").toLowerCase().slice(0, 12) + ".png"), fullPage: true });
     }
+    console.log("command tabs ok: " + tabs.join(", "));
     await cp.click(".nav-tab:has-text('Observers & Map')"); await cp.click(`tr:has-text('${o1}') button:text-is('Live')`); await cp.waitForTimeout(2000);
     const live = await op.evaluate(() => LIVEREQ);
     const coll = await api("collation", A);

@@ -494,7 +494,7 @@ function cardMsgs(targets) {
   }</div></div>`;
 }
 // ---------- collation ----------
-function cardColl(l) {
+function cardColl() {
   return `<div class="card"><div class="card-header"><h3><i class="fas fa-chart-column"></i> Real-Time Collation</h3><div style="display:flex;gap:6px;flex-wrap:wrap">${[
     ["nat", "All"],
     ["state", "State"],
@@ -653,7 +653,7 @@ async function addUnit() {
   }
 }
 const cardRadio = () =>
-  `<div class="radio-module"><div style="display:flex;justify-content:space-between;align-items:center"><b><i class="fas fa-tower-broadcast"></i> Radio (SDR gateway · P25/TETRA/DMR)</b><button class="btn btn-sm btn-primary" onclick="radioKey()"><i class="fas fa-key"></i> Gateway key</button></div><div class="radio-log">${DATA.radio.map((x) => `<div><span class="time">${TM(x.ts)}</span><span class="${x.alert ? "alert" : ""}">${esc(x.text)}${x.freq ? " [" + esc(x.freq) + (x.talkgroup ? " TG " + esc(x.talkgroup) : "") + "]" : ""}</span>${x.has_audio ? ` <a href="#" style="color:#68d391" onclick="playRadio(${x.id});return false">▶ play</a>` : ""}</div>`).join("")}</div><div class="search-bar" style="margin:10px 0 0;background:#0d1117;border:0"><input id="rx" placeholder="Log transmission" style="background:#1a202c;color:#fff;border-color:#2d3748"><button class="btn btn-primary btn-sm" onclick="A.post('radio',{text:$('#rx').value})">PTT / Send</button></div></div>`;
+  `<div class="radio-module"><div style="display:flex;justify-content:space-between;align-items:center"><b><i class="fas fa-tower-broadcast"></i> Radio (SDR gateway · P25/TETRA/DMR)</b><button class="btn btn-sm btn-primary" onclick="radioKey()"><i class="fas fa-key"></i> Gateway key</button></div><div class="radio-log">${DATA.radio.map((x) => `<div><span class="time">${TM(x.ts)}</span><span class="${x.alert ? "alert" : ""}">${esc(x.text)}${x.freq ? " [" + esc(x.freq) + (x.talkgroup ? " TG " + esc(x.talkgroup) : "") + "]" : ""}</span>${x.has_audio ? ` <a href="#" style="color:#68d391" onclick="playRadio(${x.id});return false">▶ play</a>` : ""}</div>`).join("")}</div><div class="search-bar" style="margin:10px 0 0;background:#0d1117;border:0"><input id="rx" placeholder="Log a note to the radio timeline" style="background:#1a202c;color:#fff;border-color:#2d3748"><button class="btn btn-primary btn-sm" onclick="A.post('radio',{text:$('#rx').value})">Log note</button></div></div>`;
 function roomDash(rid, ro) {
   CR = ro ? rid : null;
   const all = DATA.obs.filter((o) => o.room_id == rid),
@@ -663,7 +663,7 @@ function roomDash(rid, ro) {
     inc: DATA.inc.filter((i) => i.room_id == rid),
     units: DATA.units.filter((u) => u.room_id == rid),
   };
-  return `<div class="dashboard-grid"><div class="col">${cardSearch(0, all)}${cardMap(l, "<span>🔵 Patrol Unit</span>")}${cardDispatch(rid, ro)}</div><div class="col">${cardFeed(ro)}${cardColl(l)}${ro ? "" : cardRadio()}${cardMsgs(ro ? null : [["robs:" + rid, "All my observers"], ...all.map((o) => ["obs:" + o.code, o.code]), ["CMD", "Command Center"]])}</div></div>`;
+  return `<div class="dashboard-grid"><div class="col">${cardSearch(0, all)}${cardMap(l, "<span>🔵 Patrol Unit</span>")}${cardDispatch(rid, ro)}</div><div class="col">${cardFeed(ro)}${cardColl()}${ro ? "" : cardRadio()}${cardMsgs(ro ? null : [["robs:" + rid, "All my observers"], ...all.map((o) => ["obs:" + o.code, o.code]), ["CMD", "Command Center"]])}</div></div>`;
 }
 // ---------- contacts / data / audit ----------
 function tabContacts() {
