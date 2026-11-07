@@ -1,7 +1,8 @@
 # Run in PowerShell AS ADMINISTRATOR. Put my-collation-center-system.zip in your Downloads folder first.
 $ErrorActionPreference='Stop'
 $Zip="$HOME\Downloads\my-collation-center-system.zip"; $Dir="$HOME\collation"
-if(-not(Test-Path $Zip)){throw "Put my-collation-center-system.zip in $HOME\Downloads first."}
+$InRepo=Test-Path "$PSScriptRoot\docker-compose.yml"
+if($InRepo){$Dir=$PSScriptRoot}elseif(-not(Test-Path $Zip)){throw "Run this script from the project folder, or put my-collation-center-system.zip in $HOME\Downloads first."}
 if(-not(Get-Command docker -ErrorAction SilentlyContinue)){
   try{wsl --install --no-distribution}catch{}
   winget install -e --id Docker.DockerDesktop --accept-source-agreements --accept-package-agreements
@@ -9,7 +10,7 @@ if(-not(Get-Command docker -ErrorAction SilentlyContinue)){
 docker info 2>$null | Out-Null
 if($LASTEXITCODE -ne 0){ Start-Process "$env:ProgramFiles\Docker\Docker\Docker Desktop.exe"; Write-Host 'Starting Docker Desktop...'
   do{Start-Sleep 5; docker info 2>$null | Out-Null}until($LASTEXITCODE -eq 0) }
-Expand-Archive $Zip $HOME -Force; Set-Location $Dir
+if(-not $InRepo){Expand-Archive $Zip $HOME -Force}; Set-Location $Dir
 $ip=(Get-NetIPConfiguration | Where-Object{$_.IPv4DefaultGateway -and $_.NetAdapter.Status -eq 'Up'} | Select-Object -First 1).IPv4Address.IPAddress
 function R($n){-join(((48..57)+(65..90)+(97..122))|Get-Random -Count $n|ForEach-Object{[char]$_})}
 $cmd=R 12
@@ -25,9 +26,11 @@ LK_SECRET=$(R 40)
 COMPOSE_PROFILES=restream
 APP_NAME=My Collation Center
 COMMAND_PASSCODE=$cmd
-PARTIES=APC,PDP,NNPP,ADC,NDC,LP,SDP,APGA,YPP,AA
+PARTIES=
+BACKUP_MINS=30
 STT_URL=
 "@ | Set-Content .env -Encoding ascii
+New-Item -ItemType Directory -Force "$Dir\data\app" | Out-Null
 New-NetFirewallRule -DisplayName 'Collation TCP' -Direction Inbound -Protocol TCP -LocalPort 80,443,7881 -Action Allow -ErrorAction SilentlyContinue | Out-Null
 New-NetFirewallRule -DisplayName 'Collation UDP' -Direction Inbound -Protocol UDP -LocalPort 7882 -Action Allow -ErrorAction SilentlyContinue | Out-Null
 docker compose up -d --build

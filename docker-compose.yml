@@ -1,6 +1,7 @@
 services:
   db:
-    image: postgres:16-alpine
+    image: postgres:16.15-alpine
+    command: ["postgres","-c","max_connections=200","-c","shared_buffers=512MB","-c","synchronous_commit=on"]
     restart: unless-stopped
     environment:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
@@ -11,10 +12,10 @@ services:
       interval: 5s
       retries: 20
   redis:
-    image: redis:7-alpine
+    image: redis:7.4-alpine
     restart: unless-stopped
   livekit:
-    image: livekit/livekit-server:latest
+    image: livekit/livekit-server:v1.13.9
     restart: unless-stopped
     environment:
       LIVEKIT_KEYS: "${LK_KEY}: ${LK_SECRET}"
@@ -47,9 +48,13 @@ services:
       STT_URL: ${STT_URL:-}
       APP_NAME: ${APP_NAME:-My Collation Center}
       DATA_DIR: /data
-    volumes: [appdata:/data]
+      BACKUP_MINS: ${BACKUP_MINS:-30}
+      BACKUP_KEEP: ${BACKUP_KEEP:-96}
+      PG_POOL: ${PG_POOL:-40}
+    # all clips, EC8A photos, radio audio and database backups are kept in ./data/app on this PC
+    volumes: ["./data/app:/data"]
   caddy:
-    image: caddy:2
+    image: caddy:2.11.9
     restart: unless-stopped
     ports: ["80:80", "443:443"]
     environment:
@@ -58,7 +63,7 @@ services:
     volumes: ["./Caddyfile:/etc/caddy/Caddyfile:ro", "caddydata:/data"]
     depends_on: [app, livekit]
   egress:            # YouTube/Facebook/Twitch restream (enabled by COMPOSE_PROFILES=restream)
-    image: livekit/egress:latest
+    image: livekit/egress:v1.14.1
     profiles: ["restream"]
     restart: unless-stopped
     cap_add: [SYS_ADMIN]
@@ -71,9 +76,9 @@ services:
           address: redis:6379
     depends_on: [livekit, redis]
   coturn:            # optional extra TURN relay, Linux only (COMPOSE_PROFILES=turn); LiveKit already relays over TCP 7881
-    image: coturn/coturn:latest
+    image: coturn/coturn:4.6.3
     profiles: ["turn"]
     restart: unless-stopped
     network_mode: host
     command: ["-n","--log-file=stdout","--realm=${DOMAIN}","--use-auth-secret","--static-auth-secret=${TURN_SECRET}","--external-ip=${PUBLIC_IP}","--min-port=49160","--max-port=49200","--fingerprint","--no-cli"]
-volumes: {pgdata: {}, appdata: {}, caddydata: {}}
+volumes: {pgdata: {}, caddydata: {}}

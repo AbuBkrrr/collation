@@ -228,3 +228,15 @@ test("live video request, heartbeat, disabling a Command Center", async () => {
   assert.equal((await api("obs", { tok: S.B })).s, 401);
   assert.equal((await api("me", { tok: S.t4 })).s, 401);
 });
+
+test("database backup on this PC (platform administrator only)", async () => {
+  const b = ok(await api("backups", { tok: S.A, body: {} }));
+  assert.match(b.name, /^collation_.*\.dump$/);
+  assert.ok(ok(await api("backups", { tok: S.A })).files.some((f) => f.name == b.name && f.size > 1000));
+  const r = await fetch(BASE + "/api/backups/" + b.name, { headers: { Authorization: "Bearer " + S.A } });
+  assert.equal(r.status, 200);
+  assert.equal((await r.arrayBuffer()).byteLength > 1000, true);
+  const k = ok(await api("login/command", { body: { user: "admin", pass: "adminpass1" } }));
+  assert.ok(k.token);
+  assert.equal((await api("backups/../../etc/passwd", { tok: S.A })).s >= 400, true);
+});

@@ -727,8 +727,13 @@ ${CORR ? `<div class="correction-controls"><input id="mi" type="number" inputmod
             () => toast("📍 Location permission needed for GPS tracking."),
             { enableHighAccuracy: true, maximumAge: 5000 },
           );
+        // heartbeat + GPS: every 15 s, every 5 s while streaming; queued items retried every 5 s
+        let lastHb = 0;
         setInterval(() => {
-          hb();
+          if (streaming || Date.now() - lastHb > 14000) {
+            lastHb = Date.now();
+            hb();
+          }
           flush();
           flushBlobs().catch(() => {});
         }, 5000);

@@ -17,11 +17,12 @@ app.get(
         " order by code",
       [w[1]],
     );
-    const t = await q("select code,party,v,edits,hist from tallies where code=any($1)", [
+    const t = await q("select code,party,v,edits," + (o.length <= 2000 || u.role == "obs" || req.query.full == "1" ? "hist" : "null hist") + " from tallies where code=any($1)", [
         o.map((x) => x.code),
       ]),
       m = {};
-    t.forEach((x) => ((m[x.code] = m[x.code] || {})[x.party] = { v: x.v, edits: x.edits, hist: x.hist }));
+    const full = u.role == "obs" || req.query.full == "1" || o.length <= 2000;
+    t.forEach((x) => ((m[x.code] = m[x.code] || {})[x.party] = full ? { v: x.v, edits: x.edits, hist: x.hist } : { v: x.v, edits: x.edits }));
     res.json(o.map((x) => ({ ...x, t: m[x.code] || {} })));
   }),
 );
@@ -65,20 +66,32 @@ app.post(
     res.json({ ok: 1 });
   }),
 );
+// Heartbeat fast path (the hottest endpoint: every phone, every 15 s): token check + access check + update
+// in ONE statement. Same rules as auth(): code active, room active, Command Center active, same phone.
 app.post(
   "/api/observer/heartbeat",
-  auth("obs"),
   h(async (req, res) => {
-    const b = req.body,
+    let u;
+    try {
+      u = jwt.verify((req.headers.authorization || "").slice(7), SECRET);
+    } catch {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    if (u.role != "obs" || !u.dh) return res.status(401).json({ error: "Unauthorized" });
+    const b = req.body || {},
       lat = Number.isFinite(b.lat) && Math.abs(b.lat) <= 90 ? b.lat : null,
       lng = Number.isFinite(b.lng) && Math.abs(b.lng) <= 180 ? b.lng : null;
-    const [r] = await q(
-      "update observers o set seen=now(),lat=coalesce($2,o.lat),lng=coalesce($3,o.lng),streaming=coalesce($4,o.streaming),pend=coalesce($5,o.pend) from (select streaming old from observers where code=$1) p where o.code=$1 returning p.old,o.streaming,o.live_req",
-      [req.u.id, lat, lng, typeof b.streaming == "boolean" ? b.streaming : null, Number.isInteger(b.pend) ? b.pend : null],
+    const [r] = await qsys(
+      `update observers o set seen=now(),lat=coalesce($2,o.lat),lng=coalesce($3,o.lng),streaming=coalesce($4,o.streaming),pend=coalesce($5,o.pend)
+       from observers p join rooms r on r.id=p.room_id join tenants t on t.id=r.tenant
+       where o.code=$1 and p.code=$1 and o.active and r.status='active' and t.active and left(o.device_hash,16)=$6
+       returning p.streaming old,o.streaming,o.live_req,r.tenant`,
+      [u.id, lat, lng, typeof b.streaming == "boolean" ? b.streaming : null, Number.isInteger(b.pend) ? b.pend : null, u.dh],
     );
+    if (!r) return res.status(401).json({ error: "Access revoked" });
     // only a change of streaming state is pushed at once; GPS moves reach dashboards on their 10 s refresh
-    if (r && !!r.old != !!r.streaming) bus.notify(req.u.tn);
-    res.json({ ok: 1, live: !!r?.live_req });
+    if (!!r.old != !!r.streaming) bus.notify(r.tenant);
+    res.json({ ok: 1, live: !!r.live_req });
   }),
 );
 app.post(

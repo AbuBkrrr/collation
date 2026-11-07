@@ -74,6 +74,7 @@ const STATES = [
   "Zamfara",
 ];
 const pool = new Pool({
+  max: +E.PG_POOL || 40,
   connectionString: E.DATABASE_URL || "postgres://postgres:postgres@localhost:5432/collation",
 });
 // qsys: system query (owner role, bypasses row-level security) - logins, boot, platform admin, jobs.
