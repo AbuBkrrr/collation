@@ -1,5 +1,8 @@
 const {qsys,qx,RLS,hit,LK,als,express,jwt,bcrypt,http,https,fs,path,crypto,E,PORT,SECRET,DATA,PARTIES,STATES,pool,q,rnd,abbr,aud,h,SCHEMA,app,rate,auth,su,own,mine,tnOf,cfgTenant,roomScope,getS,setS,appName,clean,bus} = require("../core");
 const TOTP = require("../totp");
+// an APK is available if it was dropped in DATA_DIR or committed to the repo's apks/ folder by CI
+const hasApk = (name) =>
+  fs.existsSync(path.join(DATA, name + ".apk")) || fs.existsSync(path.join(__dirname, "..", "..", "apks", name + ".apk"));
 app.get(
   "/api/config",
   h(async (req, res) => {
@@ -36,7 +39,8 @@ app.get(
       loc: c.n > 0,
       appName: await appName(await cfgTenant(req)),
       lk: !!(LK && E.LIVEKIT_URL && E.LIVEKIT_API_KEY),
-      apk: fs.existsSync(path.join(DATA, "observer.apk")),
+      apk: hasApk("observer"),
+      apkRoom: hasApk("room"),
     });
   }),
 );

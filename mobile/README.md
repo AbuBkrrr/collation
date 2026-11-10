@@ -1,25 +1,33 @@
-# Collation Observer — Android app
+# Android apps — Observer & Situation Room
 
-A Capacitor wrapper around the observer web app. It bundles the UI, so it opens instantly and works offline, and it talks to your Command Center server for login, GPS, live video, voice tallies and the EC8A upload. GPS keeps running with the screen off (a foreground service), and the screen stays awake while streaming.
+Two Capacitor wrappers built from the same `mobile/` project: the **Observer** app (field agents) and the **Situation Room** app (LGA/area supervisors). Each bundles its web UI so it opens instantly, and talks to your Command Center server for login, GPS, live video, maps, voice tallies and uploads. They install side by side (distinct `applicationId`s) and both run in any browser too.
+
+## Building the APKs (the easy way: CI)
+
+The restricted dev container cannot compile an APK (Google's SDK/Maven hosts are blocked), so the APKs are built by **GitHub Actions** (`.github/workflows/android.yml`). It runs on a push that touches the apps (or on manual *Run workflow*), builds both APKs, uploads them as downloadable artifacts, and commits them to `apks/` in the repo. On your server, `git pull` then brings the APKs and they appear on the landing page (`/download/app` and `/download/room`) with QR codes. You can also drop a file at `DATA_DIR/observer.apk` or `DATA_DIR/room.apk` to override.
+
+## What each app does
+
+- **Observer** — first launch asks for the **Command Center web address**, then the normal observer screen: enter the code from the Situation Room and a PIN (the code locks to the phone). GPS keeps running with the screen off.
+- **Situation Room** — enter the same address, then sign in with the room ID and passcode: the live map, collation and results in your hand.
+
+The small gear at the bottom-left changes the saved address later.
 
 ## What the observer sees
 
 1. First launch: the app asks for the **Command Center web address** (for example `https://collation.example.com`). It checks the address and remembers it. The small gear at the bottom-left changes it later.
 2. Then the normal observer screen: enter the code from the Situation Room and a PIN. The code locks to this phone.
 
-## Build it (on a PC with Android Studio)
+## Building locally (a PC with the Android SDK)
 
-You need Node.js and Android Studio (with an Android SDK). From this `mobile/` folder:
+You need Node.js and the Android SDK (Android Studio, or the command-line tools). From the repo root run `npm ci`, then from this `mobile/` folder `npm ci`, then:
 
 ```bash
-npm install          # Capacitor and the plugins
-npm run sync         # builds www/ from the observer app and copies it into android/
-npm run open         # opens the project in Android Studio
+sh build-apk.sh observer   # → ../apks/observer.apk
+sh build-apk.sh room       # → ../apks/room.apk
 ```
 
-In Android Studio, press **Run** to install on a connected phone (enable USB debugging first), or **Build → Build Bundle(s) / APK(s) → Build APK(s)** to produce an installable `app-debug.apk`.
-
-`npm run sync` reruns the web build and `cap sync`. Run it again whenever the observer app changes.
+`build-apk.sh` assembles the chosen app's `www/`, brands the native project (`applicationId`, app label), runs `cap sync`, builds a debug APK and restores the native files. To work inside Android Studio instead: `npm run sync` then `npm run open`.
 
 ### A signed release APK (for the Play Store or direct install)
 

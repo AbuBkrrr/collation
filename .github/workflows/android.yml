@@ -1,0 +1,57 @@
+name: android
+# Builds the Observer and Situation Room Android APKs (the restricted dev container can't: Google's
+# SDK/Maven hosts are blocked there). The built APKs are committed to apks/ so a plain `git pull` on
+# the server publishes them on the landing page, and are also uploaded as downloadable artifacts.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "mobile/**"
+      - "public/observer/**"
+      - "public/room/**"
+      - "public/shared/**"
+      - ".github/workflows/android.yml"
+    paths-ignore:
+      - "apks/**"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "21" }
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK packages
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm --prefix mobile ci
+      - name: Build APKs
+        run: |
+          chmod +x mobile/android/gradlew
+          sh mobile/build-apk.sh observer
+          sh mobile/build-apk.sh room
+          ls -la apks
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apks
+          path: apks/*.apk
+          if-no-files-found: error
+      - name: Commit APKs back to the branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -f apks/observer.apk apks/room.apk
+          if git diff --cached --quiet; then
+            echo "APKs unchanged — nothing to commit."
+          else
+            git commit -m "Build Android APKs (observer + situation room) [skip ci]"
+            git push origin HEAD:${GITHUB_REF_NAME}
+          fi

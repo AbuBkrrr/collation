@@ -87,13 +87,23 @@
         line-height: 1.5;
         flex: 1;
       }
+      .dlgrid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 18px;
+      }
+      @media (max-width: 820px) {
+        .dlgrid {
+          grid-template-columns: 1fr;
+        }
+      }
       .dl {
         background: #fff;
         border: 1px solid #e2e8f0;
         border-radius: 16px;
         padding: 26px;
         display: flex;
-        gap: 26px;
+        gap: 20px;
         align-items: center;
         flex-wrap: wrap;
       }
@@ -111,12 +121,15 @@
         font-size: 14px;
         line-height: 1.55;
       }
-      #qr {
+      .qr {
         background: #fff;
         padding: 8px;
         border: 1px solid #e2e8f0;
         border-radius: 12px;
         line-height: 0;
+      }
+      .qr:empty {
+        display: none;
       }
       .foot {
         text-align: center;
@@ -159,30 +172,51 @@
         </a>
       </div>
 
-      <div class="dl" id="dlcard">
-        <div class="ic" style="background: #38a169; width: 56px; height: 56px; font-size: 26px">
-          <i class="fab fa-android"></i>
-        </div>
-        <div class="txt">
-          <h3>Observer Android app</h3>
-          <p id="dltext">
-            Install on each observer's phone for background GPS, live video and offline voice tallies. After
-            installing, open it and enter this site's address when asked.
-          </p>
-          <div style="margin-top: 12px; display: flex; gap: 10px; flex-wrap: wrap">
-            <a class="btn btn-success" id="dlbtn" href="/download/app"
-              ><i class="fas fa-download"></i> Download the app (.apk)</a
-            >
-            <span class="btn btn-outline" id="dlsoon" style="pointer-events: none"
-              >Android app coming soon</span
-            >
+      <div class="dlgrid">
+        <div class="dl" data-app="observer">
+          <div class="ic" style="background: #38a169; width: 52px; height: 52px; font-size: 24px">
+            <i class="fab fa-android"></i>
           </div>
-          <p style="margin-top: 10px; font-size: 12px; color: #718096">
-            When Android warns about installing outside the Play Store, allow it for this download.
-          </p>
+          <div class="txt">
+            <h3>Observer Android app</h3>
+            <p>
+              For field observers: background GPS, live video and offline voice tallies. After installing,
+              open it and enter this site's address when asked.
+            </p>
+            <div style="margin-top: 12px; display: flex; gap: 10px; flex-wrap: wrap">
+              <a class="btn btn-success dlbtn" href="/download/app" style="display: none"
+                ><i class="fas fa-download"></i> Download (.apk)</a
+              >
+              <span class="btn btn-outline dlsoon" style="pointer-events: none">Android app coming soon</span>
+            </div>
+          </div>
+          <div class="qr"></div>
         </div>
-        <div id="qr"></div>
+
+        <div class="dl" data-app="room">
+          <div class="ic" style="background: #2b6cb0; width: 52px; height: 52px; font-size: 24px">
+            <i class="fab fa-android"></i>
+          </div>
+          <div class="txt">
+            <h3>Situation Room Android app</h3>
+            <p>
+              For LGA / area supervisors who run a room from a phone or tablet: the live map, collation and
+              results in your hand. Open it and enter this site's address, then sign in with your room ID.
+            </p>
+            <div style="margin-top: 12px; display: flex; gap: 10px; flex-wrap: wrap">
+              <a class="btn btn-primary dlbtn" href="/download/room" style="display: none"
+                ><i class="fas fa-download"></i> Download (.apk)</a
+              >
+              <span class="btn btn-outline dlsoon" style="pointer-events: none">Android app coming soon</span>
+            </div>
+          </div>
+          <div class="qr"></div>
+        </div>
       </div>
+      <p style="text-align: center; font-size: 12px; color: #718096">
+        Both apps also run in any browser from the buttons above. When Android warns about installing outside
+        the Play Store, allow it for these downloads.
+      </p>
 
       <div class="foot" id="foot">Secure sign-in · each command sees only its own rooms, observers and results.</div>
     </div>
@@ -195,16 +229,25 @@
             document.getElementById("pname").textContent = c.appName;
             document.title = c.appName;
           }
-          const has = !!c.apk;
-          document.getElementById(has ? "dlsoon" : "dlbtn").classList.add("hide");
-          if (has && window.qrcode) {
-            const q = qrcode(0, "M");
-            q.addData(location.origin + "/download/app");
-            q.make();
-            document.getElementById("qr").innerHTML = q.createSvgTag({ cellSize: 4, margin: 0 });
-          } else {
-            document.getElementById("qr").classList.add("hide");
-          }
+          const apps = { observer: { has: !!c.apk, url: "/download/app" }, room: { has: !!c.apkRoom, url: "/download/room" } };
+          document.querySelectorAll(".dl[data-app]").forEach((card) => {
+            const a = apps[card.getAttribute("data-app")],
+              btn = card.querySelector(".dlbtn"),
+              soon = card.querySelector(".dlsoon"),
+              qr = card.querySelector(".qr");
+            if (a.has) {
+              btn.style.display = "";
+              soon.classList.add("hide");
+              if (window.qrcode) {
+                const q = qrcode(0, "M");
+                q.addData(location.origin + a.url);
+                q.make();
+                qr.innerHTML = q.createSvgTag({ cellSize: 4, margin: 0 });
+              } else qr.classList.add("hide");
+            } else {
+              qr.classList.add("hide");
+            }
+          });
         })
         .catch(() => {});
     </script>

@@ -18,12 +18,23 @@ for (const [u, f] of [
 ])
   app.get(u, (req, res) => res.sendFile(path.join(__dirname, "node_modules", f), V));
 app.use(express.static(path.join(__dirname, "public"), { extensions: ["html"], maxAge: "5m" }));
-// Observer Android APK: drop the built file at DATA_DIR/observer.apk on the server; it then appears on the
-// landing page with a download button and a QR code.
-const APK = path.join(DATA, "observer.apk");
+// Android APKs. CI (.github/workflows/android.yml) builds them and commits them to apks/ in the repo,
+// so a plain `git pull` brings them to the server. You can also drop a file at DATA_DIR/<name>.apk to
+// override. Both appear on the landing page with a download button and a QR code when present.
+const apkPath = (name) => {
+  const a = path.join(DATA, name + ".apk"),
+    b = path.join(__dirname, "apks", name + ".apk");
+  return fs.existsSync(a) ? a : fs.existsSync(b) ? b : null;
+};
 app.get("/download/app", (req, res) => {
-  if (!fs.existsSync(APK)) return res.status(404).type("text").send("The Android app has not been uploaded yet.");
-  res.download(APK, "collation-observer.apk");
+  const p = apkPath("observer");
+  if (!p) return res.status(404).type("text").send("The Observer Android app has not been published yet.");
+  res.download(p, "my-situation-room-observer.apk");
+});
+app.get("/download/room", (req, res) => {
+  const p = apkPath("room");
+  if (!p) return res.status(404).type("text").send("The Situation Room Android app has not been published yet.");
+  res.download(p, "my-situation-room-room.apk");
 });
 app.get("/", (req, res) => res.sendFile(path.join(__dirname, "public", "landing", "index.html")));
 const { server } = require("./src/ws");
