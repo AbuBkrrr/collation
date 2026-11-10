@@ -286,19 +286,19 @@ function mapMount() {
   if (!map) {
     map = L.map(hold, { preferCanvas: true }).setView([12.0, 8.52], 9);
     cv = L.canvas({ padding: 0.3 });
-    const dk = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-        attribution: "&copy; OpenStreetMap &copy; CARTO",
-        subdomains: "abcd",
-        maxZoom: 19,
-      }),
-      sat = L.tileLayer(
-        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-        { attribution: "Tiles &copy; Esri", maxZoom: 19 },
-      );
+    // Keyless basemaps (no API key needed): Esri dark-gray canvas with labels, Esri satellite, OpenStreetMap.
+    const E = "https://server.arcgisonline.com/ArcGIS/rest/services/",
+      dk = L.layerGroup([
+        L.tileLayer(E + "Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", { attribution: "Tiles &copy; Esri", maxZoom: 16 }),
+        L.tileLayer(E + "Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}", { maxZoom: 16 }),
+      ]),
+      sat = L.layerGroup([
+        L.tileLayer(E + "World_Imagery/MapServer/tile/{z}/{y}/{x}", { attribution: "Tiles &copy; Esri, Maxar", maxZoom: 19 }),
+        L.tileLayer(E + "Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}", { maxZoom: 19 }),
+      ]),
+      osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "&copy; OpenStreetMap", maxZoom: 19 });
     dk.addTo(map);
-    // place names / roads over the Esri imagery
-    const lbl = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}", { maxZoom: 19 });
-    BASES = { "Dark map": dk, "Satellite (Esri)": L.layerGroup([sat, lbl]) };
+    BASES = { "Dark map": dk, "Streets": osm, "Satellite": sat };
     LCTL = L.control.layers(BASES).addTo(map);
     // Google Map Tiles / Mapbox imagery when the server has a key configured (sharper in Nigerian cities)
     A.get("maps")
@@ -652,6 +652,9 @@ async function addUnit() {
     toast("⚠️ " + e.message);
   }
 }
+// radio monitor used by the Command Center and read-only room drill (playback only, with room labels)
+const cardRadioView = () =>
+  `<div class="radio-module"><div style="display:flex;justify-content:space-between;align-items:center"><b><i class="fas fa-tower-broadcast"></i> Radio monitor</b><span class="tag" style="background:#1a202c;color:#a0aec0">${DATA.radio.length} transmissions</span></div><div class="radio-log" style="max-height:360px">${DATA.radio.map((x) => `<div><span class="time">${TM(x.ts)}</span>${x.room_name ? '<span style="color:#63b3ed">' + esc(x.room_name) + "</span> " : ""}<span class="${x.alert ? "alert" : ""}">${esc(x.text)}${x.freq ? " [" + esc(x.freq) + (x.talkgroup ? " TG " + esc(x.talkgroup) : "") + "]" : ""}</span>${x.has_audio ? ` <a href="#" style="color:#68d391" onclick="playRadio(${x.id});return false">▶ play</a>` : ""}</div>`).join("") || '<div class="muted" style="padding:10px">No radio yet. A listening post (SDR + antenna) near the area feeds this through the room\'s gateway key. See radio-gateway/README.md.</div>'}</div></div>`;
 const cardRadio = () =>
   `<div class="radio-module"><div style="display:flex;justify-content:space-between;align-items:center"><b><i class="fas fa-tower-broadcast"></i> Radio (SDR gateway · P25/TETRA/DMR)</b><button class="btn btn-sm btn-primary" onclick="radioKey()"><i class="fas fa-key"></i> Gateway key</button></div><div class="radio-log">${DATA.radio.map((x) => `<div><span class="time">${TM(x.ts)}</span><span class="${x.alert ? "alert" : ""}">${esc(x.text)}${x.freq ? " [" + esc(x.freq) + (x.talkgroup ? " TG " + esc(x.talkgroup) : "") + "]" : ""}</span>${x.has_audio ? ` <a href="#" style="color:#68d391" onclick="playRadio(${x.id});return false">▶ play</a>` : ""}</div>`).join("")}</div><div class="search-bar" style="margin:10px 0 0;background:#0d1117;border:0"><input id="rx" placeholder="Log a note to the radio timeline" style="background:#1a202c;color:#fff;border-color:#2d3748"><button class="btn btn-primary btn-sm" onclick="A.post('radio',{text:$('#rx').value})">Log note</button></div></div>`;
 function roomDash(rid, ro) {
@@ -663,7 +666,7 @@ function roomDash(rid, ro) {
     inc: DATA.inc.filter((i) => i.room_id == rid),
     units: DATA.units.filter((u) => u.room_id == rid),
   };
-  return `<div class="dashboard-grid"><div class="col">${cardSearch(0, all)}${cardMap(l, "<span>🔵 Patrol Unit</span>")}${cardDispatch(rid, ro)}</div><div class="col">${cardFeed(ro)}${cardColl()}${ro ? "" : cardRadio()}${cardMsgs(ro ? null : [["robs:" + rid, "All my observers"], ...all.map((o) => ["obs:" + o.code, o.code]), ["CMD", "Command Center"]])}</div></div>`;
+  return `<div class="dashboard-grid"><div class="col">${cardSearch(0, all)}${cardMap(l, "<span>🔵 Patrol Unit</span>")}${cardDispatch(rid, ro)}</div><div class="col">${cardFeed(ro)}${cardColl()}${ro ? cardRadioView() : cardRadio()}${cardMsgs(ro ? null : [["robs:" + rid, "All my observers"], ...all.map((o) => ["obs:" + o.code, o.code]), ["CMD", "Command Center"]])}</div></div>`;
 }
 // ---------- contacts / data / audit ----------
 function tabContacts() {
@@ -763,6 +766,7 @@ async function loadAll() {
       ME.su ? g("tenants") : [],
     ]);
   else [DATA.radio, DATA.clips] = await Promise.all([g("radio"), g("clips")]);
+  if (A.role == "cmd") DATA.radio = await g("radio" + (DRILL ? "?room=" + DRILL : F.radioRoom ? "?room=" + F.radioRoom : ""));
   if (A.role == "cmd") DATA.totp = await A.get("totp").catch(() => ({}));
   if (A.role == "cmd" && ME.su) DATA.bk = await A.get("backups").catch(() => null);
   if (A.role == "cmd" && ME.su) DATA.mkt = await A.get("pitch/stats").catch(() => null);

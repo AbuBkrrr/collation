@@ -63,15 +63,28 @@ app.post(
 );
 app.get(
   "/api/radio",
-  auth("room"),
-  h(async (req, res) =>
+  auth("cmd", "room"),
+  h(async (req, res) => {
+    const u = req.u;
+    if (u.role == "room")
+      return res.json(
+        await q(
+          "select id,ts,text,alert,freq,talkgroup,unit,code,(audio_path is not null) has_audio from radio where room_id=$1 order by id desc limit 80",
+          [u.id],
+        ),
+      );
+    // Command Center: radio across all its rooms (optionally one room via ?room), with the room name
+    const room = req.query.room ? String(req.query.room) : null;
+    if (room && !(await mine(u, room))) return res.sendStatus(403);
     res.json(
       await q(
-        "select id,ts,text,alert,freq,talkgroup,unit,code,(audio_path is not null) has_audio from radio where room_id=$1 order by id desc limit 60",
-        [req.u.id],
+        "select rd.id,rd.ts,rd.text,rd.alert,rd.freq,rd.talkgroup,rd.unit,rd.code,rd.room_id,r.name room_name,(rd.audio_path is not null) has_audio from radio rd join rooms r on r.id=rd.room_id where " +
+          (room ? "rd.room_id=$1" : "r.tenant=$1") +
+          " order by rd.id desc limit 150",
+        [room || u.tn],
       ),
-    ),
-  ),
+    );
+  }),
 );
 app.post(
   "/api/radio",

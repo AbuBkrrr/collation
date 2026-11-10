@@ -64,6 +64,21 @@ app.post(
   }),
 );
 app.post(
+  "/api/rooms/reset-passcodes",
+  auth("cmd"),
+  h(async (req, res) => {
+    const rooms = await q("select id,name,state,scope from rooms where tenant=$1 order by id", [req.u.tn]);
+    const out = [];
+    for (const r of rooms) {
+      const p = rnd(10);
+      await q("update rooms set pass_hash=$2 where id=$1", [r.id, await bcrypt.hash(p, 10)]);
+      out.push({ id: r.id, name: r.name, lga: r.scope, passcode: p });
+    }
+    aud("CMD", "Reset and exported passcodes for " + out.length + " rooms");
+    res.json({ rooms: out });
+  }),
+);
+app.post(
   "/api/rooms/:id/reset",
   auth("cmd"),
   h(async (req, res) => {
