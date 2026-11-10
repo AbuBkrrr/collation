@@ -225,7 +225,7 @@
             .catch((e) => toast("⚠️ " + e.message));
       };
       const cTn =
-        () => `<div class="dashboard-grid"><div class="card"><div class="card-header"><h3><i class="fas fa-sitemap"></i> New Command Center</h3></div><div class="muted" style="margin-bottom:8px">Each Command Center has its own rooms, observers, operators, data, settings and audit log, and cannot see any other Command Center.</div><input class="fi" id="tn_n" placeholder="Command Center name (e.g. Kano State Command)"><select class="fi" id="tn_s"><option value="">State (optional) — auto-fills its LGAs/wards/PUs</option>${CFG.states.map((x)=>`<option>${x}</option>`).join("")}</select><input class="fi" id="tn_o" placeholder="First operator name (optional — auto-made from the name)"><input class="fi" id="tn_p" type="password" placeholder="Operator passcode (optional — auto-generated)"><button class="btn btn-primary" onclick="tnAdd()"><i class="fas fa-plus"></i> Create Command Center</button><div class="muted" style="margin-top:6px;font-size:12px">After creating, you get a ready-to-send invite (login link + operator + passcode) to share with the client.</div></div>
+        () => `<div class="dashboard-grid"><div class="card"><div class="card-header"><h3><i class="fas fa-sitemap"></i> New Command Center</h3></div><div class="muted" style="margin-bottom:8px">Each Command Center has its own rooms, observers, operators, data, settings and audit log, and cannot see any other Command Center.</div><input class="fi" id="tn_n" placeholder="Command Center name (e.g. Kano State Command)"><select class="fi" id="tn_s"><option value="">State (optional) — auto-fills its LGAs/wards/PUs</option>${CFG.states.map((x)=>`<option>${x}</option>`).join("")}</select><input class="fi" id="tn_o" placeholder="First operator name (optional — auto-made from the name)"><div style="position:relative"><input class="fi" id="tn_p" type="password" placeholder="Operator passcode (optional — auto-generated)" style="padding-right:84px"><button type="button" class="btn btn-sm btn-outline" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);padding:4px 10px" onclick="tnEye(this)">Show</button></div><input class="fi" id="tn_p2" type="password" placeholder="Confirm passcode"><button class="btn btn-primary" onclick="tnAdd()"><i class="fas fa-plus"></i> Create Command Center</button><div class="muted" style="margin-top:6px;font-size:12px">Leave the passcode blank to auto-generate a strong one. After creating, you get a ready-to-send invite (login link + operator + passcode) to share with the client.</div></div>
 <div class="card"><div class="card-header"><h3>Command Centers (${DATA.tn.length})</h3></div><div class="tw"><table><tr><th>ID</th><th>Name</th><th>State</th><th>Rooms</th><th>Operators</th><th>Status</th><th></th></tr>${DATA.tn.map((t) => `<tr><td class="mono">${esc(t.id)}</td><td><b>${esc(t.name)}</b></td><td>${esc(t.state || "—")}</td><td>${t.rooms}</td><td>${t.operators}</td><td>${pill(t.active ? "active" : "inactive")}</td><td style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-sm btn-primary" onclick="tnShare('${t.id}','${esc(t.name).replace(/'/g,"\\'")}')"><i class="fas fa-share-nodes"></i> Share</button><button class="btn btn-sm ${t.active ? "btn-danger" : "btn-success"}" onclick="A.post('tenants/${t.id}/toggle').then(()=>{toast('Updated');loadAll()}).catch(e=>toast('⚠️ '+e.message))">${t.active ? "Disable" : "Enable"}</button></td></tr>`).join("")}</table></div><div class="muted" style="font-size:12px;margin-top:8px"><b>Share</b> re-issues the client's login: it sets a fresh passcode and copies a ready-to-send invite. Any passcode shared earlier stops working.</div></div></div>`;
       function inviteMsg(nm, r) {
         return (
@@ -247,14 +247,23 @@
           .then((r) => shareInvite(inviteMsg(nm, r)))
           .catch((e) => toast("⚠️ " + e.message));
       };
-      const tnAdd = () =>
-        A.post("tenants", { name: $("#tn_n").value, state: $("#tn_s").value, operator: $("#tn_o").value, pass: $("#tn_p").value })
+      function tnEye(btn) {
+        const i = $("#tn_p"), i2 = $("#tn_p2"), show = i.type === "password";
+        i.type = i2.type = show ? "text" : "password";
+        btn.textContent = show ? "Hide" : "Show";
+      }
+      const tnAdd = () => {
+        const pass = $("#tn_p").value, pass2 = $("#tn_p2").value;
+        if (pass && pass.length < 8) return toast("⚠️ Passcode must be at least 8 characters.");
+        if (pass && pass !== pass2) return toast("⚠️ The two passcodes don't match.");
+        A.post("tenants", { name: $("#tn_n").value, state: $("#tn_s").value, operator: $("#tn_o").value, pass: pass })
           .then((r) => {
             shareInvite(inviteMsg($("#tn_n").value, r));
             toast("✅ Command Center " + r.id + " created.");
             loadAll();
           })
           .catch((e) => toast("⚠️ " + e.message));
+      };
       const cloudNow = () =>
         A.post("cloudsync")
           .then(() => toast("☁️ Synced."))
