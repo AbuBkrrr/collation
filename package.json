@@ -5,7 +5,8 @@
   "scripts": {
     "start": "node server.js",
     "test": "node --test --test-concurrency=1 test/*.test.js",
-    "e2e": "node test/e2e.js"
+    "e2e": "node test/e2e.js",
+    "seed:demo": "node scripts/seed-demo.js"
   },
   "engines": {
     "node": ">=18"
