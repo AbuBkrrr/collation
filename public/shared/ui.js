@@ -765,6 +765,7 @@ async function loadAll() {
   else [DATA.radio, DATA.clips] = await Promise.all([g("radio"), g("clips")]);
   if (A.role == "cmd") DATA.totp = await A.get("totp").catch(() => ({}));
   if (A.role == "cmd" && ME.su) DATA.bk = await A.get("backups").catch(() => null);
+  if (A.role == "cmd" && ME.su) DATA.mkt = await A.get("pitch/stats").catch(() => null);
   if ($("#collSlot")) loadColl();
   if (TAB == "res" && PUS_) loadPus();
   if (A.role == "room")

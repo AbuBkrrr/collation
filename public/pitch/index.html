@@ -1,0 +1,580 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>html,body{margin:0}*{box-sizing:border-box}img{max-width:100%}[hidden]{display:none!important}</style>
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>My Situation Room</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+  /* Layout concept: a dark "command-centre at night" scrollytelling pitch — full-bleed bands,
+     live code-driven simulations (tactical map, collation, phone feed), gold accent on navy. */
+  :root {
+    --bg: #060d1c;
+    --band: #0a1528;
+    --surface: #0f1e38;
+    --surface-2: #14274a;
+    --line: #22365c;
+    --fg: #eef4ff;
+    --muted: #9fb3d4;
+    --faint: #6d83a8;
+    --gold: #edc050;      /* accent: authority / trust */
+    --blue: #4b8cf5;      /* patrol / system */
+    --green: #37d6a0;      /* verified / live-good */
+    --red: #ff5d73;        /* incident / live */
+    --amber: #f3b23f;      /* pending / warning */
+    --display: "Space Grotesk", system-ui, sans-serif;
+    --body: "Inter", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--body);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  h1, h2, h3, .display { font-family: var(--display); font-weight: 600; text-wrap: balance; letter-spacing: -0.02em; }
+  .gut { padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); }
+  .wrap { max-width: 1120px; margin: 0 auto; }
+  .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--gold); }
+  .muted { color: var(--muted); }
+  a { color: inherit; }
+  section { position: relative; }
+  .band { padding-block: clamp(64px, 9vw, 128px); }
+
+  /* ---------- NAV ---------- */
+  nav {
+    position: sticky; top: env(safe-area-inset-top, 0px); z-index: 30;
+    background: rgba(6,13,28,0.82); backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--line);
+  }
+  body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 31; background: rgba(6,13,28,0.95); }
+  .nav-in { max-width: 1120px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; height: 62px; gap: 16px; }
+  .brand { display: flex; align-items: center; gap: 11px; font-family: var(--display); font-weight: 600; font-size: 17px; letter-spacing: -0.01em; }
+  .shield { width: 30px; height: 30px; flex: none; }
+  .nav-links { display: flex; gap: 26px; font-size: 14px; }
+  .nav-links a { color: var(--muted); text-decoration: none; transition: color .2s; }
+  .nav-links a:hover { color: var(--fg); }
+  @media (max-width: 760px) { .nav-links { display: none; } }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px;
+    padding: 11px 18px; border-radius: 10px; text-decoration: none; border: 1px solid transparent; cursor: pointer;
+    transition: transform .15s, background .2s, border-color .2s;
+  }
+  .btn-gold { background: var(--gold); color: #1a1205; }
+  .btn-gold:hover { transform: translateY(-1px); }
+  .btn-ghost { border-color: var(--line); color: var(--fg); background: transparent; }
+  .btn-ghost:hover { border-color: var(--gold); }
+
+  /* ---------- HERO ---------- */
+  .hero { position: relative; overflow: hidden; border-bottom: 1px solid var(--line); }
+  #mapCanvas { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0.5; }
+  .hero-grad { position: absolute; inset: 0; background:
+      radial-gradient(1200px 520px at 72% 12%, rgba(75,140,245,0.14), transparent 60%),
+      radial-gradient(900px 500px at 20% 90%, rgba(237,192,80,0.09), transparent 60%),
+      linear-gradient(180deg, rgba(6,13,28,0.3), rgba(6,13,28,0.86)); }
+  .hero-in { position: relative; z-index: 2; padding-block: clamp(72px, 11vw, 150px); }
+  .hero h1 { font-size: clamp(38px, 6.4vw, 76px); line-height: 1.02; margin: 18px 0 0; }
+  .hero h1 .hl { color: var(--gold); }
+  .hero p.lead { font-size: clamp(17px, 2.2vw, 22px); color: var(--muted); max-width: 40ch; margin: 22px 0 0; }
+  .hero-cta { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 34px; }
+  .live-chip { display: inline-flex; align-items: center; gap: 9px; font-family: var(--mono); font-size: 12px; color: var(--muted);
+    border: 1px solid var(--line); background: rgba(10,21,40,0.7); padding: 7px 13px; border-radius: 999px; }
+  .dot-live { width: 8px; height: 8px; border-radius: 50%; background: var(--red); box-shadow: 0 0 0 0 rgba(255,93,115,.6); animation: pulse 1.6s infinite; }
+  @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(255,93,115,.55)} 70%{box-shadow:0 0 0 9px rgba(255,93,115,0)} 100%{box-shadow:0 0 0 0 rgba(255,93,115,0)} }
+
+  /* ---------- STAT STRIP ---------- */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; margin-top: 54px; }
+  .stat { background: var(--band); padding: 22px 20px; }
+  .stat .n { font-family: var(--display); font-size: clamp(26px, 4vw, 40px); font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+  .stat .l { font-size: 12.5px; color: var(--faint); margin-top: 4px; letter-spacing: .02em; }
+  .stat .n .u { color: var(--gold); }
+  @media (max-width: 680px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+
+  /* ---------- SECTION HEADERS ---------- */
+  .sec-head { max-width: 62ch; }
+  .sec-head h2 { font-size: clamp(28px, 4.2vw, 46px); margin: 14px 0 0; line-height: 1.08; }
+  .sec-head p { color: var(--muted); font-size: 17px; margin: 16px 0 0; }
+
+  /* ---------- SPLIT ---------- */
+  .split { display: grid; grid-template-columns: 1.05fr 1fr; gap: clamp(30px, 5vw, 70px); align-items: center; margin-top: 52px; }
+  .split.rev { grid-template-columns: 1fr 1.05fr; }
+  @media (max-width: 880px) { .split, .split.rev { grid-template-columns: 1fr; } .split .viz { order: -1; } }
+  .feat { display: flex; gap: 14px; padding: 14px 0; border-top: 1px solid var(--line); }
+  .feat:first-child { border-top: 0; }
+  .feat .ic { width: 40px; height: 40px; flex: none; border-radius: 10px; background: var(--surface-2); display: grid; place-items: center; color: var(--gold); }
+  .feat h4 { margin: 2px 0 3px; font-family: var(--display); font-size: 16.5px; }
+  .feat p { margin: 0; color: var(--muted); font-size: 14.5px; }
+
+  /* ---------- DASHBOARD SIM ---------- */
+  .panel { background: linear-gradient(180deg, var(--surface), var(--band)); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; box-shadow: 0 30px 70px -40px rgba(0,0,0,.9); }
+  .panel-bar { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line); background: rgba(0,0,0,.2); }
+  .tl { display: flex; gap: 6px; }
+  .tl i { width: 10px; height: 10px; border-radius: 50%; background: #2b3f63; }
+  .panel-title { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-left: 6px; }
+  .sim-tag { margin-left: auto; font-family: var(--mono); font-size: 10px; color: var(--amber); border: 1px solid rgba(243,178,63,.35); padding: 3px 8px; border-radius: 999px; letter-spacing: .08em; }
+  .coll { padding: 18px; display: flex; flex-direction: column; gap: 13px; }
+  .coll-row { display: grid; grid-template-columns: 54px 1fr 84px; align-items: center; gap: 12px; }
+  .coll-row .p { font-family: var(--mono); font-weight: 600; font-size: 13px; }
+  .bar-bg { height: 16px; background: #0b1730; border-radius: 6px; overflow: hidden; border: 1px solid #1b2c4d; }
+  .bar-fi { height: 100%; border-radius: 5px; width: 0; transition: width 1.1s cubic-bezier(.4,0,.2,1); }
+  .coll-row .v { font-family: var(--mono); font-size: 13px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .coll-foot { display: flex; gap: 16px; flex-wrap: wrap; padding: 2px 4px 2px; font-size: 12.5px; color: var(--faint); font-family: var(--mono); }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; font-family: var(--mono); }
+  .pill.g { background: rgba(55,214,160,.14); color: var(--green); }
+  .pill.r { background: rgba(255,93,115,.15); color: var(--red); }
+  .pill.a { background: rgba(243,178,63,.15); color: var(--amber); }
+
+  /* ---------- PHONE ---------- */
+  .phone-wrap { display: flex; justify-content: center; }
+  .phone { width: 300px; max-width: 86vw; aspect-ratio: 300/620; border-radius: 40px; padding: 12px; position: relative;
+    background: #02070f; border: 1px solid #1b2c4d; box-shadow: 0 40px 90px -40px rgba(0,0,0,.95), inset 0 0 0 2px #0a1528; }
+  .screen { position: absolute; inset: 12px; border-radius: 30px; overflow: hidden; background: #0a1525; display: flex; flex-direction: column; }
+  .notch { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); width: 120px; height: 24px; background: #02070f; border-radius: 0 0 14px 14px; z-index: 5; }
+  .ph-head { padding: 30px 14px 10px; display: flex; flex-direction: column; gap: 3px; border-bottom: 1px solid #16284a; }
+  .ph-head .cc { font-family: var(--display); font-weight: 600; font-size: 13.5px; }
+  .ph-head .r1 { display: flex; justify-content: space-between; align-items: center; }
+  .ph-head .on { font-size: 10px; color: var(--green); font-family: var(--mono); }
+  .ph-head .r2 { display: flex; justify-content: space-between; color: var(--faint); font-size: 10px; font-family: var(--mono); }
+  .cam { margin: 12px; border-radius: 16px; aspect-ratio: 3/3.1; position: relative; overflow: hidden; border: 1px solid #22365c; }
+  #camCanvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .cam-ov { position: absolute; inset: 9px; display: flex; flex-direction: column; justify-content: space-between; pointer-events: none; }
+  .cam-top { display: flex; justify-content: space-between; align-items: flex-start; }
+  .badge-live { display: inline-flex; align-items: center; gap: 5px; background: rgba(255,93,115,.9); color: #fff; font-size: 9.5px; font-weight: 700; font-family: var(--mono); padding: 3px 7px; border-radius: 5px; }
+  .badge-live .b { width: 5px; height: 5px; border-radius: 50%; background: #fff; animation: blink 1s infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .cam-gps { background: rgba(2,7,15,.6); color: #cfe0ff; font-size: 9px; font-family: var(--mono); padding: 3px 6px; border-radius: 5px; }
+  .tally { margin: 0 12px 12px; background: rgba(13,27,50,.75); border: 1px solid #22365c; border-radius: 14px; padding: 12px; }
+  .tally-h { display: flex; align-items: center; gap: 7px; font-size: 10px; color: var(--muted); font-family: var(--mono); letter-spacing: .06em; margin-bottom: 9px; }
+  .mic { width: 9px; height: 9px; border-radius: 50%; background: var(--red); animation: pulse 1.6s infinite; }
+  .trow { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #16284a; font-family: var(--mono); }
+  .trow:last-child { border-bottom: 0; }
+  .trow .pc { font-size: 13px; font-weight: 600; }
+  .trow .pv { font-size: 15px; font-variant-numeric: tabular-nums; }
+  .trow.new .pv { color: var(--green); }
+
+  /* ---------- INTEGRITY ---------- */
+  .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 50px; }
+  @media (max-width: 860px) { .steps { grid-template-columns: 1fr 1fr; } }
+  .step { background: var(--surface); border: 1px solid var(--line); border-radius: 15px; padding: 20px; position: relative; }
+  .step .k { font-family: var(--mono); font-size: 12px; color: var(--gold); }
+  .step h4 { font-family: var(--display); font-size: 16px; margin: 12px 0 7px; }
+  .step p { margin: 0; color: var(--muted); font-size: 13.5px; }
+  .vtag { position: absolute; top: 16px; right: 16px; }
+
+  /* ---------- VALUE CARDS ---------- */
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 50px; }
+  @media (max-width: 860px) { .cards { grid-template-columns: 1fr; } }
+  .card { background: linear-gradient(180deg, var(--surface), var(--band)); border: 1px solid var(--line); border-radius: 16px; padding: 26px; }
+  .card .ic { width: 46px; height: 46px; border-radius: 12px; background: var(--surface-2); display: grid; place-items: center; color: var(--gold); margin-bottom: 16px; }
+  .card h3 { font-size: 19px; margin: 0 0 8px; }
+  .card p { margin: 0; color: var(--muted); font-size: 14.5px; }
+
+  /* ---------- TIMELINE ---------- */
+  .tline { margin-top: 50px; display: flex; flex-direction: column; gap: 2px; }
+  .tev { display: grid; grid-template-columns: 92px 1fr; gap: 20px; padding: 20px 0; border-top: 1px solid var(--line); align-items: start; }
+  .tev:first-child { border-top: 0; }
+  .tev .t { font-family: var(--mono); color: var(--gold); font-size: 14px; padding-top: 2px; }
+  .tev h4 { font-family: var(--display); margin: 0 0 5px; font-size: 18px; }
+  .tev p { margin: 0; color: var(--muted); font-size: 14.5px; max-width: 60ch; }
+
+  /* ---------- CLOSE ---------- */
+  .close { text-align: center; background:
+      radial-gradient(800px 360px at 50% 0%, rgba(237,192,80,0.1), transparent 70%), var(--band);
+    border-top: 1px solid var(--line); }
+  .close h2 { font-size: clamp(30px, 5vw, 54px); margin: 16px auto 0; max-width: 18ch; }
+  .close p { color: var(--muted); font-size: 18px; max-width: 48ch; margin: 20px auto 0; }
+  .contact { display: inline-flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; margin-top: 30px; font-family: var(--mono); font-size: 14px; }
+  .contact code { background: var(--surface); border: 1px solid var(--line); padding: 10px 16px; border-radius: 10px; color: var(--fg); }
+  footer { border-top: 1px solid var(--line); padding-block: 34px; }
+  .foot-in { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--faint); }
+  .reveal { opacity: 0; transform: translateY(16px); transition: opacity .7s ease, transform .7s ease; }
+  .reveal.in { opacity: 1; transform: none; }
+  .two-up { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 50px; }
+  @media (max-width: 760px) { .two-up { grid-template-columns: 1fr; } }
+  @media (prefers-reduced-motion: reduce) { .reveal { opacity: 1; transform: none; transition: none; } .bar-fi { transition: none; } .dot-live, .mic, .badge-live .b { animation: none; } }
+</style>
+</head>
+<body>
+
+
+<nav class="gut">
+  <div class="nav-in">
+    <div class="brand">
+      <svg class="shield" viewBox="0 0 24 24" fill="none"><path d="M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5l8-3z" fill="#edc050" opacity=".15"/><path d="M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5l8-3z" stroke="#edc050" stroke-width="1.3"/><path d="M12 2v20" stroke="#edc050" stroke-width="1.3" opacity=".5"/></svg>
+      My Situation Room
+    </div>
+    <div class="nav-links">
+      <a href="#command">Command Centre</a>
+      <a href="#observer">Observer App</a>
+      <a href="#trust">Trust</a>
+      <a href="#why">Why us</a>
+      <a href="#day">Election Day</a>
+    </div>
+    <a href="#close" class="btn btn-gold">Request a demo</a>
+  </div>
+</nav>
+
+<header class="hero">
+  <canvas id="mapCanvas"></canvas>
+  <div class="hero-grad"></div>
+  <div class="hero-in wrap gut">
+    <div class="live-chip"><span class="dot-live"></span> LIVE · 247 observers reporting · 44 LGAs</div>
+    <h1>See every polling unit.<br><span class="hl">Trust every result.</span></h1>
+    <p class="lead">A command centre and field app that put live video, GPS and real‑time collation from every polling unit on one screen — so you lead election day with calm, not guesswork.</p>
+    <div class="hero-cta">
+      <a href="#close" class="btn btn-gold">Request a live demo</a>
+      <a href="#command" class="btn btn-ghost">See how it works</a>
+    </div>
+    <div class="eyebrow" style="margin-top:30px">An AI Brains Ventures production</div>
+
+    <div class="stats">
+      <div class="stat"><div class="n" data-count="2847"><span>0</span></div><div class="l">Polling units live</div></div>
+      <div class="stat"><div class="n" data-count="5692"><span>0</span></div><div class="l">Observers deployed</div></div>
+      <div class="stat"><div class="n"><span data-count="98">0</span><span class="u">%</span></div><div class="l">Units reporting</div></div>
+      <div class="stat"><div class="n"><span class="u">&lt;</span><span data-count="60">0</span><span class="u">s</span></div><div class="l">From field to screen</div></div>
+    </div>
+  </div>
+</header>
+
+<section class="band gut" id="stakes">
+  <div class="wrap reveal">
+    <div class="sec-head">
+      <div class="eyebrow">Why it matters</div>
+      <h2>On election day, the gap between a rumour and the truth is measured in minutes.</h2>
+      <p>Disputes start where there is no record. A snatched ballot box, a figure that doesn't match, a flashpoint nobody saw coming — by the time a phone call reaches the situation room, the moment has passed. This platform closes that gap. Every observer becomes a live witness, every result carries proof, and your command centre sees it as it happens.</p>
+    </div>
+  </div>
+</section>
+
+<section class="band band-alt gut" id="command" style="background:var(--band);border-block:1px solid var(--line)">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="eyebrow">The Command Centre</div>
+      <h2>Your whole operation, on one screen.</h2>
+      <p>Watch results build in real time, drill from the nation down to a single polling unit, and open a live feed from any observer with one tap.</p>
+    </div>
+    <div class="split reveal">
+      <div>
+        <div class="feat"><div class="ic">◳</div><div><h4>Real‑time collation</h4><p>Results arrive as observers report them. Parties sort by vote count, highest first, and the totals update live — no spreadsheets, no waiting for the close of polls.</p></div></div>
+        <div class="feat"><div class="ic">◈</div><div><h4>Live tactical map</h4><p>Every observer's GPS, every patrol unit, every incident on one map. Search from State to LGA to Ward to polling unit and the whole screen follows.</p></div></div>
+        <div class="feat"><div class="ic">▶</div><div><h4>Live video on demand</h4><p>Request a stream from any observer and their camera starts. Two‑way talkback, restream to agencies or media, and a saved 60‑second buffer on every incident.</p></div></div>
+        <div class="feat"><div class="ic">⚑</div><div><h4>Broadcast &amp; dispatch</h4><p>Message every room at once with read receipts, and send the nearest patrol unit to an incident with its ETA already calculated.</p></div></div>
+      </div>
+      <div class="viz">
+        <div class="panel">
+          <div class="panel-bar"><span class="tl"><i></i><i></i><i></i></span><span class="panel-title">collation · kano state · live</span><span class="sim-tag">LIVE SIMULATION</span></div>
+          <div class="coll" id="coll"></div>
+          <div class="coll-foot gut" style="padding-bottom:16px">
+            <span class="pill g">● 2,791 verified</span>
+            <span class="pill a">● 41 pending</span>
+            <span class="pill r">● 15 disputed</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band gut" id="observer">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="eyebrow">The Observer App</div>
+      <h2>Built for the field, not the lab.</h2>
+      <p>Zero training. It runs on the cheap Android phones observers already carry, works when the network drops, and names exactly who the observer reports to.</p>
+    </div>
+    <div class="split rev reveal">
+      <div class="viz phone-wrap">
+        <div class="phone">
+          <div class="notch"></div>
+          <div class="screen">
+            <div class="ph-head">
+              <div class="r1"><span class="cc">Kano State Command</span><span class="on">● Online</span></div>
+              <div class="r2"><span>🏛 Dala LGA Situation Room</span><span>PU 012</span></div>
+            </div>
+            <div class="cam">
+              <canvas id="camCanvas"></canvas>
+              <div class="cam-ov">
+                <div class="cam-top"><span class="badge-live"><span class="b"></span>LIVE</span><span class="cam-gps" id="gps">12.0022, 8.5919</span></div>
+                <div></div>
+              </div>
+            </div>
+            <div class="tally">
+              <div class="tally-h"><span class="mic"></span> VOICE TALLY · speak the figures</div>
+              <div id="tally"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="feat"><div class="ic">🎙</div><div><h4>Speak the result</h4><p>The observer says “APC 251, PDP 189” and the figures fill in. Works offline on the phone. Each figure can be corrected once, then it locks.</p></div></div>
+        <div class="feat"><div class="ic">📷</div><div><h4>Photograph the EC8A</h4><p>A photo of the official result sheet is attached to every polling unit, with a fingerprint that proves it was never altered.</p></div></div>
+        <div class="feat"><div class="ic">📍</div><div><h4>Live location, always</h4><p>GPS keeps flowing with the screen off, so the command centre always knows where each observer is — and can find them if trouble starts.</p></div></div>
+        <div class="feat"><div class="ic">🛡</div><div><h4>Stealth SOS</h4><p>A tap turns the screen into a plain clock. A triple‑tap sends a silent alarm with location and a 60‑second video buffer. Safety first.</p></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band gut" id="trust" style="background:var(--band);border-block:1px solid var(--line)">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="eyebrow">Results you can defend</div>
+      <h2>Two witnesses at every polling unit.</h2>
+      <p>Two independent observers report the same unit. The system compares them automatically. A figure only counts when it holds up.</p>
+    </div>
+    <div class="steps reveal">
+      <div class="step"><div class="k">01</div><h4>Both report</h4><p>Two observers enter the figures for the same polling unit, independently, from their own phones.</p></div>
+      <div class="step"><div class="k">02</div><h4>Auto‑compared</h4><p>If they match, the unit is counted. If they differ, it is marked <span style="color:var(--red)">disputed</span> and held out of the totals.</p></div>
+      <div class="step"><div class="k">03</div><h4>Supervisor resolves</h4><p>A room supervisor settles the dispute against the EC8A photo and signs it with a note. Nothing is quietly overwritten.</p></div>
+      <div class="step"><span class="pill g vtag">✓ verified</span><div class="k">04</div><h4>Verified</h4><p>Matched or resolved, with a result‑sheet photo on file. That is a number you can defend in public.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="band gut" id="peace">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="eyebrow">Peace of mind, by design</div>
+      <h2>Your election. Your data. Your command.</h2>
+    </div>
+    <div class="cards reveal">
+      <div class="card"><div class="ic">🔒</div><h3>Sealed from each other</h3><p>Run fifty commands on one platform and none can see another's rooms, observers or results. Separation is enforced in the database itself, not just the screen.</p></div>
+      <div class="card"><div class="ic">🏛</div><h3>Data stays yours</h3><p>Every figure, photo and video is held on your own server and backed up automatically. You export the full record whenever you want. Nothing is locked away.</p></div>
+      <div class="card"><div class="ic">📶</div><h3>Made for weak networks</h3><p>Video adapts down to a trickle like a video call, and tallies queue on the phone when signal drops, then sync the moment it returns. Nothing is lost.</p></div>
+      <div class="card"><div class="ic">🔑</div><h3>Locked to the observer</h3><p>A code works on one phone, behind a PIN the observer sets. Lost a phone? Reset it in one tap and the old one goes dark immediately.</p></div>
+      <div class="card"><div class="ic">👁</div><h3>Every action logged</h3><p>Who logged in, who edited a figure, who resolved a dispute, who exported data — all time‑stamped. An audit trail you can hand to anyone.</p></div>
+      <div class="card"><div class="ic">📡</div><h3>Talks to everyone</h3><p>Share a live feed to the police, the electoral body or the media in one tap, and fold in security radio from the field. One picture, all parties.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="band gut" id="day" style="background:var(--band);border-block:1px solid var(--line)">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="eyebrow">A day in the situation room</div>
+      <h2>How election day feels with it on.</h2>
+    </div>
+    <div class="tline reveal">
+      <div class="tev"><div class="t">06:30</div><div><h4>Doors open, map lights up</h4><p>Observers log in across the state. Green dots bloom on the map as each polling unit comes online. You can see your whole coverage at a glance.</p></div></div>
+      <div class="tev"><div class="t">09:15</div><div><h4>A flashpoint, seen live</h4><p>An observer in Fagge taps Report Incident. Her last sixty seconds of video and her exact location land in the dispatch queue. The nearest patrol is on screen with a four‑minute ETA. You dispatch before it escalates.</p></div></div>
+      <div class="tev"><div class="t">13:40</div><div><h4>Numbers you can watch</h4><p>Accreditation closes and figures start flowing in by voice. The collation bars climb and reorder themselves live. You are reading the election as it happens, not after.</p></div></div>
+      <div class="tev"><div class="t">16:20</div><div><h4>A dispute, settled cleanly</h4><p>Two observers at one unit disagree by forty votes. The unit turns amber and drops out of the count. A supervisor opens both EC8A photos, enters the correct figure and signs it. The total is right, and the record shows why.</p></div></div>
+      <div class="tev"><div class="t">20:00</div><div><h4>Results that hold</h4><p>As units verify, your totals firm up — each one backed by two witnesses and a result‑sheet photo. When you announce, you are standing on evidence.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<section class="band gut" id="why">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="eyebrow">Why us</div>
+      <h2>Why teams trust us with election day.</h2>
+      <p>Plenty of dashboards look good in a boardroom. This one was built for the field, the network and the scrutiny of a real election.</p>
+    </div>
+    <div class="two-up reveal">
+      <div class="card"><div class="ic">✓</div><h3>Built for how elections really run here</h3><p>Designed around weak mobile networks, budget Android phones and two agents per unit, not a lab demo. It works where your observers actually stand.</p></div>
+      <div class="card"><div class="ic">✓</div><h3>Evidence, not argument</h3><p>Every result carries two independent witnesses and a photo of the EC8A, and every action is time‑stamped. You defend your numbers with proof, not promises.</p></div>
+      <div class="card"><div class="ic">✓</div><h3>You stay in command of your data</h3><p>It runs on your own server. Your results, videos and photos never pass through us, stay sealed from every other command, and export whenever you want.</p></div>
+      <div class="card"><div class="ic">✓</div><h3>Proven, and live in a day</h3><p>Stress‑tested to a full state's volume. We stand it up and train your team in a single day, then stay beside you through election night.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="band close gut" id="close">
+  <div class="wrap reveal">
+    <div class="eyebrow">Ready when you are</div>
+    <h2>Lead your next election with your eyes open.</h2>
+    <p>We will stand up a live command centre for your state or organisation and walk your team through it, end to end. Book a demo and watch a simulated election day run in front of you. Terms are settled the way serious partnerships should be, across a table and in confidence.</p>
+    <div class="contact">
+      <span class="muted">Visit</span> <code>mysituationroom.com.ng</code>
+      <span class="muted">·</span> <a href="#command" class="btn btn-gold">See it again</a>
+    </div>
+  </div>
+</section>
+
+<footer class="gut">
+  <div class="wrap foot-in">
+    <div class="brand" style="font-size:15px"><svg class="shield" viewBox="0 0 24 24" fill="none" style="width:24px;height:24px"><path d="M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5l8-3z" stroke="#edc050" stroke-width="1.3"/></svg> My Situation Room</div>
+    <div>An AI Brains Ventures production · Election observation &amp; real‑time collation</div>
+  </div>
+</footer>
+
+<script>
+  var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // ---- reveal on scroll (from a visible resting state; everything readable even if JS is idle) ----
+  var io = new IntersectionObserver(function (es) {
+    es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } });
+  }, { threshold: 0.12 });
+  document.querySelectorAll(".reveal").forEach(function (el) { el.classList.add("reveal"); io.observe(el); });
+
+  // ---- count-up stats (every number rests at its real value; the strip animates when it scrolls in) ----
+  function animateCount(el) {
+    var target = +el.getAttribute("data-count"); if (!target && target !== 0) return;
+    if (reduce) { el.textContent = target.toLocaleString(); return; }
+    var t0 = null, dur = 1500;
+    function step(ts) { if (!t0) t0 = ts; var p = Math.min((ts - t0) / dur, 1); var e = 1 - Math.pow(1 - p, 3);
+      el.textContent = Math.round(target * e).toLocaleString(); if (p < 1) requestAnimationFrame(step); }
+    requestAnimationFrame(step);
+  }
+  document.querySelectorAll(".stat [data-count]").forEach(function (el) { el.textContent = (+el.getAttribute("data-count")).toLocaleString(); });
+  var strip = document.querySelector(".stats");
+  if (strip && !reduce) {
+    var sio = new IntersectionObserver(function (es) { es.forEach(function (e) { if (e.isIntersecting) { e.target.querySelectorAll("[data-count]").forEach(animateCount); sio.unobserve(e.target); } }); }, { threshold: 0.3 });
+    sio.observe(strip);
+  }
+
+  // ---- hero tactical map ----
+  (function () {
+    var c = document.getElementById("mapCanvas"), x = c.getContext("2d"), W, H, DPR = Math.min(devicePixelRatio || 1, 2);
+    var obs = [], inc = [], patrol = [];
+    function seed() {
+      obs = []; inc = []; patrol = [];
+      var n = Math.max(26, Math.floor(W / 34));
+      for (var i = 0; i < n; i++) obs.push({ x: Math.random() * W, y: Math.random() * H, ph: Math.random() * 6.28, sp: 0.2 + Math.random() * 0.5 });
+      for (var j = 0; j < 3; j++) inc.push({ x: W * (0.2 + Math.random() * 0.6), y: H * (0.2 + Math.random() * 0.6), t: Math.random() * 6.28 });
+      for (var k = 0; k < 4; k++) patrol.push({ x: Math.random() * W, y: Math.random() * H, a: Math.random() * 6.28 });
+    }
+    function size() { W = c.clientWidth; H = c.clientHeight; c.width = W * DPR; c.height = H * DPR; x.setTransform(DPR, 0, 0, DPR, 0, 0); seed(); }
+    function draw(ts) {
+      x.clearRect(0, 0, W, H);
+      // faint grid
+      x.strokeStyle = "rgba(75,140,245,0.06)"; x.lineWidth = 1;
+      for (var gx = 0; gx < W; gx += 46) { x.beginPath(); x.moveTo(gx, 0); x.lineTo(gx, H); x.stroke(); }
+      for (var gy = 0; gy < H; gy += 46) { x.beginPath(); x.moveTo(0, gy); x.lineTo(W, gy); x.stroke(); }
+      var T = ts / 1000;
+      // links between near observers
+      x.strokeStyle = "rgba(55,214,160,0.08)";
+      for (var a = 0; a < obs.length; a++) for (var b = a + 1; b < obs.length; b++) {
+        var dx = obs[a].x - obs[b].x, dy = obs[a].y - obs[b].y, d = dx * dx + dy * dy;
+        if (d < 9000) { x.globalAlpha = 1 - d / 9000; x.beginPath(); x.moveTo(obs[a].x, obs[a].y); x.lineTo(obs[b].x, obs[b].y); x.stroke(); }
+      }
+      x.globalAlpha = 1;
+      // patrol (blue)
+      patrol.forEach(function (p) { if (!reduce) { p.x += Math.cos(p.a) * 0.3; p.y += Math.sin(p.a) * 0.3; if (p.x < 0 || p.x > W) p.a = Math.PI - p.a; if (p.y < 0 || p.y > H) p.a = -p.a; }
+        x.fillStyle = "#4b8cf5"; x.beginPath(); x.arc(p.x, p.y, 3, 0, 6.28); x.fill(); });
+      // observers (green, gentle drift + twinkle)
+      obs.forEach(function (o) { var tw = 0.6 + 0.4 * Math.sin(T * o.sp + o.ph);
+        var ox = o.x + (reduce ? 0 : Math.sin(T * 0.3 + o.ph) * 4), oy = o.y + (reduce ? 0 : Math.cos(T * 0.25 + o.ph) * 4);
+        x.fillStyle = "rgba(55,214,160," + tw + ")"; x.beginPath(); x.arc(ox, oy, 2.4, 0, 6.28); x.fill(); });
+      // incidents (red pulse rings)
+      inc.forEach(function (n) { var pr = reduce ? 0.5 : (Math.sin(T * 1.5 + n.t) * 0.5 + 0.5);
+        x.strokeStyle = "rgba(255,93,115," + (0.5 - pr * 0.4) + ")"; x.lineWidth = 2; x.beginPath(); x.arc(n.x, n.y, 8 + pr * 22, 0, 6.28); x.stroke();
+        x.fillStyle = "#ff5d73"; x.beginPath(); x.arc(n.x, n.y, 4, 0, 6.28); x.fill(); });
+      if (!reduce) requestAnimationFrame(draw);
+    }
+    addEventListener("resize", size); size(); requestAnimationFrame(draw);
+    if (reduce) draw(0);
+  })();
+
+  // ---- collation bars (live simulation: climb + reorder by votes) ----
+  (function () {
+    var el = document.getElementById("coll");
+    var parties = [
+      { p: "APC", c: "#4b8cf5", v: 61200 }, { p: "PDP", c: "#ff5d73", v: 48900 },
+      { p: "NNPP", c: "#37d6a0", v: 71500 }, { p: "LP", c: "#f3b23f", v: 33100 },
+      { p: "ADC", c: "#a98bf5", v: 12400 }, { p: "SDP", c: "#6d9bd1", v: 7200 }
+    ];
+    function render() {
+      parties.sort(function (a, b) { return b.v - a.v; });
+      var tot = parties.reduce(function (s, p) { return s + p.v; }, 0);
+      el.innerHTML = parties.map(function (p) {
+        var pc = Math.round(p.v / tot * 100);
+        return '<div class="coll-row"><div class="p" style="color:' + p.c + '">' + p.p + '</div>'
+          + '<div class="bar-bg"><div class="bar-fi" style="background:' + p.c + '"></div></div>'
+          + '<div class="v">' + p.v.toLocaleString() + ' · ' + pc + '%</div></div>';
+      }).join("");
+      requestAnimationFrame(function () {
+        el.querySelectorAll(".bar-fi").forEach(function (b, i) { b.style.width = Math.round(parties[i].v / parties[0].v * 100) + "%"; });
+      });
+    }
+    render();
+    if (!reduce) setInterval(function () {
+      parties.forEach(function (p) { p.v += Math.floor(Math.random() * 900); });
+      render();
+    }, 2200);
+  })();
+
+  // ---- phone: simulated live camera + voice tally ----
+  (function () {
+    var c = document.getElementById("camCanvas"); if (!c) return;
+    var x = c.getContext("2d"), DPR = Math.min(devicePixelRatio || 1, 2), W, H;
+    function size() { W = c.clientWidth; H = c.clientHeight; c.width = W * DPR; c.height = H * DPR; x.setTransform(DPR, 0, 0, DPR, 0, 0); }
+    size(); addEventListener("resize", size);
+    // a moving light field that reads as a live scene through a camera, with scanline + grain
+    function frame(ts) {
+      var T = ts / 1000;
+      var g = x.createLinearGradient(0, 0, W, H);
+      g.addColorStop(0, "#15304f"); g.addColorStop(0.5, "#1b3b5e"); g.addColorStop(1, "#102538");
+      x.fillStyle = g; x.fillRect(0, 0, W, H);
+      // drifting highlights (people/movement suggestion)
+      for (var i = 0; i < 5; i++) {
+        var px = W * (0.5 + 0.4 * Math.sin(T * 0.4 + i)), py = H * (0.5 + 0.38 * Math.cos(T * 0.33 + i * 1.7));
+        var rg = x.createRadialGradient(px, py, 0, px, py, 46);
+        rg.addColorStop(0, "rgba(120,170,230,0.33)"); rg.addColorStop(1, "rgba(120,170,230,0)");
+        x.fillStyle = rg; x.beginPath(); x.arc(px, py, 46, 0, 6.28); x.fill();
+      }
+      // scanline
+      var sy = (T * 60) % H;
+      x.fillStyle = "rgba(255,255,255,0.04)"; x.fillRect(0, sy, W, 2);
+      // grain
+      if (!reduce) { for (var k = 0; k < 40; k++) { x.fillStyle = "rgba(255,255,255," + (Math.random() * 0.03) + ")"; x.fillRect(Math.random() * W, Math.random() * H, 1, 1); } }
+      if (!reduce) requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame); if (reduce) frame(0);
+
+    // GPS flicker
+    var gpsEl = document.getElementById("gps");
+    if (!reduce) setInterval(function () {
+      var la = (12.0022 + (Math.random() - 0.5) * 0.0006).toFixed(4), lo = (8.5919 + (Math.random() - 0.5) * 0.0006).toFixed(4);
+      gpsEl.textContent = la + ", " + lo;
+    }, 1600);
+
+    // voice tally fills in like someone is speaking the figures
+    var tEl = document.getElementById("tally");
+    var rows = [["APC", 251], ["PDP", 189], ["NNPP", 274], ["LP", 96], ["ADC", 32]];
+    var shown = [];
+    function paint() {
+      tEl.innerHTML = rows.map(function (r, i) {
+        var on = i < shown.length;
+        return '<div class="trow' + (i === shown.length - 1 ? " new" : "") + '"><span class="pc">' + r[0] + '</span><span class="pv">' + (on ? r[1] : "—") + "</span></div>";
+      }).join("");
+    }
+    paint();
+    if (reduce) { shown = rows.slice(); paint(); }
+    else {
+      var idx = 0;
+      setInterval(function () { shown = rows.slice(0, idx + 1); paint(); idx = (idx + 1) % (rows.length + 2); if (idx === 0) shown = []; }, 1400);
+    }
+  })();
+
+  // smooth in-page nav
+  document.querySelectorAll('a[href^="#"]').forEach(function (a) {
+    a.addEventListener("click", function (e) { var t = document.querySelector(a.getAttribute("href")); if (t) { e.preventDefault(); t.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" }); } });
+  });
+</script>
+
+<script>
+/* First-party view beacon: records this open to your own server for marketing analytics.
+   ?ref=<label> on the link lets you attribute each open to the person or channel you shared with. */
+(function(){
+  try{
+    var ref=new URLSearchParams(location.search).get("ref")||"";
+    var payload=JSON.stringify({ref:ref,screen:(screen.width+"x"+screen.height),tz:((Intl.DateTimeFormat().resolvedOptions()||{}).timeZone||""),path:location.pathname});
+    if(navigator.sendBeacon){navigator.sendBeacon("/api/pitch/view",new Blob([payload],{type:"application/json"}));}
+    else{fetch("/api/pitch/view",{method:"POST",headers:{"Content-Type":"application/json"},body:payload,keepalive:true}).catch(function(){});}
+  }catch(e){}
+})();
+</script>
+
+</body>
+</html>

@@ -238,6 +238,42 @@
         A.post("cloudsync")
           .then(() => toast("☁️ Synced."))
           .catch((e) => toast("⚠️ " + e.message));
+      function mktBars(rows) {
+        const max = Math.max(1, ...rows.map((r) => r.n));
+        return rows.map((r) => `<div style="display:grid;grid-template-columns:130px 1fr 78px;gap:10px;align-items:center;margin-bottom:6px"><div class="muted" style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.k)}">${esc(r.k)}</div><div class="bar-bg" style="height:14px"><div class="bar-fill" style="width:${Math.round((r.n / max) * 100)}%;background:#2b6cb0"></div></div><div style="font-size:13px;text-align:right" class="mono">${r.n}${r.u != null ? " · " + r.u + "u" : ""}</div></div>`).join("") || '<div class="muted">No data yet.</div>';
+      }
+      function mkBuild() {
+        const slug = ($("#mkref").value || "").trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+        $("#mkout").value = location.origin + "/pitch" + (slug ? "?ref=" + slug : "");
+      }
+      function cMkt() {
+        const m = DATA.mkt, base = location.origin + "/pitch";
+        return `<div class="dashboard-grid"><div class="col">
+          <div class="card"><div class="card-header"><h3><i class="fas fa-link"></i> Tracking links</h3></div>
+            <div class="muted" style="margin-bottom:8px">Give each person or channel its own link so you can see who opened it. The label is only for your reports.</div>
+            <input class="fi" id="mkref" placeholder="Label, e.g. inec-kano or whatsapp-batch-1" oninput="mkBuild()">
+            <div class="search-bar" style="margin-top:8px"><input class="fi" id="mkout" readonly value="${base}"><button class="btn btn-primary" onclick="navigator.clipboard&&navigator.clipboard.writeText($('#mkout').value);toast('Link copied')"><i class="fas fa-copy"></i> Copy</button></div>
+            <div class="muted" style="margin-top:6px">Your pitch page lives at <span class="mono">${base}</span>. Opens are logged here, on your own server.</div>
+          </div>
+          ${m ? `<div class="card"><div class="card-header"><h3><i class="fas fa-chart-simple"></i> Opens · last ${m.days} days</h3><button class="btn btn-sm btn-outline" onclick="loadAll()"><i class="fas fa-rotate"></i></button></div>
+            <div style="display:flex;gap:22px;flex-wrap:wrap;margin-bottom:14px">
+              <div><div style="font-size:30px;font-weight:700" class="mono">${m.total.views}</div><div class="muted" style="font-size:12px">Total opens</div></div>
+              <div><div style="font-size:30px;font-weight:700" class="mono">${m.total.uniques}</div><div class="muted" style="font-size:12px">Unique visitors</div></div>
+              <div><div style="font-size:30px;font-weight:700" class="mono">${m.total.today}</div><div class="muted" style="font-size:12px">Today</div></div>
+            </div>
+            <h4 style="margin:10px 0 6px;font-size:13px">By link label</h4>${mktBars(m.byRef)}
+            <h4 style="margin:16px 0 6px;font-size:13px">By day</h4>${mktBars(m.byDay)}
+          </div>` : '<div class="card"><div class="muted">No analytics yet. Share your pitch link and opens will show up here within seconds.</div></div>'}
+        </div><div class="col">
+          ${m ? `<div class="card"><div class="card-header"><h3><i class="fas fa-mobile-screen"></i> Devices &amp; browsers</h3></div>
+            <h4 style="margin:0 0 6px;font-size:13px">Device</h4>${mktBars(m.byDevice)}
+            <h4 style="margin:16px 0 6px;font-size:13px">Operating system</h4>${mktBars(m.byOs)}
+            <h4 style="margin:16px 0 6px;font-size:13px">Browser</h4>${mktBars(m.byBrowser)}
+            <h4 style="margin:16px 0 6px;font-size:13px">Came from</h4>${mktBars(m.byReferrer)}
+          </div>
+          <div class="card"><div class="card-header"><h3><i class="fas fa-clock-rotate-left"></i> Recent opens</h3></div><div class="tw" style="max-height:320px;overflow:auto"><table><tr><th>Time</th><th>Label</th><th>Device</th><th>OS</th><th>Browser</th></tr>${m.recent.map((r) => `<tr><td>${DT(r.ts)}</td><td>${esc(r.ref || "—")}</td><td>${esc(r.device)}</td><td>${esc(r.os)}</td><td>${esc(r.browser)}</td></tr>`).join("")}</table></div></div>` : ""}
+        </div></div>`;
+      }
       start("cmd", () => ({
         rooms: ["Situation Rooms", "building-columns", cRooms],
         obs: ["Observers & Map", "location-dot", cObs],
@@ -246,7 +282,7 @@
         res: ["Results Review", "scale-balanced", () => cardSearch(1, DATA.obs) + '<div style="margin-top:20px">' + tabResults(true) + "</div>"],
         dat: ["Export & Archive", "download", tabData],
         con: ["Contacts", "address-book", tabContacts],
-        ...(ME.su ? { loc: ["Locations", "map", cLoc], tn: ["Command Centers", "sitemap", cTn] } : {}),
+        ...(ME.su ? { loc: ["Locations", "map", cLoc], tn: ["Command Centers", "sitemap", cTn], mkt: ["Marketing", "chart-line", cMkt] } : {}),
         aud: ["Audit Log", "clipboard-list", tabAudit],
         set: ["App Settings", "gear", cSet],
       }));

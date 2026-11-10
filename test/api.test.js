@@ -326,3 +326,28 @@ test("Command Center carries a state; names flow to room and observer banners", 
   ok(await api("settings", { tok: KD, body: { appName: "Kaduna 2027 Command" } }));
   assert.equal(ok(await api("config", { tok: RT })).appName, "Kaduna 2027 Command");
 });
+
+test("pitch page serves and open-analytics logs; stats are platform-admin only", async () => {
+  // public page
+  const pg = await fetch(BASE + "/pitch");
+  assert.equal(pg.status, 200);
+  assert.match(await pg.text(), /My Situation Room/);
+  // log opens with different devices/refs (sendBeacon posts JSON)
+  const view = (ref, ua) => fetch(BASE + "/api/pitch/view", { method: "POST", headers: { "Content-Type": "application/json", "User-Agent": ua, Referer: "https://wa.me/" }, body: JSON.stringify({ ref, screen: "1080x2400", tz: "Africa/Lagos" }) });
+  assert.equal((await view("inec-kano", "Mozilla/5.0 (Linux; Android 13; Infinix) Chrome/120 Mobile Safari/537")).status, 200);
+  assert.equal((await view("inec-kano", "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0) Safari/605")).status, 200);
+  assert.equal((await view("whatsapp-b1", "Mozilla/5.0 (Windows NT 10.0) Chrome/120 Safari/537")).status, 200);
+  await new Promise((r) => setTimeout(r, 150));
+  // platform admin sees the stats
+  const st = ok(await api("pitch/stats", { tok: S.A }));
+  assert.ok(st.total.views >= 3);
+  assert.ok(st.byRef.find((r) => r.k == "inec-kano").n >= 2);
+  assert.ok(st.byDevice.find((r) => r.k == "Mobile"));
+  assert.ok(st.byDevice.find((r) => r.k == "Desktop"));
+  assert.ok(st.byOs.find((r) => r.k == "Android") && st.byOs.find((r) => r.k == "iOS"));
+  assert.equal(st.recent[0].ref, "whatsapp-b1");
+  // a normal Command Center admin (not the platform administrator) cannot see platform marketing stats
+  ok(await api("tenants", { tok: S.A, body: { name: "Mkt Gate Test", operator: "mktgate", pass: "mktgate12" } }));
+  const MK = ok(await api("login/command", { body: { user: "mktgate", pass: "mktgate12" } })).token;
+  assert.equal((await api("pitch/stats", { tok: MK })).s, 403);
+});
