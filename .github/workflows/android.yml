@@ -11,8 +11,6 @@ on:
       - "public/room/**"
       - "public/shared/**"
       - ".github/workflows/android.yml"
-    paths-ignore:
-      - "apks/**"
 
 permissions:
   contents: write
