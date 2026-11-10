@@ -394,9 +394,17 @@
     <div class="eyebrow">Ready when you are</div>
     <h2>Lead your next election with your eyes open.</h2>
     <p>We will stand up a live command centre for your state or organisation and walk your team through it, end to end. Book a demo and watch a simulated election day run in front of you. Terms are settled the way serious partnerships should be, across a table and in confidence.</p>
-    <div class="contact">
-      <span class="muted">Visit</span> <code>mysituationroom.com.ng</code>
-      <span class="muted">·</span> <a href="#command" class="btn btn-gold">See it again</a>
+    <form id="demoForm" onsubmit="return sendDemo(event)" style="max-width:520px;margin:22px auto 0;text-align:left;display:grid;gap:12px">
+      <input name="name" placeholder="Your name" autocomplete="name" style="width:100%;padding:14px 16px;border-radius:12px;border:1px solid rgba(237,192,80,.35);background:rgba(0,0,0,.25);color:#fff;font-size:15px;font-family:inherit">
+      <input name="phone" required placeholder="Phone / WhatsApp number" inputmode="tel" autocomplete="tel" style="width:100%;padding:14px 16px;border-radius:12px;border:1px solid rgba(237,192,80,.35);background:rgba(0,0,0,.25);color:#fff;font-size:15px;font-family:inherit">
+      <input name="org" placeholder="Organisation or state (optional)" style="width:100%;padding:14px 16px;border-radius:12px;border:1px solid rgba(237,192,80,.35);background:rgba(0,0,0,.25);color:#fff;font-size:15px;font-family:inherit">
+      <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">Request a demo</button>
+      <div id="demoMsg" class="muted" style="font-size:13px;min-height:18px;text-align:center"></div>
+    </form>
+    <div class="contact" style="margin-top:18px">
+      <span class="muted">Or message us directly</span>
+      <a href="https://wa.me/2348032540215" target="_blank" rel="noopener" class="btn btn-gold">WhatsApp +234 803 254 0215</a>
+      <span class="muted">·</span> <a href="#command" class="btn btn-ghost">See it again</a>
     </div>
   </div>
 </section>
@@ -572,6 +580,21 @@
     var payload=JSON.stringify({ref:ref,screen:(screen.width+"x"+screen.height),tz:((Intl.DateTimeFormat().resolvedOptions()||{}).timeZone||""),path:location.pathname});
     if(navigator.sendBeacon){navigator.sendBeacon("/api/pitch/view",new Blob([payload],{type:"application/json"}));}
     else{fetch("/api/pitch/view",{method:"POST",headers:{"Content-Type":"application/json"},body:payload,keepalive:true}).catch(function(){});}
+  // Demo request: capture the details the visitor chooses to give (a page cannot read a phone
+  // number on its own), store them as a lead, then hand off to WhatsApp with the message pre-filled.
+  window.sendDemo=function(e){
+    e.preventDefault();
+    var f=e.target.elements, ref=new URLSearchParams(location.search).get("ref")||"";
+    var name=(f.name.value||"").trim(), phone=(f.phone.value||"").trim(), org=(f.org.value||"").trim();
+    var msg=document.getElementById("demoMsg");
+    if(!phone){msg.textContent="Please add a phone number.";return false;}
+    msg.textContent="Sending…";
+    fetch("/api/pitch/lead",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ref:ref,name:name,phone:phone,org:org})}).catch(function(){});
+    var wa="Hello, I'd like a demo of My Situation Room."+(name?" My name is "+name+".":"")+(org?" I'm with "+org+".":"")+(phone?" Phone: "+phone+".":"");
+    msg.innerHTML="✅ Thank you — opening WhatsApp to finish. If it doesn't open, <a href=\"https://wa.me/2348032540215\" style=\"color:#edc050\">message us here</a>.";
+    setTimeout(function(){window.location.href="https://wa.me/2348032540215?text="+encodeURIComponent(wa);},400);
+    return false;
+  };
   }catch(e){}
 })();
 </script>

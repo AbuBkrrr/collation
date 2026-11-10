@@ -157,7 +157,9 @@ create index if not exists ec8a_room_i on ec8a(room_id,state,lga,ward,pu);
 alter table observers add column if not exists acc float8,add column if not exists ec_reg int,add column if not exists ec_acc int;
 alter table radio add column if not exists source text,add column if not exists system text;
 create table if not exists pitch_views(id serial primary key,ts timestamptz default now(),ref text,device text,os text,browser text,ua text,referrer text,screen text,tz text,iph text);
-create index if not exists pitch_ts on pitch_views(ts);`;
+create index if not exists pitch_ts on pitch_views(ts);
+create table if not exists pitch_leads(id serial primary key,ts timestamptz default now(),ref text,name text,phone text,org text,note text,device text,os text,browser text,iph text);
+create index if not exists pitch_leads_ts on pitch_leads(ts);`;
 // Row-level security: applied to the restricted role used inside authenticated requests.
 const RLS = `do $$ begin if not exists(select 1 from pg_roles where rolname='collation_app') then create role collation_app nologin; end if; end $$;
 do $$ begin execute format('grant collation_app to %I', current_user); exception when others then null; end $$;

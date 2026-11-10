@@ -28,6 +28,27 @@ app.post(
     res.json({ ok: 1 });
   }),
 );
+// A visitor's phone number cannot be read from the browser — there is no such web API. So the pitch
+// page offers an optional "request a demo / leave your number" form; what people type is captured here
+// as a lead (with the same device/os/browser context as the open) and shown in Marketing → Leads.
+app.post(
+  "/api/pitch/lead",
+  h(async (req, res) => {
+    if (hit("pl:" + req.ip, 20, 60000)) return res.sendStatus(429);
+    const b = req.body || {},
+      phone = clip(b.phone, 40),
+      name = clip(b.name, 80);
+    if (!phone && !name) return res.status(400).json({ error: "A name or phone is required" });
+    const ua = clip(req.headers["user-agent"], 400) || "",
+      d = parseUA(ua),
+      iph = crypto.createHmac("sha256", SECRET).update((req.ip || "") + new Date().toISOString().slice(0, 10)).digest("hex").slice(0, 32);
+    await qsys(
+      "insert into pitch_leads(ref,name,phone,org,note,device,os,browser,iph) values($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+      [clip(b.ref, 60), name, phone, clip(b.org, 80), clip(b.note, 400), d.device, d.os, d.browser, iph],
+    );
+    res.json({ ok: 1 });
+  }),
+);
 // stats for the platform administrator only
 app.get(
   "/api/pitch/stats",
@@ -48,6 +69,8 @@ app.get(
       byReferrer: await grp("nullif(referrer,'')"),
       byDay: await qsys("select to_char(ts::date,'YYYY-MM-DD') k,count(*)::int n,count(distinct iph)::int u from pitch_views where " + w + " group by 1 order by 1"),
       recent: await qsys("select ts,ref,device,os,browser,referrer from pitch_views where " + w + " order by id desc limit 40"),
+      leads: await qsys("select ts,ref,name,phone,org,note,device,os,browser from pitch_leads where " + w + " order by id desc limit 100"),
+      leadCount: (await qsys("select count(*)::int c from pitch_leads where " + w))[0].c,
     });
   }),
 );
