@@ -108,17 +108,24 @@ app.post(
     const { party, v } = req.body;
     if (!PARTIES.includes(party) || !Number.isInteger(v) || v < 0)
       return res.status(400).json({ error: "Invalid party or number" });
-    const r = await qx(
-      "insert into tallies(code,party,v,hist) values($1,$2,$3,$4) on conflict do nothing",
-      [req.u.id, party, v, JSON.stringify([{ v, ts: Date.now(), src: req.body.src || "manual" }])],
-    );
+    if (v > 100000) return res.status(400).json({ error: "Number too large" });
+    // Each entry (spoken or typed) ADDS to the party's running total; the history keeps every entry.
+    // A total that was corrected by hand (tap the row) is locked and takes no further additions.
+    const src = String(req.body.src || "manual").slice(0, 12),
+      r = await qx(
+        `insert into tallies(code,party,v,hist) values($1,$2,$3,jsonb_build_array(jsonb_build_object('v',$3::int,'add',$3::int,'ts',$4::bigint,'src',$5::text)))
+         on conflict (code,party) do update set v=tallies.v+excluded.v,
+           hist=tallies.hist||jsonb_build_array(jsonb_build_object('v',tallies.v+excluded.v,'add',excluded.v,'ts',$4::bigint,'src',$5::text))
+         where tallies.edits=0 returning v`,
+        [req.u.id, party, v, Date.now(), src],
+      );
     if (!r.rowCount)
-      return res.status(409).json({ error: party + " already entered — correct it once by tapping the row" });
+      return res.status(409).json({ error: party + " was corrected and is locked — it takes no more entries" });
     const [x] = await q(
       "select sum(v)::int s,(select reg from observers where code=$1) reg from tallies where code=$1",
       [req.u.id],
     );
-    res.json({ ok: 1, anomaly: x.s > x.reg, total: x.s, reg: x.reg });
+    res.json({ ok: 1, v: r.rows[0].v, added: v, anomaly: x.s > x.reg, total: x.s, reg: x.reg });
   }),
 );
 app.post(

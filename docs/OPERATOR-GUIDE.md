@@ -49,7 +49,9 @@ A Situation Room is one area of responsibility — usually one LGA. **Situation 
 
 ### One room at a time
 1. Under **Create Situation Room**, type a **Room name** (e.g. `Nassarawa LGA Situation Room`).
-2. Pick the **state/LGA** it covers (this limits which polling units its observers can be assigned).
+2. Your **state is fixed** (it is set when your Command Centre is created and cannot be changed here).
+   Tick the **LGA** the room covers from the list. Leave the name blank and it is called
+   "&lt;LGA&gt; LGA Situation Room".
 3. Click **create**. A **passcode and a QR code are shown once** — give them to that room's
    supervisor (**Share / print with QR** gives you a card to copy or print). The passcode is stored
    hashed; nobody (not even you) can read it back later, only reset it.
@@ -57,8 +59,8 @@ A Situation Room is one area of responsibility — usually one LGA. **Situation 
 
 ### All LGAs at once (fast setup)
 Use **One room per LGA** to create a room for every LGA in your state in one click, then download the
-CSV of room IDs + passcodes, and a **printable sheet with one QR sign-in card per room** opens for
-you to print or save as PDF. This is the quickest way to stand up a whole state.
+CSV of room IDs + passcodes, and a second file — a **QR sheet** (`…-QR.html`) with one sign-in card
+per room. Open that file to view, print or save as PDF. This is the quickest way to stand up a whole state.
 
 ### Managing a room (buttons on each row)
 - **Rename** — change its display name.
@@ -70,8 +72,9 @@ you to print or save as PDF. This is the quickest way to stand up a whole state.
 
 ### Reset & download ALL passcodes
 In the Situation Rooms header, **Reset & download all passcodes** generates a fresh passcode for
-every room, downloads a CSV (`room_id, room_name, lga, passcode, login_url, qr_sign_in_link`) and opens a
-**printable QR sheet** (one card per room) to hand out to your supervisors. (It resets them, so use it once when you're ready to distribute.)
+every room and downloads **two files**: a CSV (`room_id, room_name, lga, passcode, login_url,
+qr_sign_in_link`) and a **QR sheet** (`Situation-Room-sign-in-sheets-QR.html`) with one QR card per
+room. The QR codes are in the second file — open it in your browser and print it. (It resets them, so use it once when you're ready to distribute.)
 
 ---
 
@@ -113,6 +116,17 @@ Observer codes are created **in the room**, by its supervisor, so each code is t
 2. **Scan the QR card** (it connects the app and fills in the code), or enter the **site address**
    when asked (once) and type the **code**. Then they choose a **PIN**.
 3. The code **locks to that phone**. If they switch phones, the code won't work until you reset it.
+
+### What the observer does on election day (tell them this)
+- **Tallies add up.** Each figure they say ("APC 251") or type is **added to that party's running
+  total** — so they can enter results in parts. To fix a mistake they tap the party's row and set the
+  correct total **once**; after that the row is locked.
+- **Messages** from the room appear on their screen. They are **not read aloud**.
+- **Talk-back:** while they are streaming, they hear the room (or a shared viewer) speaking to them
+  through the phone, and the room hears them.
+- **Stealth mode** turns the screen into a plain clock. Three quick taps on the clock send a silent
+  SOS. To leave stealth: **press and hold the clock for two seconds**, or tap the faint word "open"
+  at the bottom-right.
 
 ### Managing an observer (from the room or the Command Centre)
 - **Reset device** — unlocks the code so it can be enrolled on a new phone (lost/replaced phone).
@@ -169,7 +183,9 @@ switched off again automatically. **Revoke** a view (same tab) to cut off everyo
 
 **Global Collation** tab. Figures arrive as observers report them, sorted by votes, highest first,
 and the parties re-order live as numbers come in. The six major parties (APN, APC, ADC, NDC, PDP, LP)
-are shown; drill **State → LGA → Ward → Polling Unit** to see any level. In a live election the
+are shown; drill **LGA → Ward → Polling Unit** to see any level. The search bar is locked to **your
+state** and lists only its LGAs, wards, polling units and rooms. Use **PARTY** (or type a party name
+such as "APC" in the search box) to show one party only. In a live election the
 figures keep rising as observers submit.
 
 ---

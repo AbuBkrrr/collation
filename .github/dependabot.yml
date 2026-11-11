@@ -8,11 +8,19 @@ updates:
     groups:
       all:
         patterns: ["*"]
+    # major versions can move or rename the files this app serves from node_modules (e.g. /vendor/qrcode.js),
+    # so they are upgraded by hand, with a browser check - not automatically
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   # the Android app's dependencies
   - package-ecosystem: npm
     directory: "/mobile"
     schedule: { interval: weekly }
     open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   # GitHub Actions versions (supply-chain)
   - package-ecosystem: github-actions
     directory: "/"
@@ -21,3 +29,6 @@ updates:
   - package-ecosystem: docker
     directory: "/"
     schedule: { interval: weekly }
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]

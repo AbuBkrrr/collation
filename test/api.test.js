@@ -91,9 +91,10 @@ test("observer device lock + PIN", async () => {
 });
 
 test("tally entry, edit once, two-observer dispute, supervisor resolve, EC8A", async () => {
-  ok(await api("observer/tally", { tok: S.t1, body: { party: "APC", v: 100 } }));
+  ok(await api("observer/tally", { tok: S.t1, body: { party: "APC", v: 95 } }));
   ok(await api("observer/tally", { tok: S.t1, body: { party: "PDP", v: 50 } }));
-  assert.equal((await api("observer/tally", { tok: S.t1, body: { party: "APC", v: 5 } })).s, 409);
+  // a second entry for the same party adds to the running total
+  assert.equal(ok(await api("observer/tally", { tok: S.t1, body: { party: "APC", v: 5, src: "voice" } })).v, 100);
   ok(await api("observer/tally", { tok: S.t2, body: { party: "APC", v: 100 } }));
   let c = ok(await api("collation", { tok: S.RA.tok }));
   assert.equal(c.sum.counts.partial, 1, "no conflict yet, still entering");
@@ -103,6 +104,7 @@ test("tally entry, edit once, two-observer dispute, supervisor resolve, EC8A", a
   assert.equal(c.sum.totals.APC, 0, "disputed PU not counted");
   ok(await api("observer/tally/edit", { tok: S.t2, body: { party: "PDP", v: 50 } }));
   assert.equal((await api("observer/tally/edit", { tok: S.t2, body: { party: "PDP", v: 51 } })).s, 409, "second edit refused");
+  assert.equal((await api("observer/tally", { tok: S.t2, body: { party: "PDP", v: 1 } })).s, 409, "a corrected total takes no more entries");
   c = ok(await api("collation", { tok: S.RA.tok }));
   assert.equal(c.sum.counts.matched, 1);
   assert.equal(c.sum.totals.APC, 100);
@@ -388,4 +390,22 @@ test("shared live view: passcode-gated, view-only, scoped, revocable; manuals se
   assert.match(ok(await api("help/operator", { tok: R })).html, /<h1/);
   assert.equal((await api("help/admin", { tok: C })).s, 403);
   assert.match(ok(await api("help/admin", { tok: S.A })).html, /<h1/);
+});
+
+test("every page and every front-end library the pages load is actually served", async () => {
+  // a dependency update that moves a file inside node_modules must fail here, not on election day
+  const get = async (p) => (await fetch(BASE + p)).status;
+  const pages = ["/", "/pitch", "/help", "/command/", "/room/", "/observer/", "/share/"];
+  const seen = new Set();
+  for (const p of pages) {
+    const r = await fetch(BASE + p);
+    assert.equal(r.status, 200, p);
+    for (const m of (await r.text()).matchAll(/(?:src|href)="(\/(?:vendor|shared)\/[^"]+)"/g)) seen.add(m[1]);
+  }
+  ["/vendor/jsqr.js", "/vendor/qrcode.js", "/vendor/leaflet/images/marker-icon.png"].forEach((x) => seen.add(x));
+  assert.ok(seen.size >= 10);
+  for (const u of seen) assert.equal(await get(u), 200, u);
+  // the Android build copies these straight out of node_modules
+  const sh = fs.readFileSync(path.join(__dirname, "..", "mobile", "build-www.sh"), "utf8");
+  for (const m of sh.matchAll(/"\$ROOT\/(node_modules\/[^"*$]+)"/g)) if (!m[1].endsWith(".")) assert.ok(fs.existsSync(path.join(__dirname, "..", m[1])), m[1]);
 });

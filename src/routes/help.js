@@ -33,4 +33,11 @@ app.get(
     res.download(f, g.pdf);
   }),
 );
+// Public help page (linked from the landing page): the operator manual, readable without signing in.
+const page = (title, body) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><link rel="stylesheet" href="/vendor/fa/css/all.min.css"><link rel="stylesheet" href="/shared/fonts.css"><link rel="stylesheet" href="/shared/style.css"><style>body{background:#eef2f6;padding:18px;display:block}.hp{max-width:960px;width:100%;min-width:0;box-sizing:border-box;margin:0 auto;overflow:hidden;background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:26px}.hb{display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between;align-items:center;margin-bottom:10px}@media(max-width:640px){body{padding:0}.hp{border-radius:0;padding:16px}}</style></head><body><div class="hp"><div class="hb"><a class="btn btn-outline" href="/"><i class="fas fa-arrow-left"></i> Home</a><a class="btn btn-primary" href="/help/manual.pdf"><i class="fas fa-file-pdf"></i> Download PDF</a></div><div class="manual">${body}</div></div></body></html>`;
+app.get("/help", (req, res) => res.type("html").send(page(GUIDES.operator.title, marked.parse(fs.readFileSync(path.join(DOCS, GUIDES.operator.file), "utf8")))));
+app.get("/help/manual.pdf", (req, res) => {
+  const f = path.join(DOCS, "pdf", GUIDES.operator.pdf);
+  fs.existsSync(f) ? res.download(f, GUIDES.operator.pdf) : res.sendStatus(404);
+});
 module.exports = { GUIDES };

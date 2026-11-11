@@ -125,7 +125,7 @@ app.post(
   auth("cmd"),
   h(async (req, res) => {
     let st = String(req.body.state || "");
-    if (!st) { const [t] = await q("select state from tenants where id=$1", [req.u.tn]); if (t?.state) st = t.state; }
+    { const [t] = await q("select state from tenants where id=$1", [req.u.tn]); if (t?.state) st = t.state; } // fixed by the Command Center
     if (!STATES.includes(st)) return res.status(400).json({ error: "Choose a valid state" });
     const lgas = (await q("select distinct lga from locations where state=$1 order by 1", [st])).map((x) => x.lga);
     if (!lgas.length) return res.status(400).json({ error: "No LGAs loaded for " + st + " (Locations tab)" });

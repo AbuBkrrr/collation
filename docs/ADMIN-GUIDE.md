@@ -70,6 +70,12 @@ On the client's row in the **Command Centres** list, click **Share**. This **set
 (the old one stops working) and copies a new invite to send. Use it if a client lost their passcode
 or you suspect it leaked.
 
+### Changing the state a Command Centre is locked to
+
+In the **Command Centres** list, the **State** column is a drop-down for you only. A client whose
+Command Centre has a state sees that state fixed everywhere (room creation, search, collation) and
+cannot change it. "— all states —" leaves it unlocked (as your own Main Command Centre is).
+
 ### Turning a Command Centre off / on
 
 On the client's row, click **Disable (suspends its rooms)**. The client can no longer log in and all
@@ -153,7 +159,10 @@ See `SECURITY.md` for the full checklist (branch protection, firewall, backups, 
 
 ---
 
-## 7a. Help tab
+## 7a. Help
+
+The landing page has a **Help & user manual** button that opens the operator manual for anyone,
+without signing in (`/help`). Your administrator manual is never public.
 
 The **Help** tab shows both manuals inside the app — this one (visible to you only) and the client
 operator manual — each with a **Download PDF** button, handy for onboarding emails.

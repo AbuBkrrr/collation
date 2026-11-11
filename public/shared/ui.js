@@ -71,6 +71,7 @@ const A = {
       if (t.kind == Track.Kind.Video || t.kind == Track.Kind.Audio) t.attach(el);
     });
     await room.connect(r.url, r.token);
+    room.startAudio().catch(() => {}); // make sure the observer's sound plays, not only the picture
     A.pcs[code] = { close: () => room.disconnect() };
     if (talk)
       await room.localParticipant
@@ -209,9 +210,9 @@ function hist() {
   if (c.error) return '<div class="muted">⚠️ ' + esc(c.error) + "</div>";
   const s = c.sum,
     n = s.counts,
-    show = byVotes(c.parties, s.totals).filter((p, i) => i < 10 || s.totals[p] > 0);
+    show = byVotes(c.parties, s.totals).filter((p, i) => (PF() ? p == PF() : i < 10 || s.totals[p] > 0));
   return (
-    `<div class="muted" style="margin-bottom:8px">${n.verified}/${n.pus} PUs verified · ${s.total} votes counted · ${n.disputed} disputed (not counted until resolved)</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">${Object.keys(SC)
+    `<div class="muted" style="margin-bottom:8px">${n.verified}/${n.pus} PUs verified · ${s.total.toLocaleString()} votes counted · ${n.disputed} disputed (not counted until resolved)${PF() ? " · showing <b>" + PF() + "</b> only" : ""}</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">${Object.keys(SC)
       .filter((k) => n[k])
       .map((k) => pillS(k, n[k]))
       .join("")}</div>` +
@@ -219,7 +220,7 @@ function hist() {
       .map((p) => {
         const i = c.parties.indexOf(p),
           pc = s.total ? Math.round((s.totals[p] / s.total) * 100) : 0;
-        return `<div class="histogram-row"><div class="party-name">${p}</div><div class="bar-bg"><div class="bar-fill" style="width:${pc}%;background:${PCOL[i % PCOL.length]}"></div></div><div class="pct">${s.totals[p]} · ${pc}%</div></div>`;
+        return `<div class="histogram-row"><div class="party-name" style="color:${PCOL[i % PCOL.length]}">${p}</div><div class="bar-bg"><div class="bar-fill" style="width:${pc}%;background:${PCOL[i % PCOL.length]}"></div></div><div class="pct">${(s.totals[p] || 0).toLocaleString()} · ${pc}%</div></div>`;
       })
       .join("")
   );
@@ -227,7 +228,7 @@ function hist() {
 function drill() {
   const c = DATA.coll;
   if (!c || c.error) return "";
-  const ps = byVotes(c.parties, c.sum.totals).filter((p, i) => i < 10 || c.sum.totals[p] > 0);
+  const ps = byVotes(c.parties, c.sum.totals).filter((p, i) => (PF() ? p == PF() : i < 10 || c.sum.totals[p] > 0));
   return `<div class="tw"><table><tr><th>${c.level == "nat" ? "Scope" : c.level.toUpperCase()}</th><th>PUs</th><th>Verified</th><th>Disputed</th>${ps.map((p) => "<th>" + p + "</th>").join("")}<th>Total</th></tr>${
     c.rows
       .map(
@@ -237,15 +238,19 @@ function drill() {
       .join("") || "<tr><td colspan=30>No data</td></tr>"
   }</table></div>`;
 }
+// the party being searched for: chosen in the PARTY list, or typed into the search box (e.g. "apc")
+const PF = () => F.party || ((CFG?.parties || []).includes((F.q || "").trim().toUpperCase()) ? F.q.trim().toUpperCase() : "");
 const flt = (l) =>
   l.filter(
     (o) =>
+      (!PF() || (o.t && o.t[PF()])) &&
       (!F.state || o.state == F.state) &&
       (!F.lga || o.lga == F.lga) &&
       (!F.ward || o.ward == F.ward) &&
       (!F.pu || o.pu == F.pu) &&
       (!F.room || o.room_id == F.room) &&
       (!F.q ||
+        (PF() && !F.party) ||
         (o.code + (o.name || "") + o.pu + o.ward + o.lga + o.state + o.room_id)
           .toLowerCase()
           .includes(F.q.toLowerCase())),
@@ -259,16 +264,21 @@ function setF(k, v) {
   render();
 }
 function cardSearch(cmd, all) {
-  const lv = ["state", "lga", "ward", "pu"];
+  const lv = ["state", "lga", "ward", "pu"],
+    FIXST = cmd ? ME.tenantState : ME.room?.state;
   const sel = lv
     .map((k, i) => {
       let p = all;
       for (let j = 0; j < i; j++) if (F[lv[j]]) p = p.filter((o) => o[lv[j]] == F[lv[j]]);
-      const v = [...new Set(p.map((o) => o[k]))].sort();
+      let v = [...new Set(p.map((o) => o[k]))];
+      // one-state Command Center (or a room): the state is fixed, and every LGA of that state is listed
+      if (k == "state" && FIXST) return `<select disabled title="This ${cmd ? "Command Center" : "room"} covers ${esc(FIXST)} only"><option>STATE: ${esc(FIXST)}</option></select>`;
+      if (k == "lga" && cmd && DATA.lgas) v = [...new Set([...v, ...DATA.lgas])];
+      v.sort();
       return `<select onchange="setF('${k}',this.value)"><option value="">${k.toUpperCase()}: All</option>${v.map((x) => `<option ${F[k] == x ? "selected" : ""}>${esc(x)}</option>`).join("")}</select>`;
     })
     .join("");
-  return `<div class="card"><div class="card-header"><h3><i class="fas fa-sitemap"></i> Hierarchical Search</h3><span class="tag">State → LGA → Ward → PU → Observer</span></div><div class="search-bar">${sel}${cmd ? `<select onchange="setF('room',this.value)"><option value="">ROOM: All</option>${DATA.rooms.map((r) => `<option value="${r.id}" ${F.room == r.id ? "selected" : ""}>${esc(r.name)}</option>`).join("")}</select>` : ""}<input placeholder="Code, name, PU, ward…" value="${esc(F.q || "")}" onchange="setF('q',this.value)"><button class="btn btn-outline" onclick="F={};fit=true;render()"><i class="fas fa-xmark"></i> Clear</button></div></div>`;
+  return `<div class="card"><div class="card-header"><h3><i class="fas fa-sitemap"></i> Hierarchical Search</h3><span class="tag">State → LGA → Ward → PU → Observer</span></div><div class="search-bar">${sel}${cmd ? `<select onchange="setF('room',this.value)"><option value="">ROOM: All</option>${DATA.rooms.map((r) => `<option value="${r.id}" ${F.room == r.id ? "selected" : ""}>${esc(r.name)}</option>`).join("")}</select>` : ""}<select onchange="setF('party',this.value)"><option value="">PARTY: All</option>${CFG.parties.map((p) => `<option ${F.party == p ? "selected" : ""}>${p}</option>`).join("")}</select><input placeholder="Code, name, PU, ward or party…" value="${esc(F.q || "")}" onchange="setF('q',this.value)"><button class="btn btn-outline" onclick="F={};fit=true;render()"><i class="fas fa-xmark"></i> Clear</button></div></div>`;
 }
 // ---------- map ----------
 const sv = (a, b) =>
@@ -482,7 +492,7 @@ async function msgTo(to, text, cmd) {
 }
 const ackMsg = (id) => A.post("messages/" + id + "/ack");
 function cardMsgs(targets) {
-  return `<div class="card"><div class="card-header"><h3><i class="fas fa-comments"></i> Messages</h3></div>${targets ? `<div class="search-bar"><select id="mt">${targets.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join("")}</select><input id="mx" placeholder="Message / talkback (spoken on observer device)"><button class="btn btn-primary" onclick="msgTo($('#mt').value,$('#mx').value)">Send</button></div>` : ""}<div class="contact-list">${
+  return `<div class="card"><div class="card-header"><h3><i class="fas fa-comments"></i> Messages</h3></div>${targets ? `<div class="search-bar"><select id="mt">${targets.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join("")}</select><input id="mx" placeholder="Message to the observer (shown on their screen)"><button class="btn btn-primary" onclick="msgTo($('#mt').value,$('#mx').value)">Send</button></div>` : ""}<div class="contact-list">${
     DATA.msg
       .filter((m) => !m.cmd)
       .slice(0, 10)
@@ -768,6 +778,8 @@ async function loadAll() {
   else [DATA.radio, DATA.clips] = await Promise.all([g("radio"), g("clips")]);
   if (A.role == "cmd") DATA.radio = await g("radio" + (DRILL ? "?room=" + DRILL : F.radioRoom ? "?room=" + F.radioRoom : ""));
   if (A.role == "cmd") DATA.totp = await A.get("totp").catch(() => ({}));
+  // a Command Center locked to one state: its LGA list, for the room form and the search filters
+  if (A.role == "cmd" && ME.tenantState && !DATA.lgas) DATA.lgas = (await g("locations?state=" + encodeURIComponent(ME.tenantState))).map((x) => x.lga);
   if (A.role == "cmd" && ME.su) DATA.bk = await A.get("backups").catch(() => null);
   if (A.role == "cmd" && ME.su) DATA.mkt = await A.get("pitch/stats").catch(() => null);
   if ($("#collSlot")) loadColl();
@@ -988,8 +1000,12 @@ function printCreds(title, items) {
     )
     .join("");
   const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><style>body{font-family:system-ui,Arial,sans-serif;margin:16px;color:#1a202c}h1{font-size:18px}.g{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:12px}.c{border:1px solid #cbd5e0;border-radius:10px;padding:12px;display:flex;gap:12px;align-items:center;break-inside:avoid}.q svg{display:block}h3{margin:0 0 6px;font-size:14px}div{font-size:13px}span{color:#4a5568}b{font-family:ui-monospace,Menlo,monospace}.s{color:#718096;font-size:11px;margin-top:6px}button{padding:10px 16px;border-radius:8px;border:0;background:#2b6cb0;color:#fff;font-weight:600;margin-bottom:12px}@media print{button{display:none}}</style></head><body><button onclick="print()">Print / Save as PDF</button><h1>${esc(title)}</h1><div class="g">${cards}</div></body></html>`;
-  const w = window.open(URL.createObjectURL(new Blob([html], { type: "text/html" })), "_blank");
-  if (!w) toast("⚠️ Allow pop-ups to open the printable sheet");
+  // saved as a file, because browsers block a new window that opens after waiting on the server
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+  a.download = title.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "") + "-QR.html";
+  a.click();
+  toast("📄 QR sheet downloaded — open the file to view, print or save as PDF");
 }
 
 // ================= Shared live view (view-only dashboard for people outside the system) =================

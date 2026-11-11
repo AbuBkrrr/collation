@@ -154,8 +154,8 @@
           TL = OB.t || {};
           MSG = await A.get("messages");
           const incoming = MSG.filter((m) => m.from_id != OB.code);
-          if (lastN >= 0 && incoming.length > lastN && window.speechSynthesis && !incoming[0].cmd)
-            speechSynthesis.speak(new SpeechSynthesisUtterance(incoming[0].text));
+          // new messages are shown on screen only — never read aloud (an observer may be standing in a crowd)
+          if (lastN >= 0 && incoming.length > lastN && !incoming[0].cmd) toast("📩 New message: " + String(incoming[0].text).slice(0, 80));
           lastN = incoming.length;
           const c = incoming.find((m) => m.cmd == "save" && !m.ack.includes(OB.code));
           if (c) {
@@ -202,13 +202,22 @@
               resolution: { width: 640, height: 360, frameRate: 15 },
             },
           });
+          // talk-back: play whatever the Situation Room / Command Center / a shared viewer says
           lk.on(RoomEvent.TrackSubscribed, (t) => {
-            if (t.kind == Track.Kind.Audio) t.attach(au);
+            if (t.kind != Track.Kind.Audio) return;
+            const el = t.attach();
+            el.autoplay = true;
+            el.dataset.tb = "1";
+            document.body.appendChild(el);
+            el.play().catch(() => {});
+            toast("🔊 The Situation Room is speaking to you");
           });
+          lk.on(RoomEvent.TrackUnsubscribed, (t) => t.detach().forEach((el) => el.remove()));
           lk.on(RoomEvent.Disconnected, () => {
             if (streaming) toast("⚠️ Stream link lost — reconnecting…");
           });
           await lk.connect(r.url, r.token);
+          lk.startAudio().catch(() => {});
           const v = await lk.localParticipant.setCameraEnabled(true),
             a = await lk.localParticipant.setMicrophoneEnabled(true).catch(() => null);
           stream = new MediaStream([v?.track?.mediaStreamTrack, a?.track?.mediaStreamTrack].filter(Boolean));
@@ -347,9 +356,9 @@
           const r = await send("observer/tally", { party: p, v, src });
           if (r.anomaly)
             toast("⚠️ Total (" + r.total + ") exceeds registered voters (" + r.reg + ") — flagged to room.");
-          else if (!r.queued) toast("🎤 " + p + " = " + v);
+          else if (!r.queued) toast((src == "voice" ? "🎤 " : "✅ ") + p + " +" + v + (r.v != null && r.v != v ? " = " + r.v : ""));
           if (r.queued) {
-            TL[p] = { v, edits: 0 };
+            TL[p] = { v: (TL[p]?.v || 0) + v, edits: 0 }; // offline: add locally; the server adds it up when it syncs
           } else load();
         } catch (e) {
           toast("⚠️ " + e.message);
@@ -366,8 +375,8 @@
           const re = new RegExp("\\b(?:" + alt.join("|") + ")\\b\\D{0,8}?(\\d[\\d, ]*)", "gi");
           let m;
           while ((m = re.exec(s)))
-            if (!TL[p]) setTally(p, parseInt(m[1].replace(/\D/g, ""), 10), "voice");
-            else toast(p + " already entered — tap its row to correct once.");
+            if (TL[p]?.edits) toast(p + " was corrected and is locked.");
+            else setTally(p, parseInt(m[1].replace(/\D/g, ""), 10), "voice"); // adds to that party's running total
         });
       }
       const NW = {
@@ -570,8 +579,9 @@
         const p = $("#mp").value,
           v = parseInt($("#mv").value, 10);
         if (isNaN(v) || v < 0) return toast("⚠️ Enter a valid number.");
-        if (TL[p]) return toast(p + " already entered — tap the row to correct ONCE.");
-        setTally(p, v, "manual");
+        if (TL[p]?.edits) return toast(p + " was corrected and is locked.");
+        setTally(p, v, "manual"); // adds to that party's running total
+        $("#mv").value = "";
       }
       function openCorr(p) {
         if (TL[p].edits) return toast("⚠️ " + p + " already corrected once. Locked.");
@@ -655,7 +665,7 @@
           ms = MSG.slice(0, 4);
         if (stealth) {
           $("#app").innerHTML =
-            `<div class="observer-layout"><div class="phone-mockup"><div class="notch"></div><div class="phone-screen"><div class="clock" onclick="clockTap()"><div id="clk" style="font-size:64px;font-weight:300">${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div><div style="color:#718096">Clock · Alarm</div></div><div style="position:absolute;bottom:26px;right:30px;opacity:.15;color:#fff;font-size:11px;cursor:pointer" onclick="stealth=false;render()">open</div></div></div></div>`;
+            `<div class="observer-layout"><div class="phone-mockup"><div class="notch"></div><div class="phone-screen"><div class="clock" onclick="clockTap()" onpointerdown="window.HOLD=Date.now()" onpointerup="if(Date.now()-(window.HOLD||Date.now())>1500){stealth=false;render()}"><div id="clk" style="font-size:64px;font-weight:300">${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div><div style="color:#718096">Clock · Alarm</div></div><div style="position:absolute;bottom:26px;right:30px;opacity:.15;color:#fff;font-size:11px;cursor:pointer" onclick="stealth=false;render()">open</div></div></div></div>`;
           return;
         }
         const rows =
@@ -666,14 +676,14 @@
                 `<div class="tally-row" style="${t[p].edits ? "opacity:.6;cursor:not-allowed" : ""}" onclick="openCorr('${p}')"><span>${p}</span><span>${t[p].v}${t[p].edits ? ' <i class="fas fa-lock" style="font-size:11px"></i>' : ""}</span></div>`,
             )
             .join("") ||
-          '<div style="color:#a0aec0;font-size:13px">No tallies yet. Tap Mic and say e.g. “APC 251”.</div>';
+          '<div style="color:#a0aec0;font-size:13px">No tallies yet. Tap Mic and say e.g. “APC 251”, or type below. Each entry adds to that party’s total.</div>';
         $("#app").innerHTML =
           `<div class="observer-layout"><div class="phone-mockup"><div class="notch"></div><div class="phone-screen"><div class="app-header" style="flex-direction:column;align-items:stretch;gap:3px">
 <div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700;font-size:14px;color:#fff">${esc(CFG.appName || CC || "Command Center")}</span><span style="color:${on ? "#68d391" : "#fc8181"};font-size:11px"><i class="fas fa-circle" style="font-size:8px"></i> ${!on ? "Offline" + (pend + BQ ? " · " + (pend + BQ) + " queued" : "") : pend + BQ ? "Syncing " + (pend + BQ) : "Online"}</span></div>
 <div style="display:flex;justify-content:space-between;align-items:center;color:#a0aec0;font-size:11px"><span><i class="fas fa-building-columns" style="font-size:10px"></i> ${esc(OB.room_name || OB.room_id)}</span><span class="mono">${esc(OB.code)} · PU ${esc(OB.pu)}</span></div></div>
 <div class="app-content">${LIVEREQ && !streaming ? `<button class="btn-report" style="background:#e53e3e" onclick="startStream()"><i class="fas fa-video"></i> Situation Room requests LIVE VIDEO — tap to start</button>` : ""}<div style="font-size:12px;color:#a0aec0"><i class="fas fa-location-dot"></i> ${esc(OB.lga)} LGA · ${esc(OB.ward)} Ward</div>
 <div class="camera-view" id="camSlot"><div class="camera-overlay"><span style="color:${streaming ? "#fc8181" : "#fff"}">${streaming ? "● LIVE Streaming" : "Ready"}</span><span>${lat != null ? lat.toFixed(4) + ", " + lng.toFixed(4) : "GPS…"}</span></div><div class="stream-controls">${streaming ? '<button style="background:#e53e3e;color:#fff" onclick="stopStream()">⏹ Stop Stream</button>' : '<button style="background:#38a169;color:#fff" onclick="startStream()">▶ Start Stream</button>'}</div></div>
-<div class="tally-panel"><div class="tally-title"><span>VOICE TALLY · tap a row to correct once</span><button class="btn btn-sm ${mic ? "btn-danger" : "btn-primary"}" onclick="toggleMic()"><i class="fas fa-microphone"></i> ${mic ? (fbMode ? "Listening (server)" : "Listening") : "Mic"}</button></div>${rows}<div id="tr" style="margin-top:8px;color:#a0aec0;font-size:12px"></div>
+<div class="tally-panel"><div class="tally-title"><span>TALLY · entries add up · tap a row to correct once</span><button class="btn btn-sm ${mic ? "btn-danger" : "btn-primary"}" onclick="toggleMic()"><i class="fas fa-microphone"></i> ${mic ? (fbMode ? "Listening (server)" : "Listening") : "Mic"}</button></div>${rows}<div id="tr" style="margin-top:8px;color:#a0aec0;font-size:12px"></div>
 ${CORR ? `<div class="correction-controls"><input id="mi" type="number" inputmode="numeric" value="${t[CORR].v}"><button style="background:#38a169" onclick="saveCorr()">✓</button><button style="background:#e53e3e" onclick="CORR=null;render()">✕</button></div>` : ""}
 <div class="correction-controls"><select class="dk" id="mp">${CFG.parties
             .filter((p) => !t[p])
