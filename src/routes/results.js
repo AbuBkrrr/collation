@@ -115,8 +115,33 @@ app.get(
     const f = filt(req.query),
       lvl = LV.includes(req.query.level) ? req.query.level : "nat";
     if (f.room && req.u.role == "cmd" && !(await mine(req.u, f.room))) return res.sendStatus(403);
-    const l = await puList(req.u, f),
-      g = {};
+    let l = await puList(req.u, f),
+      pooled = null;
+    // State-wide view (Global Collation of a Command Center): vote counts of every pooled Command Center
+    // of the same state, one figure per polling unit. Only these aggregates leave another command -
+    // never its observers, codes, photos, video, audio or map positions.
+    if (req.u.role == "cmd" && req.query.pool == "1" && !f.room) {
+      const [me] = await qsys("select state,pool from tenants where id=$1", [req.u.tn]);
+      if (me?.state && me.pool) {
+        const others = await qsys("select id from tenants where state=$1 and pool and active and id<>$2", [me.state, req.u.tn]);
+        const RANK = { pending: 0, disputed: 1, single: 2, partial: 3, matched: 4, resolved: 5 };
+        const score = (x) => (x.fig ? 10 : 0) + (x.verified ? 6 : RANK[x.status] || 0);
+        const best = new Map(l.map((x) => [x.key, { x, own: true }]));
+        for (const t of others) {
+          const tl = await als.run({ name: "pool", tn: t.id, room: "" }, () => puList({ role: "cmd", tn: t.id, id: "pool" }, { ...f, state: me.state }));
+          for (const x of tl) {
+            const cur = best.get(x.key);
+            // our own figure for a unit always stands; otherwise the best-evidenced figure is used (never added twice)
+            if (!cur || (!(cur.own && cur.x.fig) && score(x) > score(cur.x))) best.set(x.key, { x, own: false });
+          }
+        }
+        const all = [...best.values()],
+          ext = all.filter((b) => !b.own);
+        l = all.map((b) => b.x);
+        pooled = { state: me.state, centres: others.length + 1, extPus: ext.length, extVotes: ext.reduce((s, b) => s + (b.x.total || 0), 0) };
+      }
+    }
+    const g = {};
     l.forEach((x) => {
       const k = lvl == "nat" ? "All" : lvl == "pu" ? [x.lga, x.ward, "PU " + x.pu].join(" / ") : x[lvl];
       (g[k] = g[k] || []).push(x);
@@ -124,6 +149,7 @@ app.get(
     res.json({
       parties: PARTIES,
       level: lvl,
+      pooled,
       sum: agg(l),
       rows: Object.entries(g)
         .sort((a, b) => String(a[0]).localeCompare(String(b[0])))

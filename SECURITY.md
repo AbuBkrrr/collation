@@ -11,6 +11,7 @@ This document describes how **My Situation Room** is hardened, and the few steps
 - Observer codes are **device-locked** (first phone + PIN); a reset ends the session on the old device.
 
 **Multi-tenant isolation (defense in depth)**
+- **Deliberate exception — pooled vote counts.** Global Collation can add up the vote counts of the Command Centers of one state (aggregates only: no observers, codes, photos, video, audio or positions). The platform administrator controls this per Command Center ("Pool votes"); switch it off for clients whose figures must stay private from each other.
 - Every Command Center is isolated at the **database layer** with PostgreSQL **Row-Level Security**. Authenticated queries run as a restricted role with the tenant/room set per request, so one command physically cannot read another's rooms, observers, results, photos, radio or audit — even if an application check were missed.
 
 **Abuse resistance**
