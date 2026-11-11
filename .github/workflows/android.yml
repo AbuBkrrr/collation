@@ -40,7 +40,7 @@ jobs:
           sh mobile/build-apk.sh observer
           sh mobile/build-apk.sh room
           ls -la apks
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: android-apks
           path: apks/*.apk
