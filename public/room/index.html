@@ -19,6 +19,7 @@
     <div class="toast" id="toast"></div>
     <div id="app"></div>
     <script src="/vendor/leaflet/leaflet.js"></script>
+    <script src="/vendor/qrcode.js"></script>
     <script src="/vendor/livekit-client.umd.js"></script>
     <script src="/vendor/read-excel-file.min.js"></script>
     <script src="/shared/ui.js"></script>
@@ -29,8 +30,8 @@
           locLoad("lga");
           if ($("#gl")?.value) locLoad("ward");
         }, 60);
-        return `<div style="display:grid;grid-template-columns:1fr 2fr;gap:20px"><div class="card"><div class="card-header"><h3><i class="fas fa-key"></i> Generate Observer Code</h3></div><select class="fi" id="gs" onchange="locLoad('lga')">${CFG.states.map((s) => `<option ${s == ME.room.state ? "selected" : ""}>${s}</option>`).join("")}</select><input class="fi" id="gl" list="dl-lga" placeholder="LGA" value="${esc(ME.room.scope && !ME.room.scope.includes(",") ? ME.room.scope : "")}" ${ME.room.scope && !ME.room.scope.includes(",") ? "readonly" : ""} onchange="locLoad('ward')"><datalist id="dl-lga"></datalist><input class="fi" id="gw" list="dl-ward" placeholder="Ward" onchange="locLoad('pu')"><datalist id="dl-ward"></datalist><input class="fi" id="gp" list="dl-pu" placeholder="PU code (e.g. 012)" onchange="puReg()"><datalist id="dl-pu"></datalist><input class="fi" id="gr" type="number" placeholder="Registered voters (default 500)"><input class="fi" id="gn" placeholder="Observer name (optional)"><button class="btn btn-primary" onclick="genCode()"><i class="fas fa-key"></i> Generate Code</button><div class="muted" style="margin-top:8px">The code is the ONLY login link. It binds one observer to this room and one PU. Generate two codes per PU: the two observers' figures are compared automatically. On first login the code locks to that phone with a PIN the observer chooses; use "Reset phone" if a phone is lost.</div></div>
-<div class="card"><div class="card-header"><h3><i class="fas fa-users"></i> Observers (${all.length})</h3><input placeholder="Search code, name, PU…" value="${esc(F.q || "")}" onchange="setF('q',this.value)" style="padding:6px 10px;border-radius:8px;border:1px solid #cbd5e0"></div><div class="tw"><table><tr><th>Code</th><th>Name</th><th>Location</th><th>Reg.</th><th>Status</th><th>Phone</th><th>Tallies (hover = edit history)</th><th>Actions</th></tr>${flt(all).slice(0, 500).map((o) => `<tr><td class="mono">${esc(o.code)}</td><td>${esc(o.name)}</td><td>${esc(o.state)}/${esc(o.lga)}/${esc(o.ward)}/PU ${esc(o.pu)}</td><td>${o.reg}</td><td>${o.active ? pill(st(o)) : '<span class="pill r">Revoked</span>'}</td><td>${o.bound ? '<span class="pill g">Locked</span>' : '<span class="pill s">Not used yet</span>'}</td><td>${tallyCell(o)}</td><td><button class="btn btn-sm btn-outline" onclick="SEL='${o.code}';TAB='dash';render()">Feed</button> <button class="btn btn-sm btn-outline" onclick="navigator.clipboard?.writeText('${o.code}');toast('Copied')">Copy</button> ${o.bound ? `<button class="btn btn-sm btn-outline" onclick="resetDev('${o.code}')">Reset phone</button> ` : ""}<button class="btn btn-sm ${o.active ? "btn-danger" : "btn-success"}" onclick="A.post('obs/${o.code}/toggle')">${o.active ? "Revoke" : "Activate"}</button></td></tr>`).join("")}</table></div></div></div>`;
+        return `<div class="dashboard-grid"><div class="card"><div class="card-header"><h3><i class="fas fa-key"></i> Generate Observer Code</h3></div><select class="fi" id="gs" onchange="locLoad('lga')">${CFG.states.map((s) => `<option ${s == ME.room.state ? "selected" : ""}>${s}</option>`).join("")}</select><input class="fi" id="gl" list="dl-lga" placeholder="LGA" value="${esc(ME.room.scope && !ME.room.scope.includes(",") ? ME.room.scope : "")}" ${ME.room.scope && !ME.room.scope.includes(",") ? "readonly" : ""} onchange="locLoad('ward')"><datalist id="dl-lga"></datalist><input class="fi" id="gw" list="dl-ward" placeholder="Ward" onchange="locLoad('pu')"><datalist id="dl-ward"></datalist><input class="fi" id="gp" list="dl-pu" placeholder="PU code (e.g. 012)" onchange="puReg()"><datalist id="dl-pu"></datalist><input class="fi" id="gr" type="number" placeholder="Registered voters (default 500)"><input class="fi" id="gn" placeholder="Observer name (optional)"><button class="btn btn-primary" onclick="genCode()"><i class="fas fa-key"></i> Generate Code</button><div class="muted" style="margin-top:8px">The code is the ONLY login link. It binds one observer to this room and one PU. Generate two codes per PU: the two observers' figures are compared automatically. On first login the code locks to that phone with a PIN the observer chooses; use "Reset phone" if a phone is lost.</div></div>
+<div class="card"><div class="card-header"><h3><i class="fas fa-users"></i> Observers (${all.length})</h3><button class="btn btn-sm btn-outline" onclick="printCreds('Observer sign-in sheets',flt(DATA.obs).filter(o=>o.active&&!o.bound).slice(0,400).map(o=>obsCredOf(o.code)))"><i class="fas fa-print"></i> Print QR sheet (unused codes)</button><input placeholder="Search code, name, PU…" value="${esc(F.q || "")}" onchange="setF('q',this.value)" style="padding:6px 10px;border-radius:8px;border:1px solid #cbd5e0"></div><div class="tw"><table><tr><th>Code</th><th>Name</th><th>Location</th><th>Reg.</th><th>Status</th><th>Phone</th><th>Tallies (hover = edit history)</th><th>Actions</th></tr>${flt(all).slice(0, 500).map((o) => `<tr><td class="mono">${esc(o.code)}</td><td>${esc(o.name)}</td><td>${esc(o.state)}/${esc(o.lga)}/${esc(o.ward)}/PU ${esc(o.pu)}</td><td>${o.reg}</td><td>${o.active ? pill(st(o)) : '<span class="pill r">Revoked</span>'}</td><td>${o.bound ? '<span class="pill g">Locked</span>' : '<span class="pill s">Not used yet</span>'}</td><td>${tallyCell(o)}</td><td><button class="btn btn-sm btn-outline" onclick="SEL='${o.code}';TAB='dash';render()">Feed</button> <button class="btn btn-sm btn-outline" onclick="navigator.clipboard?.writeText('${o.code}');toast('Copied')">Copy</button> <button class="btn btn-sm btn-outline" onclick="obsCred('${o.code}')"><i class="fas fa-qrcode"></i> QR</button> ${o.bound ? `<button class="btn btn-sm btn-outline" onclick="resetDev('${o.code}')">Reset phone</button> ` : ""}<button class="btn btn-sm ${o.active ? "btn-danger" : "btn-success"}" onclick="A.post('obs/${o.code}/toggle')">${o.active ? "Revoke" : "Activate"}</button></td></tr>`).join("")}</table></div></div></div>`;
       };
       let PUS = [];
       async function locLoad(next) {
@@ -69,6 +70,12 @@
         const p = PUS.find((x) => x.pu == $("#gp").value);
         if (p) $("#gr").value = p.reg;
       };
+      // an observer's sign-in card: the code + a QR that opens the Observer sign-in with the code filled in
+      const obsCredOf = (code) => {
+        const o = DATA.obs.find((x) => x.code == code) || {};
+        return { title: "Observer sign-in" + (o.pu ? " — PU " + o.pu : ""), lines: [["Sign in at", ORIGIN.replace(/^https?:\/\//, "") + "/observer/ (or the Observer app)"], ["Code", code], ...(o.lga ? [["Polling unit", [o.lga, o.ward, "PU " + o.pu].join(" / ")]] : [])], link: loginLink("obs", code) };
+      };
+      const obsCred = (code) => credModal({ ...obsCredOf(code), note: "The observer scans this (or types the code), then chooses a PIN. The code locks to the first phone that uses it." });
       async function genCode() {
         const g = (i) => $("#" + i).value.trim();
         try {
@@ -80,7 +87,8 @@
             reg: g("gr"),
             name: g("gn"),
           });
-          prompt("✅ Observer code generated — copy it and give it to the observer:", r.code);
+          obsCred(r.code);
+          loadAll();
         } catch (e) {
           toast("⚠️ " + e.message);
         }
@@ -91,6 +99,8 @@
         obs: ["Observer Manager", "user-gear", rObs],
         con: ["Contacts", "address-book", tabContacts],
         dat: ["Data Download", "download", tabData],
+        share: ["Share Live View", "share-nodes", tabShare],
+        help: ["Help", "circle-question", tabHelp],
       }));
     </script>
   </body>

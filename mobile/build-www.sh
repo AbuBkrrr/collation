@@ -17,17 +17,18 @@ rm -rf www && mkdir -p www/shared www/vendor www/vendor/fa/css www/vendor/fa/web
 cp "$ROOT/public/$APP/index.html" www/app.html
 python3 inject.py www/app.html                          # set MCC_BASE early + add change-server gear
 cp www-src-index.html www/index.html                    # first-run launcher
-python3 - "$LABEL" <<'PY'                                # brand the launcher for this app
+python3 - "$LABEL" "$APP" <<'PY'                                # brand the launcher for this app
 import sys
 lbl = sys.argv[1]; p = "www/index.html"
-s = open(p).read().replace("Collation Observer", lbl)   # read first, then truncate+write
+s = open(p).read().replace("Collation Observer", lbl).replace("__APP__", sys.argv[2])   # read first, then truncate+write
 open(p, "w").write(s)
 PY
 cp "$ROOT/public/shared/ui.js" "$ROOT/public/shared/style.css" "$ROOT/public/shared/fonts.css" www/shared/
 cp "$ROOT/node_modules/livekit-client/dist/livekit-client.umd.js" www/vendor/livekit-client.umd.js
 cp "$ROOT/node_modules/vosk-browser/dist/vosk.js" www/vendor/vosk.js
 cp "$ROOT/node_modules/read-excel-file/bundle/read-excel-file.min.js" www/vendor/read-excel-file.min.js
-cp "$ROOT/node_modules/qrcode-generator/qrcode.js" www/vendor/qrcode.js 2>/dev/null || true
+cp "$ROOT/node_modules/qrcode-generator/qrcode.js" www/vendor/qrcode.js
+cp "$ROOT/node_modules/jsqr/dist/jsQR.js" www/vendor/jsqr.js
 cp -r "$ROOT/node_modules/leaflet/dist/." www/vendor/leaflet/     # leaflet.js + leaflet.css + marker images
 cp "$ROOT/node_modules/@fortawesome/fontawesome-free/css/all.min.css" www/vendor/fa/css/
 cp "$ROOT/node_modules/@fortawesome/fontawesome-free/webfonts/fa-solid-900."* www/vendor/fa/webfonts/

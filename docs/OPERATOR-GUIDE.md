@@ -27,6 +27,8 @@ Your Command Centre  (you)
 
 1. Open the login link from your invite — **`https://mysituationroom.com.ng/command/`**.
 2. Choose **Command Centre**, enter your **operator name** and **passcode** (from the invite).
+   - **Or scan the QR code** on your invite: with your phone camera, or with **Scan QR code instead** on the
+     sign-in screen. It fills in the details and signs you in.
 3. First thing: go to **App Settings → change your passcode** to something only you know.
 
 ### Turn on two-step login (do this)
@@ -48,12 +50,15 @@ A Situation Room is one area of responsibility — usually one LGA. **Situation 
 ### One room at a time
 1. Under **Create Situation Room**, type a **Room name** (e.g. `Nassarawa LGA Situation Room`).
 2. Pick the **state/LGA** it covers (this limits which polling units its observers can be assigned).
-3. Click **create**. A **passcode is shown once** — give it to that room's supervisor. It is stored
+3. Click **create**. A **passcode and a QR code are shown once** — give them to that room's
+   supervisor (**Share / print with QR** gives you a card to copy or print). The passcode is stored
    hashed; nobody (not even you) can read it back later, only reset it.
+4. **Rooms start inactive.** Press **Activate** on the room's row before the supervisor signs in.
 
 ### All LGAs at once (fast setup)
 Use **One room per LGA** to create a room for every LGA in your state in one click, then download the
-CSV of room IDs + passcodes. This is the quickest way to stand up a whole state.
+CSV of room IDs + passcodes, and a **printable sheet with one QR sign-in card per room** opens for
+you to print or save as PDF. This is the quickest way to stand up a whole state.
 
 ### Managing a room (buttons on each row)
 - **Rename** — change its display name.
@@ -65,8 +70,8 @@ CSV of room IDs + passcodes. This is the quickest way to stand up a whole state.
 
 ### Reset & download ALL passcodes
 In the Situation Rooms header, **Reset & download all passcodes** generates a fresh passcode for
-every room and downloads a CSV (`room_id, room_name, lga, passcode, login_url`) to hand out to your
-supervisors. (It resets them, so use it once when you're ready to distribute.)
+every room, downloads a CSV (`room_id, room_name, lga, passcode, login_url, qr_sign_in_link`) and opens a
+**printable QR sheet** (one card per room) to hand out to your supervisors. (It resets them, so use it once when you're ready to distribute.)
 
 ---
 
@@ -76,7 +81,12 @@ Your supervisors use the **Situation Room app** (download from the landing page)
 
 1. Open **`https://mysituationroom.com.ng/room/`** (or the Situation Room Android app, entering the
    site address once).
-2. Sign in with the **Room ID** and **passcode** you gave them.
+2. Sign in with the **Room ID** and **passcode** you gave them — or just **scan the QR code** on their
+   card (phone camera, or the **Scan QR code** button).
+
+   > **In the Android app the very first screen asks for the web address, not the passcode.** Tap
+   > **Scan QR code** and scan the card (it sets the address and signs in), or leave the address as
+   > `mysituationroom.com.ng` and tap **Connect**; the Room ID and passcode are typed on the *next* screen.
 3. They then:
    - **Create observer codes** for their area (section 4),
    - watch their observers on the **map**, request **live video**,
@@ -93,12 +103,15 @@ Observer codes are created **in the room**, by its supervisor, so each code is t
 
 1. In the Situation Room, open the **Observers** manager.
 2. Choose the **polling unit** (state → LGA → ward → PU — limited to the room's area).
-3. **Generate a code**. Give that short code to the field agent for that unit. Aim for **two
-   observers per polling unit** — that's what makes a result trustworthy (section 7).
+3. **Generate a code**. A card with the code and its **QR** appears — copy, print, or let the agent
+   scan it. Aim for **two observers per polling unit** — that's what makes a result trustworthy
+   (section 7). **QR** on any row shows the card again, and **Print QR sheet (unused codes)** prints
+   a card for every code not yet claimed.
 
 ### The observer's first login (they do this)
 1. Install the **Observer app** from `/download/app` (or open `/observer/`).
-2. Enter the **site address** when asked (once), then their **code** and a **PIN** they choose.
+2. **Scan the QR card** (it connects the app and fills in the code), or enter the **site address**
+   when asked (once) and type the **code**. Then they choose a **PIN**.
 3. The code **locks to that phone**. If they switch phones, the code won't work until you reset it.
 
 ### Managing an observer (from the room or the Command Centre)
@@ -123,6 +136,32 @@ Observer codes are created **in the room**, by its supervisor, so each code is t
 
 > Observers only stream **when asked** (to save their data and battery), and the screen stays awake
 > while streaming. GPS keeps updating in the background.
+
+---
+
+## 5a. Share a live view with people outside the system
+
+Use this for party leadership, a partner organisation, a media desk or a war-room screen — people who
+should **see** what is happening but must not be able to change anything.
+
+**Share Live View** tab (Command Centre or Situation Room):
+
+1. Give the view a **name**.
+2. Choose **what it shows**: *all* your observers (new ones are added automatically), or **only the
+   observers you tick**.
+3. Set a **passcode** (or leave blank to auto-generate), how long it **stays open**, and whether
+   viewers may **talk to observers** (talk-back).
+4. Click **Create shared view**. You get the **link**, the **passcode** and a **QR** for the link —
+   shown once. Send the link and passcode to your viewers, ideally by different channels.
+
+What the viewer gets (after entering the passcode): **live collation**, the **map**, and **live
+video** of the shared observers, and they can **move between LGAs, wards, polling units and feeds**
+(Previous / Next, the list, or the map). Any number of people can watch at once. If you allowed it,
+they can talk to the observer. There are **no control buttons** — a viewer cannot create, edit,
+resolve, message or export anything, and the viewer pass opens nothing else in the system.
+
+Watching a feed asks that observer's phone to start its camera; when the last viewer leaves, it is
+switched off again automatically. **Revoke** a view (same tab) to cut off everyone using it at once.
 
 ---
 
@@ -214,6 +253,12 @@ observer changes, resolutions). Your accountability trail.
 
 ---
 
+## 13a. Help
+
+**Help** tab — this manual, inside the app, with a **Download PDF** button.
+
+---
+
 ## 14. Good security habits (please follow)
 
 - Change your passcode on day one; turn on **two-step login**.
@@ -230,7 +275,8 @@ observer changes, resolutions). Your accountability trail.
 
 | Problem | Fix |
 |---|---|
-| A supervisor can't log in | Check the room isn't **Suspended**; re-issue with **New passcode**. |
+| A supervisor can't log in | Check the room is **Activated** (new rooms start inactive) and not **Suspended**; re-issue with **New passcode**. |
+| The app says **"Failed to fetch"** / "Could not reach that address" on its first screen | That screen wants the **web address** (`mysituationroom.com.ng`), not the passcode. Tap **Scan QR code**, or enter the address and type the passcode on the next screen. |
 | An observer's code won't work on a new phone | **Reset device** on that observer. |
 | Map says "API KEY REQUIRED" | You're on an old build — have your admin redeploy; maps are keyless now. |
 | No live video | Confirm the observer tapped to go live and has signal; ensure LiveKit is running on the server. |

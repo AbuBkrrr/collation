@@ -812,8 +812,10 @@ function render() {
   if ($("#collSlot") && DATA.collKey !== collKey()) loadColl();
 }
 function loginView(role) {
+  const LC = takeCreds(role);
+  if (LC && LC.p) setTimeout(doLogin, 50); // arrived by QR: sign straight in
   $("#app").innerHTML =
-    `<div class="mockup-container"><div class="topbar"><div class="brand"><i class="fas fa-shield-halved"></i><h1>${esc(CFG?.appName || "My Collation Center")} <span>· ${role == "cmd" ? "Command Center" : "Situation Room"}</span></h1></div></div><div class="card" style="max-width:420px"><input class="fi" id="li" placeholder="${role == "room" ? "Room ID (e.g. SR-KN-AB3)" : "Operator name (e.g. admin)"}" value="${role == "room" ? "" : "admin"}"><input class="fi" id="lp" type="password" placeholder="${role == "cmd" ? "Command passcode" : "Room passcode"}" onkeydown="event.key=='Enter'&&doLogin()">${role == "cmd" ? `<input class="fi" id="lo" inputmode="numeric" maxlength="6" placeholder="6-digit code (only if two-step login is on)" onkeydown="event.key=='Enter'&&doLogin()">` : ""}<button class="btn btn-primary" onclick="doLogin()">Enter</button><div class="muted" style="margin-top:8px">${role == "cmd" ? "First login: operator <b>admin</b>; the passcode is printed once in the server console (or set COMMAND_PASSCODE)." : "Your room must be activated by Command Center. Passcode is issued by Command Center."}</div></div></div>`;
+    `<div class="mockup-container"><div class="topbar"><div class="brand"><i class="fas fa-shield-halved"></i><h1>${esc(CFG?.appName || "My Collation Center")} <span>· ${role == "cmd" ? "Command Center" : "Situation Room"}</span></h1></div></div><div class="card" style="max-width:420px"><input class="fi" id="li" placeholder="${role == "room" ? "Room ID (e.g. SR-KN-AB3)" : "Operator name (e.g. admin)"}" value="${esc(LC?.u || "")}" autocapitalize="none" autocomplete="username"><input class="fi" id="lp" type="password" placeholder="${role == "cmd" ? "Command passcode" : "Room passcode"}" value="${esc(LC?.p || "")}" onkeydown="event.key=='Enter'&&doLogin()">${role == "cmd" ? `<input class="fi" id="lo" inputmode="numeric" maxlength="6" placeholder="6-digit code (only if two-step login is on)" onkeydown="event.key=='Enter'&&doLogin()">` : ""}<button class="btn btn-primary" onclick="doLogin()">Enter</button><button class="btn btn-outline" style="margin-top:8px" onclick="scanLogin('${role}',(c)=>{$('#li').value=c.u;$('#lp').value=c.p;doLogin()})"><i class="fas fa-qrcode"></i> Scan QR code instead</button><div class="muted" style="margin-top:8px">${role == "cmd" ? "First login: operator <b>admin</b>; the passcode is printed once in the server console (or set COMMAND_PASSCODE)." : "Your room must be activated by Command Center. Passcode is issued by Command Center."}</div></div></div>`;
 }
 async function doLogin() {
   try {
@@ -847,4 +849,224 @@ async function start(role, tabsFn) {
   A.ws((m) => (m.type == "changed" ? debLoad() : A.sig(m)));
   await loadAll();
   setInterval(() => A.tok && document.visibilityState == "visible" && loadAll(), 10000);
+}
+
+// ================= QR credentials: show, print, scan, and sign in by QR =================
+const ORIGIN = BASE || location.origin;
+// the sign-in link a QR carries. The details sit after "#", which browsers never send to a server.
+const loginLink = (kind, u, p) =>
+  ORIGIN + "/" + (kind == "cmd" ? "command" : kind == "room" ? "room" : "observer") + "/#u=" + encodeURIComponent(u) + (p ? "&p=" + encodeURIComponent(p) : "");
+function qrSvg(text, cell) {
+  if (!window.qrcode) return "";
+  const q = qrcode(0, "M");
+  q.addData(text);
+  q.make();
+  return q.createSvgTag({ cellSize: cell || 4, margin: 2 });
+}
+// read (once) the sign-in details that arrived by QR: from the page link, or handed over by the Android app's scanner
+function takeCreds(kind) {
+  let c = null;
+  try {
+    const hp = new URLSearchParams(location.hash.slice(1));
+    if (hp.get("u")) {
+      c = { u: hp.get("u"), p: hp.get("p") || "" };
+      history.replaceState(null, "", location.pathname + location.search);
+    } else {
+      const s = JSON.parse(localStorage.getItem("mcc_login") || "null");
+      if (s && s.kind == kind) c = s;
+      if (s) localStorage.removeItem("mcc_login");
+    }
+  } catch {}
+  return c;
+}
+// what a scanned QR means: { kind, origin, u, p } or null
+function parseLoginQR(text) {
+  try {
+    const url = new URL(String(text).trim()),
+      m = url.pathname.match(/\/(command|room|observer)\/?$/),
+      hp = new URLSearchParams(url.hash.slice(1));
+    if (!m || !hp.get("u")) return null;
+    return { kind: { command: "cmd", room: "room", observer: "obs" }[m[1]], origin: url.origin, u: hp.get("u"), p: hp.get("p") || "" };
+  } catch {
+    return null;
+  }
+}
+const loadScript = (src) =>
+  new Promise((ok, no) => {
+    if ([...document.scripts].some((s) => s.dataset.src == src)) return ok();
+    const s = document.createElement("script");
+    s.src = src;
+    s.dataset.src = src;
+    s.onload = ok;
+    s.onerror = () => no(new Error("Could not load the scanner"));
+    document.head.appendChild(s);
+  });
+// full-screen camera scanner; resolves with the QR text, or null if closed
+async function scanQR() {
+  await loadScript("/vendor/jsqr.js");
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+  } catch {
+    throw new Error("Camera unavailable — allow camera access, or type the details instead");
+  }
+  return new Promise((done) => {
+    const w = document.createElement("div");
+    w.style.cssText = "position:fixed;inset:0;background:#000;z-index:10000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px";
+    w.innerHTML = `<video playsinline muted style="max-width:100%;max-height:72vh;border-radius:12px"></video><div style="color:#fff;font-size:15px;text-align:center;padding:0 16px">Point the camera at the QR code</div><button class="btn btn-outline" style="background:#fff">Cancel</button>`;
+    document.body.appendChild(w);
+    const v = w.querySelector("video"),
+      cv = document.createElement("canvas"),
+      cx = cv.getContext("2d", { willReadFrequently: true });
+    let live = true;
+    const end = (val) => {
+      if (!live) return;
+      live = false;
+      stream.getTracks().forEach((t) => t.stop());
+      w.remove();
+      done(val);
+    };
+    w.querySelector("button").onclick = () => end(null);
+    v.srcObject = stream;
+    v.play().catch(() => {});
+    const tick = () => {
+      if (!live) return;
+      if (v.videoWidth) {
+        const k = Math.min(1, 640 / v.videoWidth);
+        cv.width = v.videoWidth * k;
+        cv.height = v.videoHeight * k;
+        cx.drawImage(v, 0, 0, cv.width, cv.height);
+        const r = jsQR(cx.getImageData(0, 0, cv.width, cv.height).data, cv.width, cv.height);
+        if (r && r.data) return end(r.data);
+      }
+      setTimeout(tick, 160);
+    };
+    tick();
+  });
+}
+// scan a sign-in QR on a login screen: fill and submit when it is for this app, otherwise say which app it is for
+async function scanLogin(kind, fill) {
+  try {
+    const t = await scanQR();
+    if (!t) return;
+    const c = parseLoginQR(t),
+      names = { cmd: "Command Center", room: "Situation Room", obs: "Observer" };
+    if (!c) return toast("❌ That is not a sign-in QR code");
+    if (c.kind != kind) return toast("❌ That QR is for the " + names[c.kind] + " sign-in");
+    if (c.origin != ORIGIN) return toast("❌ That QR belongs to another server: " + c.origin);
+    fill(c);
+  } catch (e) {
+    toast("❌ " + e.message);
+  }
+}
+const credText = (c) => [c.title, ...c.lines.map(([k, v]) => k + ": " + v), c.link ? "Sign-in link: " + c.link : ""].filter(Boolean).join("\n");
+// one credential: text + QR, with copy / print. c = { title, lines:[[label,value]], link, note }
+function credModal(c) {
+  document.getElementById("credm")?.remove();
+  const w = document.createElement("div");
+  w.id = "credm";
+  w.style.cssText = "position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:9000;display:flex;align-items:center;justify-content:center;padding:14px;overflow:auto";
+  w.innerHTML = `<div class="card" style="max-width:440px;width:100%;margin:auto;max-height:96vh;overflow:auto"><div class="card-header"><h3><i class="fas fa-qrcode"></i> ${esc(c.title)}</h3></div>
+    ${c.lines.map(([k, v]) => `<div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid #edf2f7"><span class="muted">${esc(k)}</span><b class="mono" style="word-break:break-all;text-align:right">${esc(v)}</b></div>`).join("")}
+    ${c.link ? `<div style="text-align:center;margin:14px 0 6px">${qrSvg(c.link, 5)}</div><div class="muted" style="text-align:center;font-size:12px">Scan with the phone camera or the app's <b>Scan QR</b> button to sign in — or type the details above.</div>` : ""}
+    ${c.note ? `<div class="muted" style="margin-top:10px;font-size:12px">${esc(c.note)}</div>` : ""}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px"><button class="btn btn-primary" id="credc"><i class="fas fa-copy"></i> Copy</button><button class="btn btn-outline" id="credp"><i class="fas fa-print"></i> Print</button><button class="btn btn-outline" id="credd">Done</button></div></div>`;
+  document.body.appendChild(w);
+  w.querySelector("#credc").onclick = () => {
+    navigator.clipboard?.writeText(credText(c));
+    toast("📋 Copied — paste it to the recipient");
+  };
+  w.querySelector("#credp").onclick = () => printCreds(c.title, [c]);
+  w.querySelector("#credd").onclick = () => w.remove();
+}
+// printable sheet of credentials, one card each with its QR (also the way to save them as a PDF)
+function printCreds(title, items) {
+  const cards = items
+    .map(
+      (c) =>
+        `<div class="c"><div class="q">${c.link ? qrSvg(c.link, 3) : ""}</div><div><h3>${esc(c.title)}</h3>${c.lines.map(([k, v]) => `<div><span>${esc(k)}:</span> <b>${esc(v)}</b></div>`).join("")}<div class="s">Scan to sign in, or open ${esc(ORIGIN.replace(/^https?:\/\//, ""))} and type the details.</div></div></div>`,
+    )
+    .join("");
+  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><style>body{font-family:system-ui,Arial,sans-serif;margin:16px;color:#1a202c}h1{font-size:18px}.g{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:12px}.c{border:1px solid #cbd5e0;border-radius:10px;padding:12px;display:flex;gap:12px;align-items:center;break-inside:avoid}.q svg{display:block}h3{margin:0 0 6px;font-size:14px}div{font-size:13px}span{color:#4a5568}b{font-family:ui-monospace,Menlo,monospace}.s{color:#718096;font-size:11px;margin-top:6px}button{padding:10px 16px;border-radius:8px;border:0;background:#2b6cb0;color:#fff;font-weight:600;margin-bottom:12px}@media print{button{display:none}}</style></head><body><button onclick="print()">Print / Save as PDF</button><h1>${esc(title)}</h1><div class="g">${cards}</div></body></html>`;
+  const w = window.open(URL.createObjectURL(new Blob([html], { type: "text/html" })), "_blank");
+  if (!w) toast("⚠️ Allow pop-ups to open the printable sheet");
+}
+
+// ================= Shared live view (view-only dashboard for people outside the system) =================
+let SHARES = null;
+async function shareLoad() {
+  try {
+    SHARES = await A.get("shares");
+  } catch {
+    SHARES = [];
+  }
+  render();
+}
+function tabShare() {
+  if (!SHARES) {
+    SHARES = [];
+    shareLoad();
+  }
+  const obs = DATA.obs.filter((o) => o.active),
+    q = (F.sq || "").toLowerCase(),
+    shown = obs.filter((o) => !q || [o.code, o.name, o.lga, o.ward, o.pu, o.pu_name].join(" ").toLowerCase().includes(q)).slice(0, 300);
+  window.SHSEL = window.SHSEL || new Set();
+  return `<div class="dashboard-grid"><div class="card"><div class="card-header"><h3><i class="fas fa-share-nodes"></i> Share a live view</h3></div>
+    <div class="muted" style="margin-bottom:10px">Creates a <b>view-only</b> page — live collation, map and video of the observers you choose — for anyone who has the link <b>and</b> the passcode. Viewers can move between polling units and feeds${CFG.lk ? ", and talk to an observer if you allow it" : ""}. They cannot change anything.</div>
+    <input class="fi" id="sh_l" placeholder="Name of this view (e.g. Kano Central – Party HQ)">
+    <label class="muted" style="display:block;margin:6px 0"><input type="radio" name="sh_w" value="all" ${window.SHALL !== false ? "checked" : ""} onchange="SHALL=true;render()"> All ${A.role == "room" ? "observers of this room" : "observers of this Command Center"} (new ones are included automatically)</label>
+    <label class="muted" style="display:block;margin:6px 0"><input type="radio" name="sh_w" value="pick" ${window.SHALL === false ? "checked" : ""} onchange="SHALL=false;render()"> Only the observers I tick (${SHSEL.size} ticked)</label>
+    ${window.SHALL === false ? `<input class="fi" placeholder="Search code, LGA, ward, PU…" value="${esc(F.sq || "")}" onchange="F.sq=this.value;render()"><div style="max-height:240px;overflow:auto;border:1px solid #e2e8f0;border-radius:10px;padding:6px;margin-bottom:10px">${shown.map((o) => `<label style="display:flex;gap:8px;align-items:center;padding:5px 4px;font-size:13px"><input type="checkbox" ${SHSEL.has(o.code) ? "checked" : ""} onchange="this.checked?SHSEL.add('${o.code}'):SHSEL.delete('${o.code}')"><span class="mono">${esc(o.code)}</span><span class="muted">${esc(o.lga)} / ${esc(o.ward)} / PU ${esc(o.pu)}</span></label>`).join("") || '<div class="muted" style="padding:8px">No observers match.</div>'}</div>` : ""}
+    <input class="fi" id="sh_p" placeholder="Passcode for viewers (blank = auto-generate)">
+    <select class="fi" id="sh_h"><option value="0">Stays open until I revoke it</option><option value="12">Closes after 12 hours</option><option value="24" selected>Closes after 24 hours</option><option value="72">Closes after 3 days</option></select>
+    <label class="muted" style="display:block;margin:6px 0 12px"><input type="checkbox" id="sh_t"> Allow viewers to talk to the observer (talk-back audio)</label>
+    <button class="btn btn-primary" onclick="shareNew()"><i class="fas fa-share-nodes"></i> Create shared view</button></div>
+  <div class="card"><div class="card-header"><h3><i class="fas fa-eye"></i> Shared views (${SHARES.length})</h3><button class="btn btn-sm btn-outline" onclick="shareLoad()"><i class="fas fa-rotate"></i></button></div><div class="tw"><table><tr><th>Name</th><th>Shows</th><th>Talk-back</th><th>Status</th><th>Created</th><th></th></tr>${SHARES.map((s) => `<tr><td><b>${esc(s.label)}</b><br><span class="muted">${esc(s.created_by || "")}</span></td><td>${s.observers == null ? "All" + (s.room_id ? " in " + esc(s.room_id) : "") : s.observers + " observers"}</td><td>${s.talkback ? "Yes" : "No"}</td><td>${pill(s.active ? "active" : "inactive")}${s.expires_at && s.active ? `<br><span class="muted" style="font-size:11px">until ${DT(s.expires_at)}</span>` : ""}</td><td>${DT(s.created_at)}</td><td>${s.active ? `<button class="btn btn-sm btn-outline" onclick="navigator.clipboard?.writeText('${ORIGIN}/share/#${s.token}');toast('Link copied (the passcode is not included)')">Copy link</button> <button class="btn btn-sm btn-danger" onclick="shareRevoke('${s.token}')">Revoke</button>` : ""}</td></tr>`).join("") || '<tr><td colspan="6" class="muted">Nothing shared yet.</td></tr>'}</table></div><div class="muted" style="margin-top:8px;font-size:12px">The passcode is shown once, when the view is created. Revoke a view to cut off everyone using it at once.</div></div></div>`;
+}
+async function shareNew() {
+  const pick = window.SHALL === false;
+  if (pick && !SHSEL.size) return toast("⚠️ Tick at least one observer, or choose All.");
+  try {
+    const r = await A.post("shares", {
+      label: $("#sh_l").value,
+      codes: pick ? [...SHSEL] : null,
+      room: A.role == "cmd" && DRILL ? DRILL : null,
+      pass: $("#sh_p").value.trim(),
+      hours: +$("#sh_h").value,
+      talkback: $("#sh_t").checked,
+    });
+    SHSEL.clear();
+    const link = ORIGIN + r.path;
+    credModal({ title: r.label + " — live view", lines: [["Link", link], ["Passcode", r.passcode]], link, note: "Send the link and the passcode to your viewers (ideally by different channels). The QR opens the link; the passcode is still asked for." });
+    shareLoad();
+  } catch (e) {
+    toast("⚠️ " + e.message);
+  }
+}
+async function shareRevoke(t) {
+  if (!confirm("Revoke this shared view? Everyone using it is cut off.")) return;
+  await A.post("shares/" + t + "/revoke").catch((e) => toast("⚠️ " + e.message));
+  shareLoad();
+}
+
+// ================= Help: the manuals, inside the app =================
+let HELP = {},
+  HELPSEL = "operator";
+async function helpLoad(n) {
+  try {
+    HELP[n] = await A.get("help/" + n);
+  } catch (e) {
+    HELP[n] = { title: "Manual", html: "<p>Could not load the manual: " + esc(e.message) + "</p>" };
+  }
+  render();
+}
+function tabHelp() {
+  const su = A.role == "cmd" && ME.su,
+    n = su ? HELPSEL : "operator";
+  if (!HELP[n]) {
+    HELP[n] = { title: "Loading…", html: "<p>Loading the manual…</p>" };
+    helpLoad(n);
+  }
+  const g = HELP[n];
+  return `<div class="card"><div class="card-header"><h3><i class="fas fa-circle-question"></i> ${esc(g.title)}</h3><div style="display:flex;gap:8px;flex-wrap:wrap">${su ? `<button class="btn btn-sm ${n == "admin" ? "btn-primary" : "btn-outline"}" onclick="HELPSEL='admin';render()">Administrator manual</button><button class="btn btn-sm ${n == "operator" ? "btn-primary" : "btn-outline"}" onclick="HELPSEL='operator';render()">Operator manual</button>` : ""}${g.pdf ? `<button class="btn btn-sm btn-outline" onclick="A.dl('help/${n}/pdf','${n == "admin" ? "Administrator" : "Operator"}-Manual.pdf')"><i class="fas fa-file-pdf"></i> Download PDF</button>` : ""}</div></div><div class="manual">${g.html}</div></div>`;
 }
