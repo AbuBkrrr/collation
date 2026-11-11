@@ -419,7 +419,7 @@
     </form>
     <div class="contact" style="margin-top:18px">
       <span class="muted">Or message us directly</span>
-      <a href="https://wa.me/2348032540215" target="_blank" rel="noopener" class="btn btn-gold">WhatsApp +234 803 254 0215</a>
+      <a href="https://wa.me/2348127337603" target="_blank" rel="noopener" class="btn btn-gold">WhatsApp +234 812 733 7603</a>
       <span class="muted">·</span> <a href="#command" class="btn btn-ghost">See it again</a>
     </div>
   </div>
@@ -607,8 +607,8 @@
     msg.textContent="Sending…";
     fetch("/api/pitch/lead",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ref:ref,name:name,phone:phone,org:org})}).catch(function(){});
     var wa="Hello, I'd like a demo of My Situation Room."+(name?" My name is "+name+".":"")+(org?" I'm with "+org+".":"")+(phone?" Phone: "+phone+".":"");
-    msg.innerHTML="✅ Thank you — opening WhatsApp to finish. If it doesn't open, <a href=\"https://wa.me/2348032540215\" style=\"color:#edc050\">message us here</a>.";
-    setTimeout(function(){window.location.href="https://wa.me/2348032540215?text="+encodeURIComponent(wa);},400);
+    msg.innerHTML="✅ Thank you — opening WhatsApp to finish. If it doesn't open, <a href=\"https://wa.me/2348127337603\" style=\"color:#edc050\">message us here</a>.";
+    setTimeout(function(){window.location.href="https://wa.me/2348127337603?text="+encodeURIComponent(wa);},400);
     return false;
   };
   }catch(e){}

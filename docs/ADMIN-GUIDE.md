@@ -130,7 +130,7 @@ The **Marketing** tab is yours alone — it drives client acquisition.
 > people who *chose* to leave their details or who messaged your WhatsApp.
 
 The public pitch page itself is at **`/pitch`** and the demo button opens your WhatsApp
-(+234 803 254 0215).
+(+234 812 733 7603).
 
 ---
 
