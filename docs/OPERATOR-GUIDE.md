@@ -203,6 +203,10 @@ figures keep rising as observers submit.
   another centre is used.
 - **This Command Centre only** — just your own figures.
 
+A **Situation Room** has the same switch on its collation: **Whole LGA** adds up every Situation Room
+covering that LGA — sister rooms in your Command Centre and rooms of the other Command Centres in the
+state — and **This room only** shows just its own observers' figures.
+
 Only **vote counts** are combined. You never see another centre's map, video, audio, photos or
 observer details, and they never see yours.
 

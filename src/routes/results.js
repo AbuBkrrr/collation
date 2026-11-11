@@ -120,16 +120,23 @@ app.get(
     // State-wide view (Global Collation of a Command Center): vote counts of every pooled Command Center
     // of the same state, one figure per polling unit. Only these aggregates leave another command -
     // never its observers, codes, photos, video, audio or map positions.
-    if (req.u.role == "cmd" && req.query.pool == "1" && !f.room) {
+    if (req.query.pool == "1" && !f.room) {
       const [me] = await qsys("select state,pool from tenants where id=$1", [req.u.tn]);
       if (me?.state && me.pool) {
-        const others = await qsys("select id from tenants where state=$1 and pool and active and id<>$2", [me.state, req.u.tn]);
+        const isRoom = req.u.role == "room",
+          others = await qsys("select id from tenants where state=$1 and pool and active and id<>$2", [me.state, req.u.tn]);
+        // a Situation Room sees the whole of its own LGA(s): its sister rooms in this Command Center
+        // and the rooms of the other pooled Command Centers that cover the same LGA
+        const [rm] = isRoom ? await qsys("select scope from rooms where id=$1", [req.u.id]) : [],
+          lgas = isRoom ? String(rm?.scope || "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean) : [],
+          inScope = (x) => !lgas.length || lgas.includes(String(x.lga).toLowerCase());
         const RANK = { pending: 0, disputed: 1, single: 2, partial: 3, matched: 4, resolved: 5 };
         const score = (x) => (x.fig ? 10 : 0) + (x.verified ? 6 : RANK[x.status] || 0);
         const best = new Map(l.map((x) => [x.key, { x, own: true }]));
-        for (const t of others) {
+        for (const t of [...(isRoom ? [{ id: req.u.tn }] : []), ...others]) {
           const tl = await als.run({ name: "pool", tn: t.id, room: "" }, () => puList({ role: "cmd", tn: t.id, id: "pool" }, { ...f, state: me.state }));
           for (const x of tl) {
+            if (!inScope(x)) continue;
             const cur = best.get(x.key);
             // our own figure for a unit always stands; otherwise the best-evidenced figure is used (never added twice)
             if (!cur || (!(cur.own && cur.x.fig) && score(x) > score(cur.x))) best.set(x.key, { x, own: false });
@@ -138,7 +145,7 @@ app.get(
         const all = [...best.values()],
           ext = all.filter((b) => !b.own);
         l = all.map((b) => b.x);
-        pooled = { state: me.state, centres: others.length + 1, extPus: ext.length, extVotes: ext.reduce((s, b) => s + (b.x.total || 0), 0) };
+        pooled = { state: me.state, lga: isRoom && lgas.length ? rm.scope : null, centres: others.length + 1, extPus: ext.length, extVotes: ext.reduce((s, b) => s + (b.x.total || 0), 0) };
       }
     }
     const g = {};

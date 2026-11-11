@@ -81,7 +81,8 @@ cannot change it. "— all states —" leaves it unlocked (as your own Main Comm
 
 When several Command Centres share a state, **Global Collation** adds their vote counts together
 (state → LGA → ward → polling unit), counting each polling unit once and telling each client how much
-comes from "external observers". **Only vote counts are pooled** — never maps, video, audio, photos,
+comes from "external observers". Situation Rooms get the same for their LGA: rooms covering the same
+LGA, in the same or different Command Centres, are added together. **Only vote counts are pooled** — never maps, video, audio, photos,
 observers or messages.
 
 The **Pool votes** tick-box in the Command Centres list controls this per centre (on by default for
