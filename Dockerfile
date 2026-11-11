@@ -1,4 +1,4 @@
-FROM node:22-alpine
+FROM node:26-alpine
 # pg_dump (matching PostgreSQL 16) for the automatic on-PC backups; package name varies by Alpine version
 RUN apk add --no-cache curl unzip wget su-exec && (apk add --no-cache postgresql16-client || apk add --no-cache postgresql-client)
 WORKDIR /app
