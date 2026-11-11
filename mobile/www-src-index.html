@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#1a365d"><title>Collation Observer</title>
-<link rel="stylesheet" href="/vendor/fa/css/all.min.css"><link rel="stylesheet" href="/shared/fonts.css">
+<link rel="stylesheet" href="/vendor/fa/css/all.min.css"><script src="/vendor/jsqr.js"></script><link rel="stylesheet" href="/shared/fonts.css">
 <style>
 *{box-sizing:border-box;margin:0;font-family:Inter,system-ui,sans-serif}
 body{background:#1a202c;color:#fff;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
@@ -19,8 +19,9 @@ button:disabled{opacity:.5}.err{color:#fc8181;font-size:13px;text-align:center;m
 <div class="box">
 <div class="logo"><i class="fas fa-shield-halved"></i></div>
 <h1 id="title">Collation Observer</h1>
-<p class="muted">Enter the Command Center web address your Situation Room gave you. You set this once.</p>
-<input id="url" type="url" inputmode="url" autocapitalize="none" autocomplete="url" placeholder="https://collation.example.com">
+<p class="muted" id="lead">First, connect this app to your Command Center. Scan the QR code you were given, or enter the web address (not your passcode — you will be asked for that next).</p>
+<button id="scan" onclick="scan()" style="background:#38a169"><i class="fas fa-qrcode"></i> Scan QR code</button>
+<input id="url" type="url" inputmode="url" autocapitalize="none" autocomplete="url" placeholder="mysituationroom.com.ng" value="https://mysituationroom.com.ng">
 <button id="go" onclick="save()">Connect</button>
 <div class="err" id="err"></div>
 <p class="muted" id="cur"></p>
@@ -29,10 +30,32 @@ button:disabled{opacity:.5}.err{color:#fc8181;font-size:13px;text-align:center;m
 var saved=localStorage.getItem('mcc_base')||'';
 if(saved && location.search.indexOf('setup')<0){location.replace('app.html');}
 if(saved){document.getElementById('url').value=saved;document.getElementById('cur').textContent='Saved: '+saved;}
+var APP='__APP__';
+function vOverlay(){var w=document.createElement('div');w.style.cssText='position:fixed;inset:0;background:#000;z-index:99;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px';w.innerHTML='<video playsinline muted style="max-width:100%;max-height:72vh;border-radius:12px"></video><div style="color:#fff;font-size:15px">Point the camera at the QR code</div><button style="background:#4a5568">Cancel</button>';document.body.appendChild(w);return w;}
+async function scan(){
+  var e=document.getElementById('err');e.textContent='';
+  var stream;try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});}catch(x){e.textContent='Camera unavailable. Allow camera access, or type the address.';return;}
+  var w=vOverlay(),v=w.querySelector('video'),cv=document.createElement('canvas'),cx=cv.getContext('2d',{willReadFrequently:true}),live=true;
+  function end(val){if(!live)return;live=false;stream.getTracks().forEach(function(t){t.stop()});w.remove();if(val)got(val);}
+  w.querySelector('button').onclick=function(){end(null)};v.srcObject=stream;v.play().catch(function(){});
+  (function tick(){if(!live)return;if(v.videoWidth){var k=Math.min(1,640/v.videoWidth);cv.width=v.videoWidth*k;cv.height=v.videoHeight*k;cx.drawImage(v,0,0,cv.width,cv.height);var r=jsQR(cx.getImageData(0,0,cv.width,cv.height).data,cv.width,cv.height);if(r&&r.data)return end(r.data);}setTimeout(tick,160);})();
+}
+function got(text){
+  var e=document.getElementById('err'),names={cmd:'Command Center',room:'Situation Room',obs:'Observer'};
+  try{
+    var url=new URL(String(text).trim()),m=url.pathname.match(/\/(command|room|observer)\/?$/),hp=new URLSearchParams(url.hash.slice(1));
+    if(!m||!hp.get('u'))throw 0;
+    var kind={command:'cmd',room:'room',observer:'obs'}[m[1]],mine=APP=='room'?'room':'obs';
+    if(kind!=mine){e.textContent='That QR is a '+names[kind]+' sign-in. This is the '+names[mine]+' app.';return;}
+    localStorage.setItem('mcc_login',JSON.stringify({kind:kind,u:hp.get('u'),p:hp.get('p')||''}));
+    document.getElementById('url').value=url.origin;save();
+  }catch(x){e.textContent='That is not a sign-in QR code.';}
+}
 function norm(u){u=u.trim().replace(/\/+$/,'');if(u&&!/^https?:\/\//i.test(u))u='https://'+u;return u;}
 async function save(){
   var u=norm(document.getElementById('url').value),e=document.getElementById('err'),b=document.getElementById('go');
   if(!u){e.textContent='Enter the address.';return;}
+  if(!/\./.test(u.replace(/^https?:\/\//i,''))&&!/localhost/i.test(u)){e.textContent='That looks like a code or passcode, not a web address. Enter the address (e.g. mysituationroom.com.ng) or tap Scan QR code — you will type the passcode on the next screen.';return;}
   b.disabled=true;e.textContent='Checking…';
   try{
     var c=new AbortController(),t=setTimeout(()=>c.abort(),12000);
@@ -43,7 +66,7 @@ async function save(){
     document.title=j.appName||'Observer';
     location.replace('app.html');
   }catch(err){
-    e.textContent=err.name=='AbortError'?'No response. Check the address and your internet.':err.message;
+    e.textContent=err.name=='AbortError'?'No response. Check the address and your internet.':/fetch/i.test(err.message)?'Could not reach that address. Check it is typed correctly (e.g. mysituationroom.com.ng) and that you have internet.':err.message;
     b.disabled=false;
   }
 }

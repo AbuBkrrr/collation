@@ -1,6 +1,6 @@
 const {qsys,qx,RLS,hit,LK,als,express,jwt,bcrypt,http,https,fs,path,crypto,E,PORT,SECRET,DATA,PARTIES,STATES,pool,q,rnd,abbr,aud,h,SCHEMA,app,rate,auth,su,own,mine,tnOf,cfgTenant,roomScope,getS,setS,appName,clean,bus} = require("./src/core");
 const { loadLocations, SEED } = require("./src/locations");
-for (const r of ["auth", "tenants", "rooms", "observers", "ops", "messages", "contacts", "data", "settings", "media", "radio", "locations", "results", "admin", "pitch"]) require("./src/routes/" + r);
+for (const r of ["auth", "tenants", "rooms", "observers", "ops", "messages", "contacts", "data", "settings", "media", "radio", "locations", "results", "admin", "pitch", "shares", "help"]) require("./src/routes/" + r);
 // front-end libraries are served from this PC (no CDN dependency on election day)
 const V = { maxAge: "7d", immutable: true };
 for (const [u, d] of [
@@ -14,6 +14,7 @@ for (const [u, f] of [
   ["/vendor/livekit-client.umd.js", "livekit-client/dist/livekit-client.umd.js"],
   ["/vendor/vosk.js", "vosk-browser/dist/vosk.js"],
   ["/vendor/qrcode.js", "qrcode-generator/qrcode.js"],
+  ["/vendor/jsqr.js", "jsqr/dist/jsQR.js"],
   ["/vendor/read-excel-file.min.js", "read-excel-file/bundle/read-excel-file.min.js"],
 ])
   app.get(u, (req, res) => res.sendFile(path.join(__dirname, "node_modules", f), V));

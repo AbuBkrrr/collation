@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <meta name="robots" content="noindex,nofollow" />
+    <meta name="theme-color" content="#0f172a" />
+    <title>Live view</title>
+    <link rel="stylesheet" href="/vendor/fa/css/all.min.css" />
+    <link rel="stylesheet" href="/shared/fonts.css" />
+    <link rel="stylesheet" href="/vendor/leaflet/leaflet.css" />
+    <style>
+      * { box-sizing: border-box; margin: 0; font-family: Inter, system-ui, sans-serif; }
+      body { background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+      .wrap { max-width: 1400px; margin: 0 auto; padding: 14px; }
+      .top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+      .top h1 { font-size: 19px; display: flex; align-items: center; gap: 10px; min-width: 0; }
+      .top h1 span { overflow: hidden; text-overflow: ellipsis; }
+      .tags { display: flex; gap: 8px; flex-wrap: wrap; }
+      .tag { background: #1e293b; border: 1px solid #334155; border-radius: 999px; padding: 5px 12px; font-size: 12px; white-space: nowrap; }
+      .tag.live { color: #fca5a5; border-color: #7f1d1d; }
+      .tag.live i { animation: bl 1.2s infinite; }
+      @keyframes bl { 50% { opacity: 0.25; } }
+      .grid { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 14px; }
+      .col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+      @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } }
+      .card { background: #1e293b; border: 1px solid #334155; border-radius: 14px; padding: 14px; min-width: 0; }
+      .card h2 { font-size: 14px; color: #93c5fd; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; justify-content: space-between; flex-wrap: wrap; }
+      .muted { color: #94a3b8; font-size: 12.5px; }
+      select, input, button { font-size: 14px; }
+      select, input { background: #0f172a; color: #e2e8f0; border: 1px solid #334155; border-radius: 9px; padding: 9px 10px; min-width: 0; }
+      .nav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+      @media (max-width: 520px) { .nav { grid-template-columns: 1fr; } }
+      button { border: 0; border-radius: 9px; padding: 9px 14px; font-weight: 600; cursor: pointer; background: #2563eb; color: #fff; }
+      button.o { background: #334155; }
+      button.r { background: #b91c1c; }
+      button.g { background: #15803d; }
+      button:disabled { opacity: 0.5; cursor: default; }
+      .row { display: grid; grid-template-columns: 54px 1fr 84px; gap: 10px; align-items: center; margin-bottom: 7px; transition: transform 0.5s; }
+      .bar { background: #0f172a; border-radius: 6px; height: 16px; overflow: hidden; }
+      .bar > div { height: 100%; background: #3b82f6; border-radius: 6px; transition: width 0.6s; }
+      .row:first-child .bar > div { background: #f59e0b; }
+      .num { text-align: right; font-family: "JetBrains Mono", monospace; font-size: 13px; }
+      .stats { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
+      .stats b { display: block; font-size: 22px; font-family: "JetBrains Mono", monospace; }
+      #map { height: 340px; border-radius: 10px; background: #0f172a; z-index: 0; }
+      video { width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 10px; display: block; }
+      .vc { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+      .list { max-height: 260px; overflow: auto; margin-top: 10px; border: 1px solid #334155; border-radius: 10px; }
+      .it { display: flex; justify-content: space-between; gap: 8px; padding: 9px 11px; border-bottom: 1px solid #263449; cursor: pointer; font-size: 13px; align-items: center; }
+      .it:last-child { border-bottom: 0; }
+      .it:hover, .it.on { background: #263449; }
+      .it small { color: #94a3b8; display: block; }
+      .dot { width: 9px; height: 9px; border-radius: 50%; background: #64748b; flex: none; }
+      .dot.s { background: #ef4444; box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.25); }
+      .dot.a { background: #22c55e; }
+      .pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #334155; white-space: nowrap; }
+      .pill.ok { background: #14532d; color: #86efac; }
+      .pill.bad { background: #7f1d1d; color: #fecaca; }
+      .gate { max-width: 400px; margin: 12vh auto 0; text-align: center; display: flex; flex-direction: column; gap: 12px; padding: 0 16px; }
+      .gate i.big { font-size: 42px; color: #3b82f6; }
+      .gate input { padding: 14px; font-size: 16px; text-align: center; }
+      .gate button { padding: 14px; font-size: 16px; }
+      .err { color: #fca5a5; font-size: 13px; min-height: 18px; }
+      .toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); background: #020617; border: 1px solid #334155; padding: 10px 16px; border-radius: 10px; font-size: 13.5px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 9999; max-width: 92vw; }
+      .toast.show { opacity: 1; }
+    </style>
+  </head>
+  <body>
+    <div class="toast" id="toast"></div>
+    <div id="app"></div>
+    <script src="/vendor/leaflet/leaflet.js"></script>
+    <script src="/vendor/livekit-client.umd.js"></script>
+    <script>
+      const $ = (s) => document.querySelector(s),
+        esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => "&#" + c.charCodeAt(0) + ";"),
+        LINK = location.hash.slice(1),
+        KEY = "share:" + LINK;
+      let TOK = sessionStorage.getItem(KEY),
+        D = null, // latest state from the server
+        SC = { lga: "", ward: "", pu: "" }, // where the viewer has navigated to
+        SEL = null, // observer whose feed is open
+        ROOM = null, // LiveKit connection
+        MIC = false,
+        map, layer, fitted = "", tt;
+      function toast(m) {
+        const t = $("#toast");
+        t.textContent = m;
+        t.classList.add("show");
+        clearTimeout(tt);
+        tt = setTimeout(() => t.classList.remove("show"), 3500);
+      }
+      async function api(p, body) {
+        const r = await fetch("/api/share/" + p, {
+          method: body ? "POST" : "GET",
+          headers: { ...(TOK ? { Authorization: "Bearer " + TOK } : {}), ...(body ? { "Content-Type": "application/json" } : {}) },
+          body: body ? JSON.stringify(body) : undefined,
+        });
+        const j = await r.json().catch(() => ({}));
+        if (r.status == 401 && TOK) {
+          TOK = null;
+          sessionStorage.removeItem(KEY);
+          stop();
+          gate(j.error || "This shared view has ended");
+          throw new Error("ended");
+        }
+        if (!r.ok) throw new Error(j.error || r.statusText);
+        return j;
+      }
+      // ---------- passcode gate ----------
+      function gate(msg) {
+        D = null;
+        $("#app").innerHTML = `<div class="gate"><i class="fas fa-shield-halved big"></i><h1 style="font-size:22px">Live view</h1><p class="muted">${LINK ? "Enter the passcode you were given to open this live view." : "This link is incomplete. Open the full link you were sent."}</p>${LINK ? `<input id="pw" type="password" placeholder="Passcode" autocomplete="off" onkeydown="event.key=='Enter'&&unlock()"><button onclick="unlock()" id="go">Open</button>` : ""}<div class="err" id="err">${esc(msg || "")}</div><p class="muted">View only. Nothing on this page can change the election data.</p></div>`;
+        $("#pw")?.focus();
+      }
+      async function unlock() {
+        const b = $("#go");
+        b.disabled = true;
+        $("#err").textContent = "";
+        try {
+          const r = await fetch("/api/share/open", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: LINK, pass: $("#pw").value.trim() }) }),
+            j = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(j.error || "Could not open");
+          TOK = j.token;
+          sessionStorage.setItem(KEY, TOK);
+          boot();
+        } catch (e) {
+          $("#err").textContent = e.message;
+          b.disabled = false;
+        }
+      }
+      // ---------- data ----------
+      const inScope = (x) => (!SC.lga || x.lga == SC.lga) && (!SC.ward || x.ward == SC.ward) && (!SC.pu || x.pu == SC.pu);
+      const uniq = (a) => [...new Set(a)].sort((x, y) => String(x).localeCompare(String(y), undefined, { numeric: true }));
+      async function load() {
+        try {
+          D = await api("state" + (SEL && ROOM ? "?watching=" + encodeURIComponent(SEL) : ""));
+          document.title = D.label + " · Live view";
+          draw();
+        } catch {}
+      }
+      function shell() {
+        $("#app").innerHTML = `<div class="wrap"><div class="top"><h1><i class="fas fa-shield-halved" style="color:#3b82f6"></i><span id="ttl"></span></h1><div class="tags"><span class="tag live"><i class="fas fa-circle"></i> LIVE</span><span class="tag"><i class="fas fa-eye"></i> View only</span><span class="tag" id="clock"></span></div></div>
+          <div class="nav"><select id="s_lga" onchange="go('lga',this.value)"></select><select id="s_ward" onchange="go('ward',this.value)"></select><select id="s_pu" onchange="go('pu',this.value)"></select></div>
+          <div class="grid"><div class="col">
+            <div class="card"><h2><span><i class="fas fa-chart-column"></i> Live collation <span class="muted" id="where"></span></span></h2><div class="stats" id="stats"></div><div id="bars"></div><div class="muted" style="margin-top:8px">Figures arrive as observers report them, highest first. A polling unit is <b>verified</b> when two observers agree and a result-sheet photo is on file.</div></div>
+            <div class="card"><h2><span><i class="fas fa-list-check"></i> Polling units</span><span class="muted" id="pucount"></span></h2><div class="list" id="pus" style="margin-top:0;max-height:300px"></div></div>
+          </div><div class="col">
+            <div class="card"><h2><span><i class="fas fa-video"></i> Live feed <span class="muted" id="feedname"></span></span></h2><video id="vid" playsinline autoplay></video><div class="vc" id="vc"></div><div class="list" id="feeds"></div></div>
+            <div class="card"><h2><span><i class="fas fa-map-location-dot"></i> Observers on the map</span><span class="muted" id="obscount"></span></h2><div id="map"></div></div>
+          </div></div></div>`;
+        map = L.map("map", { zoomControl: true, attributionControl: true }).setView([9.08, 8.68], 6);
+        const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(map),
+          sat = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxZoom: 19, attribution: "© Esri" });
+        L.control.layers({ Streets: osm, Satellite: sat }).addTo(map);
+        layer = L.layerGroup().addTo(map);
+      }
+      function go(k, v) {
+        SC[k] = v;
+        if (k == "lga") SC.ward = SC.pu = "";
+        if (k == "ward") SC.pu = "";
+        fitted = "";
+        draw();
+      }
+      function openPU(key) {
+        const p = D.pus.find((x) => x.key == key);
+        if (!p) return;
+        SC = { lga: p.lga, ward: p.ward, pu: p.pu };
+        fitted = "";
+        draw();
+        if (p.codes[0]) pick(p.codes[0]);
+      }
+      function draw() {
+        if (!D) return;
+        $("#ttl").textContent = D.label;
+        $("#clock").textContent = new Date().toLocaleTimeString();
+        // navigation
+        const opt = (id, all, vals, cur, fmt) => {
+          $(id).innerHTML = `<option value="">${all}</option>` + vals.map((v) => `<option value="${esc(v)}" ${v == cur ? "selected" : ""}>${esc(fmt ? fmt(v) : v)}</option>`).join("");
+        };
+        const obs = D.observers;
+        opt("#s_lga", "All LGAs", uniq(obs.map((o) => o.lga)), SC.lga);
+        opt("#s_ward", SC.lga ? "All wards" : "Ward (choose an LGA)", SC.lga ? uniq(obs.filter((o) => o.lga == SC.lga).map((o) => o.ward)) : [], SC.ward);
+        opt("#s_pu", SC.ward ? "All polling units" : "Polling unit (choose a ward)", SC.ward ? uniq(obs.filter((o) => o.lga == SC.lga && o.ward == SC.ward).map((o) => o.pu)) : [], SC.pu, (v) => "PU " + v);
+        $("#where").textContent = "· " + ([SC.lga, SC.ward, SC.pu && "PU " + SC.pu].filter(Boolean).join(" / ") || "all shared polling units");
+        // collation
+        const pus = D.pus.filter(inScope),
+          tot = Object.fromEntries(D.parties.map((p) => [p, 0]));
+        pus.forEach((x) => x.fig && Object.entries(x.fig).forEach(([p, v]) => (tot[p] = (tot[p] || 0) + v)));
+        const rows = Object.entries(tot).sort((a, b) => b[1] - a[1]).filter(([p, v], i) => v > 0 || i < 6),
+          max = Math.max(1, ...rows.map((r) => r[1])),
+          sum = rows.reduce((s, r) => s + r[1], 0),
+          rep = pus.filter((x) => x.status != "pending").length;
+        $("#stats").innerHTML = `<div><b>${sum.toLocaleString()}</b><span class="muted">votes counted</span></div><div><b>${rep}/${pus.length}</b><span class="muted">polling units reporting</span></div><div><b>${pus.filter((x) => x.verified).length}</b><span class="muted">verified</span></div>`;
+        $("#bars").innerHTML = rows.map(([p, v]) => `<div class="row"><b>${esc(p)}</b><div class="bar"><div style="width:${Math.round((v / max) * 100)}%"></div></div><div class="num">${v.toLocaleString()}</div></div>`).join("");
+        // polling units
+        const lab = { pending: "No figures yet", single: "1 observer", partial: "Partial", matched: "Matched", disputed: "Disputed", resolved: "Resolved" };
+        $("#pucount").textContent = pus.length + " shown";
+        $("#pus").innerHTML = pus.slice(0, 400).map((x) => `<div class="it ${SC.pu == x.pu && SC.ward == x.ward && SC.lga == x.lga ? "on" : ""}" onclick="openPU('${esc(x.key).replace(/'/g, "")}')"><div><b>PU ${esc(x.pu)}</b> ${esc(x.pu_name || "")}<small>${esc(x.lga)} / ${esc(x.ward)}</small></div><div style="text-align:right"><span class="pill ${x.verified ? "ok" : x.status == "disputed" ? "bad" : ""}">${x.verified ? "Verified" : lab[x.status] || x.status}</span><small>${x.total ? x.total.toLocaleString() + " votes" : ""}</small></div></div>`).join("") || '<div class="it muted">No polling units here.</div>';
+        // feeds
+        const fo = obs.filter(inScope),
+          fresh = (o) => o.seen && Date.now() - new Date(o.seen) < 120000;
+        $("#obscount").textContent = fo.filter(fresh).length + " online of " + fo.length;
+        $("#feeds").innerHTML = fo.slice(0, 400).map((o) => `<div class="it ${o.code == SEL ? "on" : ""}" onclick="pick('${o.code}')"><div style="display:flex;gap:10px;align-items:center;min-width:0"><span class="dot ${o.streaming ? "s" : fresh(o) ? "a" : ""}"></span><div><b>${esc(o.code)}</b><small>${esc(o.lga)} / ${esc(o.ward)} / PU ${esc(o.pu)}</small></div></div><span class="pill">${o.streaming ? "Streaming" : fresh(o) ? "Online" : "Offline"}</span></div>`).join("") || '<div class="it muted">No observers here.</div>';
+        controls();
+        // map
+        layer.clearLayers();
+        const pts = [];
+        fo.forEach((o) => {
+          if (o.lat == null || o.lng == null) return;
+          pts.push([o.lat, o.lng]);
+          L.circleMarker([o.lat, o.lng], { radius: o.code == SEL ? 10 : 7, color: "#fff", weight: 2, fillColor: o.streaming ? "#ef4444" : fresh(o) ? "#22c55e" : "#64748b", fillOpacity: 1 })
+            .bindTooltip(o.code + " · " + o.lga + " PU " + o.pu)
+            .on("click", () => pick(o.code))
+            .addTo(layer);
+        });
+        const fk = JSON.stringify(SC) + "|" + pts.length;
+        if (pts.length && fitted != fk) {
+          fitted = fk;
+          map.fitBounds(pts, { padding: [30, 30], maxZoom: 15 });
+        }
+      }
+      // ---------- live feed ----------
+      function controls() {
+        const o = D.observers.find((x) => x.code == SEL),
+          i = D.observers.filter(inScope).findIndex((x) => x.code == SEL);
+        $("#feedname").textContent = o ? "· " + o.code + " · " + o.lga + " PU " + o.pu : "· choose an observer below or on the map";
+        $("#vc").innerHTML = !o
+          ? ""
+          : `${ROOM ? `<button class="r" onclick="stop();draw()"><i class="fas fa-stop"></i> Stop</button>` : `<button class="g" onclick="watch()" ${D.lk ? "" : "disabled"}><i class="fas fa-play"></i> Watch live</button>`}${D.talkback && ROOM ? `<button class="${MIC ? "r" : "o"}" onclick="talk()"><i class="fas fa-microphone${MIC ? "" : "-slash"}"></i> ${MIC ? "Talking — tap to mute" : "Talk to observer"}</button>` : ""}<button class="o" onclick="step(-1)" ${i > 0 ? "" : "disabled"}><i class="fas fa-chevron-left"></i> Previous</button><button class="o" onclick="step(1)" ${i >= 0 && i < D.observers.filter(inScope).length - 1 ? "" : "disabled"}>Next <i class="fas fa-chevron-right"></i></button>${D.lk ? "" : '<span class="muted" style="align-self:center">Live video is not enabled on this server.</span>'}`;
+      }
+      function pick(code) {
+        if (code == SEL) return;
+        const was = !!ROOM;
+        stop();
+        SEL = code;
+        draw();
+        if (was) watch(); // keep watching as the viewer moves from feed to feed
+      }
+      function step(d) {
+        const l = D.observers.filter(inScope),
+          i = l.findIndex((x) => x.code == SEL);
+        if (l[i + d]) pick(l[i + d].code);
+      }
+      async function watch() {
+        if (!SEL) return;
+        stop();
+        try {
+          const { Room, RoomEvent, Track } = LivekitClient,
+            r = await api("watch", { code: SEL }),
+            room = new Room({ adaptiveStream: true, dynacast: true }),
+            v = $("#vid");
+          room.on(RoomEvent.TrackSubscribed, (t) => (t.kind == Track.Kind.Video || t.kind == Track.Kind.Audio) && t.attach(v));
+          room.on(RoomEvent.Disconnected, () => {
+            if (ROOM == room) {
+              ROOM = null;
+              MIC = false;
+              D && controls();
+            }
+          });
+          await room.connect(r.url, r.token);
+          ROOM = room;
+          controls();
+          toast(room.remoteParticipants.size ? "Connected" : "Connected — waiting for the observer's camera to start…");
+        } catch (e) {
+          if (e.message != "ended") toast("Could not open the feed: " + e.message);
+        }
+      }
+      async function talk() {
+        if (!ROOM) return;
+        try {
+          MIC = !MIC;
+          await ROOM.localParticipant.setMicrophoneEnabled(MIC);
+        } catch {
+          MIC = false;
+          toast("Microphone unavailable — allow microphone access to talk");
+        }
+        controls();
+      }
+      function stop() {
+        if (ROOM) {
+          const r = ROOM;
+          ROOM = null;
+          r.disconnect();
+        }
+        MIC = false;
+        const v = $("#vid");
+        if (v) v.srcObject = null;
+      }
+      async function boot() {
+        shell();
+        await load();
+        clearInterval(window.TIMER);
+        window.TIMER = setInterval(() => TOK && document.visibilityState == "visible" && load(), 5000);
+      }
+      addEventListener("pagehide", stop);
+      TOK ? boot() : gate();
+    </script>
+  </body>
+</html>

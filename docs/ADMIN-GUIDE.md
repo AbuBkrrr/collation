@@ -51,7 +51,8 @@ This is your main job. Go to the **Command Centres** tab.
    - **Operator passcode / Confirm** — *leave blank* to auto-generate a strong one, or type your own
      (min 8 characters) and confirm it. Use **Show** to check what you typed.
 2. Click **Create Command Centre**.
-3. A **ready-to-send invite** pops up and is copied to your clipboard, e.g.:
+3. A **sign-in card with a QR code** pops up (Copy / Print), and a ready-to-send invite is copied to
+   your clipboard, e.g.:
 
    ```
    Kano State Command — My Situation Room
@@ -60,7 +61,8 @@ This is your main job. Go to the **Command Centres** tab.
    Passcode: REY4YXQDAM
    Open the link, choose "Command Centre", and sign in...
    ```
-4. **Send that to the client** (WhatsApp, email). That's everything they need to start.
+4. **Send that to the client** (WhatsApp, email), or print the card. They can type the operator name
+   and passcode, or simply **scan the QR** to sign in. That's everything they need to start.
 
 ### Re-sending or resetting a client's login
 
@@ -151,6 +153,13 @@ See `SECURITY.md` for the full checklist (branch protection, firewall, backups, 
 
 ---
 
+## 7a. Help tab
+
+The **Help** tab shows both manuals inside the app — this one (visible to you only) and the client
+operator manual — each with a **Download PDF** button, handy for onboarding emails.
+
+---
+
 ## 8. Audit log
 
 **Audit Log** tab records every significant action with a timestamp — logins, Command Centre
@@ -164,7 +173,9 @@ separate audit log inside their own Command Centre.)
 If a client asks "can two of us watch the same observer at once?" — **yes**. The observer's phone
 streams once and everyone authorised in that command/room sees the same live feed simultaneously,
 can talk back, and can push it to an external broadcast via **Restream**. Nothing extra to configure
-as long as LiveKit is running (it is, in the standard deployment).
+as long as LiveKit is running (it is, in the standard deployment). For people **outside** the client's
+team, the client uses **Share Live View**: a view-only page (collation, map, video, optional talk-back)
+opened with a link and a passcode — see the operator manual, section 5a.
 
 ---
 

@@ -351,3 +351,41 @@ test("pitch page serves and open-analytics logs; stats are platform-admin only",
   const MK = ok(await api("login/command", { body: { user: "mktgate", pass: "mktgate12" } })).token;
   assert.equal((await api("pitch/stats", { tok: MK })).s, 403);
 });
+
+test("shared live view: passcode-gated, view-only, scoped, revocable; manuals served in-app", async () => {
+  // a fresh Command Center with one active room and two observers
+  const inv = ok(await api("tenants", { tok: S.A, body: { name: "Share Test Command" } }));
+  const C = ok(await api("login/command", { body: { user: inv.operator, pass: inv.passcode } })).token;
+  const rm = ok(await api("rooms", { tok: C, body: { name: "Share Room", state: "Kano", scope: "", operator: "op" } }));
+  ok(await api("rooms/" + rm.id + "/status", { tok: C, body: { status: "active" } }));
+  const R = ok(await api("login/room", { body: { id: rm.id, pass: rm.passcode } })).token;
+  const mk = async (pu) => ok(await api("room/obs", { tok: R, body: { state: "Kano", lga: "Dala", ward: "W1", pu, reg: 500, name: "o" + pu } })).code;
+  const a = await mk("001"), b = await mk("002");
+  // an observer from another command cannot be put in a share
+  const others = ok(await api("obs", { tok: S.A }));
+  if (others.length) assert.equal((await api("shares", { tok: C, body: { codes: [others[0].code] } })).s, 400);
+  // share only observer a
+  const sh = ok(await api("shares", { tok: R, body: { label: "HQ", codes: [a], talkback: false } }));
+  assert.ok(sh.token && sh.passcode && sh.path.endsWith("#" + sh.token));
+  assert.equal((await api("share/open", { body: { token: sh.token, pass: "wrong-pass" } })).s, 401);
+  assert.equal((await api("share/open", { body: { token: "nope", pass: sh.passcode } })).s, 401);
+  const V = ok(await api("share/open", { body: { token: sh.token, pass: sh.passcode } })).token;
+  const st = ok(await api("share/state", { tok: V }));
+  assert.deepEqual(st.observers.map((o) => o.code), [a]);
+  assert.ok(st.pus.every((p) => p.codes.includes(a)) && !JSON.stringify(st).includes(b));
+  // the viewer token opens nothing else, and a normal token is not a viewer token
+  for (const p of ["obs", "rooms", "me", "shares", "collation", "audit"]) assert.equal((await api(p, { tok: V })).s, 401, p);
+  assert.equal((await api("obs/" + a + "/live", { tok: V, body: { on: true } })).s, 401);
+  assert.equal((await api("share/state", { tok: R })).s, 401);
+  assert.equal((await api("share/watch", { tok: V, body: { code: b } })).s === 200, false);
+  // listed for the owner, invisible to another command, and dead once revoked
+  assert.equal(ok(await api("shares", { tok: R })).length, 1);
+  assert.equal(ok(await api("shares", { tok: S.A })).some((x) => x.token == sh.token), false);
+  ok(await api("shares/" + sh.token + "/revoke", { tok: R, body: {} }));
+  assert.equal((await api("share/state", { tok: V })).s, 401);
+  assert.equal((await api("share/open", { body: { token: sh.token, pass: sh.passcode } })).s, 401);
+  // manuals: operator guide for any operator/room, administrator guide for the platform administrator only
+  assert.match(ok(await api("help/operator", { tok: R })).html, /<h1/);
+  assert.equal((await api("help/admin", { tok: C })).s, 403);
+  assert.match(ok(await api("help/admin", { tok: S.A })).html, /<h1/);
+});
