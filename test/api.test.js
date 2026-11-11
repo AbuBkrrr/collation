@@ -447,3 +447,37 @@ test("state-wide collation pools vote counts across Command Centers of one state
   assert.equal(ok(await api("collation?pool=1", { tok: a.C })).sum.totals.APC, 100);
   assert.equal(ok(await api("collation?pool=1", { tok: b.C })).pooled, null);
 });
+
+test("rooms covering the same LGA in different Command Centers collate together (LGA-wide and state-wide)", async () => {
+  const mk = async (name, lga, pu, votes) => {
+    const inv = ok(await api("tenants", { tok: S.A, body: { name, state: "Yobe" } }));
+    const C = ok(await api("login/command", { body: { user: inv.operator, pass: inv.passcode } })).token;
+    const room = async (lga, pu, votes) => {
+      const rm = ok(await api("rooms", { tok: C, body: { name: lga + " room", scope: lga } }));
+      ok(await api("rooms/" + rm.id + "/status", { tok: C, body: { status: "active" } }));
+      const R = ok(await api("login/room", { body: { id: rm.id, pass: rm.passcode } })).token;
+      const code = ok(await api("room/obs", { tok: R, body: { state: "Yobe", lga, ward: "W1", pu, reg: 5000, name: "o" } })).code;
+      const t = ok(await api("login/observer", { body: { code, pin: "1234", device: "dev-" + code + "-0123456789abcdef" } })).token;
+      ok(await api("observer/tally", { tok: t, body: { party: "PDP", v: votes } }));
+      return R;
+    };
+    return { C, room, R: await room(lga, pu, votes) };
+  };
+  const a = await mk("Yobe A", "Damaturu", "001", 10);
+  const b = await mk("Yobe B", "Damaturu", "002", 20); // same LGA, another Command Center
+  const a2 = await a.room("Damaturu", "003", 5); // a second room for the same LGA inside Command Center A
+  await b.room("Potiskum", "001", 400); // a different LGA of the same state
+  // the room's own view, then the whole LGA across rooms and Command Centers (not the other LGA)
+  assert.equal(ok(await api("collation", { tok: a.R })).sum.totals.PDP, 10);
+  const lga = ok(await api("collation?pool=1", { tok: a.R }));
+  assert.equal(lga.sum.totals.PDP, 35, "10 (own) + 5 (sister room) + 20 (other Command Center)");
+  assert.deepEqual([lga.pooled.lga, lga.pooled.extPus, lga.pooled.extVotes], ["Damaturu", 2, 25]);
+  assert.equal(ok(await api("collation?pool=1", { tok: a2 })).sum.totals.PDP, 35);
+  // the Command Center's Global Collation: whole state, and the LGA row adds both centres' rooms
+  const st = ok(await api("collation?pool=1&level=lga", { tok: a.C }));
+  assert.equal(st.sum.totals.PDP, 435);
+  assert.equal(st.rows.find((r) => r.key == "Damaturu").totals.PDP, 35);
+  // the room still cannot list the other rooms' observers or polling units
+  assert.equal(ok(await api("obs", { tok: a.R })).length, 1);
+  assert.equal(ok(await api("pus", { tok: a.R })).count, 1);
+});
