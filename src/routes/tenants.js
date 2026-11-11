@@ -76,6 +76,20 @@ app.post(
     res.json({ id: t.id, name: t.name, operator: op.name, passcode: pass, loginUrl: "/command/" });
   }),
 );
+// set (or clear) the state a Command Center is locked to
+app.post(
+  "/api/tenants/:id/state",
+  auth("cmd"),
+  su,
+  h(async (req, res) => {
+    const st = req.body.state ? String(req.body.state) : null;
+    if (st && !STATES.includes(st)) return res.status(400).json({ error: "Unknown state" });
+    const r = await qsys("update tenants set state=$2 where id=$1 returning id", [req.params.id, st]);
+    if (!r.length) return res.sendStatus(404);
+    aud("CMD", "Command Center " + req.params.id + " state set to " + (st || "none"));
+    res.json({ ok: 1 });
+  }),
+);
 app.post(
   "/api/tenants/:id/toggle",
   auth("cmd"),
