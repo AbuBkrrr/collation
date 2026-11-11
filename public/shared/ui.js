@@ -174,11 +174,14 @@ const hav = (a, b, c, d) => {
 // ---- collation (computed on the server: reconciles the 2 observers per PU) ----
 const COLL_KEYS = ["state", "lga", "ward", "pu", "room"];
 let CR = null; // room id when Command drills into one room
-const collKey = () => JSON.stringify([LVL, ...COLL_KEYS.map((k) => (k == "room" ? F.room || CR || "" : F[k] || ""))]);
+let POOLED = true; // Global Collation: whole state (all pooled Command Centers) or this Command Center only
+const poolOn = () => A.role == "cmd" && TAB == "col" && POOLED && !!ME.tenantState && !F.room;
+const collKey = () => JSON.stringify([LVL, poolOn(), ...COLL_KEYS.map((k) => (k == "room" ? F.room || CR || "" : F[k] || ""))]);
 async function loadColl() {
   const k = collKey(),
     p = new URLSearchParams({ level: LVL });
   COLL_KEYS.forEach((x) => (x == "room" ? F.room || CR : F[x]) && p.set(x, x == "room" ? F.room || CR : F[x]));
+  if (poolOn()) p.set("pool", "1");
   DATA.collKey = k;
   try {
     DATA.coll = await A.get("collation?" + p);
@@ -212,7 +215,7 @@ function hist() {
     n = s.counts,
     show = byVotes(c.parties, s.totals).filter((p, i) => (PF() ? p == PF() : i < 10 || s.totals[p] > 0));
   return (
-    `<div class="muted" style="margin-bottom:8px">${n.verified}/${n.pus} PUs verified · ${s.total.toLocaleString()} votes counted · ${n.disputed} disputed (not counted until resolved)${PF() ? " · showing <b>" + PF() + "</b> only" : ""}</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">${Object.keys(SC)
+    `<div class="muted" style="margin-bottom:8px">${n.verified}/${n.pus} PUs verified · ${s.total.toLocaleString()} votes counted · ${n.disputed} disputed (not counted until resolved)${PF() ? " · showing <b>" + PF() + "</b> only" : ""}</div>${c.pooled ? `<div class="muted" style="margin-bottom:8px;background:#ebf8ff;border:1px solid #bee3f8;border-radius:8px;padding:8px 10px"><i class="fas fa-layer-group"></i> <b>${esc(c.pooled.state)} state-wide</b>: vote counts from ${c.pooled.centres} Command Center${c.pooled.centres == 1 ? "" : "s"}. ${c.pooled.extPus ? `<b>${c.pooled.extPus}</b> polling unit${c.pooled.extPus == 1 ? "" : "s"} (<b>${c.pooled.extVotes.toLocaleString()}</b> votes) come from <b>external observers</b> — other Command Centers' observers. Vote counts only: their map, video, audio and observer details are not shared.` : "No figures from external observers yet."}</div>` : ""}<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">${Object.keys(SC)
       .filter((k) => n[k])
       .map((k) => pillS(k, n[k]))
       .join("")}</div>` +
@@ -516,7 +519,7 @@ function cardColl() {
       ([k, n]) =>
         `<button class="btn btn-sm ${LVL == k ? "btn-primary" : "btn-outline"}" onclick="LVL='${k}';render()">${n}</button>`,
     )
-    .join("")}</div></div><div id="collSlot">${hist()}<div style="margin-top:12px">${drill()}</div></div></div>`;
+    .join("")}${A.role == "cmd" && TAB == "col" && ME.tenantState ? `<span style="width:1px;background:#e2e8f0;margin:0 4px"></span><button class="btn btn-sm ${POOLED ? "btn-primary" : "btn-outline"}" onclick="POOLED=true;render()" title="Vote counts from every Command Center in ${esc(ME.tenantState)}">Whole state</button><button class="btn btn-sm ${!POOLED ? "btn-primary" : "btn-outline"}" onclick="POOLED=false;render()">This Command Center only</button>` : ""}</div></div><div id="collSlot">${hist()}<div style="margin-top:12px">${drill()}</div></div></div>`;
 }
 // ---------- results & EC8A review (two observers per PU, supervisor resolves) ----------
 let PUF = "disputed",

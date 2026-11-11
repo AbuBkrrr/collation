@@ -4,8 +4,10 @@ This guide is for **you, the client**: the organisation running a Command Centre
 election. It covers everything, step by step — setting up your rooms, your observers, watching the
 field live, collating results, resolving disputes, and exporting your evidence.
 
-> **Your data is yours and yours alone.** Your Command Centre cannot see, and is never seen by, any
-> other client on the platform. Isolation is enforced in the database itself.
+> **Your operation is private.** No other Command Centre can see your rooms, observers, map, video,
+> audio, photos, messages or audit trail — isolation is enforced in the database itself. The one
+> thing that may be combined is **vote counts**: where the platform administrator has enabled it,
+> Global Collation adds up the figures of all Command Centres in the same state (section 6).
 
 ---
 
@@ -189,6 +191,20 @@ such as "APC" in the search box) to show one party only. In a live election the
 figures keep rising as observers submit.
 
 ---
+
+### Whole state, or this Command Centre only
+
+**Observers & Map** always shows only **your own** observers. **Global Collation** can show more:
+
+- **Whole state** (default) — the vote counts of **every Command Centre in your state**, added up by
+  LGA, ward and polling unit. A blue note says how many polling units and votes come from
+  **external observers** (other Command Centres' observers). Each polling unit is counted **once**:
+  your own figure for a unit always stands; where you have none, the best-evidenced figure from
+  another centre is used.
+- **This Command Centre only** — just your own figures.
+
+Only **vote counts** are combined. You never see another centre's map, video, audio, photos or
+observer details, and they never see yours.
 
 ## 7. Results Review — the trust engine
 

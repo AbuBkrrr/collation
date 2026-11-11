@@ -7,8 +7,9 @@ their own Situation Rooms, and their observers report from the field — all sea
 other client.
 
 > Audience separation: you create and switch Command Centres on and off. You **cannot** see any
-> client's rooms, observers, results, photos or audit — that isolation is enforced in the database,
-> by design, for trust. You hand each client the keys to their own house; you don't live in it.
+> client's rooms, observers, photos or audit — that isolation is enforced in the database, by
+> design, for trust. The only thing that crosses between centres is **vote counts**, and only
+> between centres of the same state that you have left in the pool (section 2).
 
 ---
 
@@ -75,6 +76,18 @@ or you suspect it leaked.
 In the **Command Centres** list, the **State** column is a drop-down for you only. A client whose
 Command Centre has a state sees that state fixed everywhere (room creation, search, collation) and
 cannot change it. "— all states —" leaves it unlocked (as your own Main Command Centre is).
+
+### Pooling vote counts across Command Centres of the same state
+
+When several Command Centres share a state, **Global Collation** adds their vote counts together
+(state → LGA → ward → polling unit), counting each polling unit once and telling each client how much
+comes from "external observers". **Only vote counts are pooled** — never maps, video, audio, photos,
+observers or messages.
+
+The **Pool votes** tick-box in the Command Centres list controls this per centre (on by default for
+a centre that has a state). **Untick it for any client whose figures must stay private** — for
+example when two clients in the same state are competitors. A centre that is not pooled neither
+contributes to nor sees the state-wide total.
 
 ### Turning a Command Centre off / on
 

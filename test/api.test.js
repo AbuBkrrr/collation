@@ -409,3 +409,41 @@ test("every page and every front-end library the pages load is actually served",
   const sh = fs.readFileSync(path.join(__dirname, "..", "mobile", "build-www.sh"), "utf8");
   for (const m of sh.matchAll(/"\$ROOT\/(node_modules\/[^"*$]+)"/g)) if (!m[1].endsWith(".")) assert.ok(fs.existsSync(path.join(__dirname, "..", m[1])), m[1]);
 });
+
+test("state-wide collation pools vote counts across Command Centers of one state, nothing else", async () => {
+  const mkCC = async (name) => {
+    const inv = ok(await api("tenants", { tok: S.A, body: { name, state: "Jigawa" } }));
+    const C = ok(await api("login/command", { body: { user: inv.operator, pass: inv.passcode } })).token;
+    const rm = ok(await api("rooms", { tok: C, body: { name: name + " room", state: "Lagos", scope: "Dutse" } })); // state is forced to Jigawa
+    ok(await api("rooms/" + rm.id + "/status", { tok: C, body: { status: "active" } }));
+    const R = ok(await api("login/room", { body: { id: rm.id, pass: rm.passcode } })).token;
+    const obs = async (pu, votes) => {
+      const code = ok(await api("room/obs", { tok: R, body: { state: "Jigawa", lga: "Dutse", ward: "W1", pu, reg: 5000, name: "o" } })).code;
+      const t = ok(await api("login/observer", { body: { code, pin: "1234", device: "dev-" + code + "-0123456789abcdef" } })).token;
+      ok(await api("observer/tally", { tok: t, body: { party: "APC", v: votes } }));
+      return code;
+    };
+    return { id: inv.id, C, obs };
+  };
+  const a = await mkCC("Pool A"), b = await mkCC("Pool B");
+  await a.obs("001", 100);
+  const bCode = await b.obs("002", 50);
+  await b.obs("001", 999); // the same unit as A's: must not be added on top of A's own figure
+  const own = ok(await api("collation?level=nat", { tok: a.C }));
+  assert.equal(own.sum.totals.APC, 100);
+  assert.equal(own.pooled, null);
+  const st = ok(await api("collation?level=pu&pool=1", { tok: a.C }));
+  assert.equal(st.sum.totals.APC, 150, "own PU 001 (100) + external PU 002 (50)");
+  assert.deepEqual([st.pooled.centres, st.pooled.extPus, st.pooled.extVotes], [2, 1, 50]);
+  assert.ok(!JSON.stringify(st).includes(bCode), "no observer codes cross over");
+  // B sees it the other way round: its own 999 for PU 001 stands, plus nothing external (A only has PU 001)
+  assert.equal(ok(await api("collation?pool=1", { tok: b.C })).sum.totals.APC, 1049);
+  // everything else stays private
+  assert.equal(ok(await api("obs", { tok: a.C })).some((o) => o.code == bCode), false);
+  assert.equal(ok(await api("pus", { tok: a.C })).items.some((x) => x.pu == "002"), false);
+  // the platform administrator can take a Command Center out of the pool
+  ok(await api("tenants/" + b.id + "/pool", { tok: S.A, body: { on: false } }));
+  await new Promise((r) => setTimeout(r, 2100)); // collation cache
+  assert.equal(ok(await api("collation?pool=1", { tok: a.C })).sum.totals.APC, 100);
+  assert.equal(ok(await api("collation?pool=1", { tok: b.C })).pooled, null);
+});

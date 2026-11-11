@@ -7,7 +7,7 @@ app.get(
   h(async (req, res) =>
     res.json(
       await qsys(
-        "select t.id,t.name,t.state,t.active,(select count(*)::int from rooms where tenant=t.id) rooms,(select count(*)::int from cmd_users where tenant=t.id) operators from tenants t order by t.id",
+        "select t.id,t.name,t.state,t.active,t.pool,(select count(*)::int from rooms where tenant=t.id) rooms,(select count(*)::int from cmd_users where tenant=t.id) operators from tenants t order by t.id",
       ),
     ),
   ),
@@ -74,6 +74,19 @@ app.post(
     await qsys("update cmd_users set pass_hash=$2,active=true where id=$1", [op.id, await bcrypt.hash(pass, 10)]);
     aud("CMD", "Re-issued invite for Command Center " + t.id + " (operator " + op.name + ")");
     res.json({ id: t.id, name: t.name, operator: op.name, passcode: pass, loginUrl: "/command/" });
+  }),
+);
+// whether a Command Center's vote counts are pooled with the other Command Centers of the same state
+// (Global Collation only - never maps, video, audio, observers or photos)
+app.post(
+  "/api/tenants/:id/pool",
+  auth("cmd"),
+  su,
+  h(async (req, res) => {
+    const r = await qsys("update tenants set pool=$2 where id=$1 returning id", [req.params.id, !!req.body.on]);
+    if (!r.length) return res.sendStatus(404);
+    aud("CMD", "Command Center " + req.params.id + " state-wide vote pooling " + (req.body.on ? "ON" : "OFF"));
+    res.json({ ok: 1 });
   }),
 );
 // set (or clear) the state a Command Center is locked to
