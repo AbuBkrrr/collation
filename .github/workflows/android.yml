@@ -46,6 +46,9 @@ jobs:
           path: apks/*.apk
           if-no-files-found: error
       - name: Commit APKs back to the branch
+        # main is protected (changes arrive by pull request), so the APKs are committed on the working
+        # branch and reach main through its pull request; on main the build is still uploaded as an artifact.
+        if: github.ref_name != 'main'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
