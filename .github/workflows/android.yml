@@ -22,7 +22,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with: { distribution: temurin, java-version: "21" }
       - name: Add Android SDK packages
         # GitHub's ubuntu runners ship the Android SDK (ANDROID_HOME preset); just add the versions we target.
