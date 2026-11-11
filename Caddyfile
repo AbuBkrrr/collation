@@ -1,5 +1,11 @@
 {$DOMAIN} {
 	{$CADDY_TLS}
+	# Auto-HTTPS (Let's Encrypt) is on by default. The app sets the security headers
+	# (CSP, HSTS, X-Frame-Options, …); here we just stop advertising the server software.
+	header {
+		-Server
+		-X-Powered-By
+	}
 	# LiveKit signalling (wss) and media negotiation
 	handle_path /lk/* {
 		reverse_proxy livekit:7880

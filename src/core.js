@@ -29,6 +29,17 @@ const SECRET =
     if (!fs.existsSync(f)) fs.writeFileSync(f, crypto.randomBytes(48).toString("hex"), { mode: 0o600 });
     return fs.readFileSync(f, "utf8").trim();
   })();
+// A guessable JWT secret lets anyone forge a token and mint any session. If JWT_SECRET is set, it must
+// be long and not an obvious placeholder. In production (NODE_ENV=production or a DOMAIN set) this is
+// fatal; in dev/test it only warns. Leave JWT_SECRET unset to auto-generate a strong one.
+if (E.JWT_SECRET && (E.JWT_SECRET.length < 24 || /change|changeme|example|placeholder|your-?secret/i.test(E.JWT_SECRET))) {
+  const msg =
+    "JWT_SECRET is weak or a placeholder. Set a long random value (openssl rand -hex 32) or leave it unset to auto-generate one.";
+  if (E.NODE_ENV === "production" || E.DOMAIN) {
+    console.error("FATAL: " + msg);
+    process.exit(1);
+  } else console.warn("WARNING: " + msg);
+}
 // Mockup order first, then the other registered parties. Override with PARTIES=... (comma separated codes).
 const PARTIES = (E.PARTIES || "APC,PDP,NNPP,ADC,NDC,LP,SDP,APGA,YPP,AA,A,AAC,ADP,APM,APP,BP,NRM,PRP,YP,ZLP")
   .split(",")
@@ -214,13 +225,41 @@ app.use((req, res, next) => {
   }
   next();
 });
+app.disable("x-powered-by"); // don't advertise the framework
+// Content-Security-Policy. Scripts/styles load only from our own origin (an injected <script src=evil>
+// is blocked), framing/objects/base-tag/forms are locked down, and the few external needs are named:
+// map tiles (img https:), Google Fonts (pitch page), LiveKit/WS (connect wss:), the Vosk worker (blob:).
+// Inline scripts/handlers and inline styles are used throughout the UI, so those keep 'unsafe-inline';
+// user-supplied text is still HTML-escaped at render. Override or relax with CSP=... / CSP_OFF=1.
+const CSP =
+  E.CSP ||
+  [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "object-src 'none'",
+    "frame-ancestors 'self'",
+    "form-action 'self' https://wa.me https://api.whatsapp.com",
+    "img-src 'self' data: blob: https:",
+    "media-src 'self' blob:",
+    "font-src 'self' data: https://fonts.gstatic.com",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:", // wasm-unsafe-eval: Vosk offline STT (WebAssembly)
+    "worker-src 'self' blob:",
+    "connect-src 'self' https: wss:",
+    "frame-src 'self'",
+  ].join("; ");
 app.use((req, res, next) => {
   res.set({
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "SAMEORIGIN",
     "Referrer-Policy": "same-origin",
     "Permissions-Policy": "camera=(self), microphone=(self), geolocation=(self)",
+    "Cross-Origin-Opener-Policy": "same-origin",
   });
+  if (!E.CSP_OFF) res.set("Content-Security-Policy", CSP);
+  // HSTS once we're on HTTPS (ignored by browsers over plain HTTP, but only send it when secure)
+  if (req.secure || req.headers["x-forwarded-proto"] === "https")
+    res.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   if (req.path.startsWith("/api/")) res.set("Cache-Control", "no-store");
   next();
 });

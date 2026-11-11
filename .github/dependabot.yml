@@ -1,0 +1,23 @@
+version: 2
+updates:
+  # application dependencies
+  - package-ecosystem: npm
+    directory: "/"
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 5
+    groups:
+      all:
+        patterns: ["*"]
+  # the Android app's dependencies
+  - package-ecosystem: npm
+    directory: "/mobile"
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 5
+  # GitHub Actions versions (supply-chain)
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule: { interval: weekly }
+  # base image for the server container
+  - package-ecosystem: docker
+    directory: "/"
+    schedule: { interval: weekly }

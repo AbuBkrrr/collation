@@ -133,7 +133,13 @@ app.post(
 // trunk-recorder's rdioscanner_uploader plugin (the same format OpenMHz and Broadcastify Calls accept)
 // POSTs each finished transmission here as multipart/form-data. Point its "server" at https://<domain> and
 // its "apiKey" at the room's gateway key. SDRTrunk's Rdio Scanner streaming uses the same fields.
-const up = multer({ storage: multer.memoryStorage(), limits: { fileSize: 60 * 1024 * 1024, fields: 40 } });
+const up = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 60 * 1024 * 1024, fields: 40, files: 1 },
+  // only accept audio (or the generic octet-stream some uploaders send); reject anything else outright
+  fileFilter: (req, file, cb) =>
+    cb(null, /^audio\/|^application\/octet-stream$/.test(file.mimetype || "")),
+});
 app.post(
   "/api/call-upload",
   up.single("audio"),
