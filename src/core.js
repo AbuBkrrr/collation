@@ -173,7 +173,8 @@ create table if not exists pitch_leads(id serial primary key,ts timestamptz defa
 create index if not exists pitch_leads_ts on pitch_leads(ts);
 create table if not exists shares(token text primary key,tenant text,room_id text,label text,pass_hash text,codes text[],talkback bool default false,active bool default true,created_by text,created_at timestamptz default now(),expires_at timestamptz);
 create index if not exists shares_tn on shares(tenant);
-alter table tenants add column if not exists pool bool default true;`;
+alter table tenants add column if not exists pool bool default true;
+alter table rooms add column if not exists kind text;`;
 // Row-level security: applied to the restricted role used inside authenticated requests.
 const RLS = `do $$ begin if not exists(select 1 from pg_roles where rolname='collation_app') then create role collation_app nologin; end if; end $$;
 do $$ begin execute format('grant collation_app to %I', current_user); exception when others then null; end $$;

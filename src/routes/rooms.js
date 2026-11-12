@@ -6,7 +6,7 @@ app.get(
   h(async (req, res) =>
     res.json(
       await q(
-        `select r.id,r.name,r.state,r.scope,r.operator,r.status,r.activated_at,(r.last_seen>now()-interval '40 seconds') online,(select count(*)::int from observers where room_id=r.id) obs,(select coalesce(sum(pend),0)::int from observers where room_id=r.id) pend from rooms r where r.tenant=$1 order by r.id`,
+        `select r.id,r.name,r.state,r.scope,r.kind,r.operator,r.status,r.activated_at,(r.last_seen>now()-interval '40 seconds') online,(select count(*)::int from observers where room_id=r.id) obs,(select coalesce(sum(pend),0)::int from observers where room_id=r.id) pend from rooms r where r.tenant=$1 order by r.id`,
         [req.u.tn],
       ),
     ),
@@ -22,16 +22,30 @@ app.post(
     if (t?.state) b.state = t.state;
     if (!b.name || !STATES.includes(b.state))
       return res.status(400).json({ error: "Name and valid state required" });
+    // Who the room is for decides how many LGAs it covers: an LGA chairman has exactly one; a senator
+    // (senatorial district), a House of Reps member (federal constituency) or a custom zone has a chosen set.
+    const KINDS = ["lga", "senate", "reps", "zone"],
+      kind = KINDS.includes(b.kind) ? b.kind : null,
+      lgas = [...new Set(String(b.scope || "").split(",").map((x) => x.trim()).filter(Boolean))];
+    if (kind == "lga" && lgas.length != 1) return res.status(400).json({ error: "An LGA room covers exactly one LGA" });
+    if (kind && kind != "lga" && !lgas.length) return res.status(400).json({ error: "Choose the LGAs this zone covers" });
+    if (lgas.length) {
+      // where the state's LGA list is loaded, every chosen LGA must be one of that state's
+      const known = (await q("select distinct lga from locations where state=$1", [b.state])).map((x) => x.lga.toLowerCase());
+      const bad = known.length ? lgas.filter((l) => !known.includes(l.toLowerCase())) : [];
+      if (bad.length) return res.status(400).json({ error: bad.join(", ") + " is not an LGA of " + b.state });
+    }
     const id = "SR-" + abbr(b.state) + "-" + rnd(3),
       pass = rnd(10);
-    await q("insert into rooms(id,name,state,scope,operator,pass_hash,tenant) values($1,$2,$3,$4,$5,$6,$7)", [
+    await q("insert into rooms(id,name,state,scope,operator,pass_hash,tenant,kind) values($1,$2,$3,$4,$5,$6,$7,$8)", [
       id,
-      b.name,
+      String(b.name).slice(0, 80),
       b.state,
-      b.scope || "",
+      lgas.join(","),
       b.operator || "",
       await bcrypt.hash(pass, 10),
       req.u.tn,
+      kind,
     ]);
     aud("CMD", "Created room " + id);
     res.json({ id, passcode: pass });

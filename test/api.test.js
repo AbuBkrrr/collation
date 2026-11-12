@@ -103,8 +103,9 @@ test("tally entry, edit once, two-observer dispute, supervisor resolve, EC8A", a
   assert.equal(c.sum.counts.disputed, 1);
   assert.equal(c.sum.totals.APC, 0, "disputed PU not counted");
   ok(await api("observer/tally/edit", { tok: S.t2, body: { party: "PDP", v: 50 } }));
-  assert.equal((await api("observer/tally/edit", { tok: S.t2, body: { party: "PDP", v: 51 } })).s, 409, "second edit refused");
-  assert.equal((await api("observer/tally", { tok: S.t2, body: { party: "PDP", v: 1 } })).s, 409, "a corrected total takes no more entries");
+  // entry is continuous: a corrected total can be corrected again and keeps taking additions
+  ok(await api("observer/tally/edit", { tok: S.t2, body: { party: "PDP", v: 49 } }));
+  assert.equal(ok(await api("observer/tally", { tok: S.t2, body: { party: "PDP", v: 1 } })).v, 50);
   c = ok(await api("collation", { tok: S.RA.tok }));
   assert.equal(c.sum.counts.matched, 1);
   assert.equal(c.sum.totals.APC, 100);
@@ -480,4 +481,39 @@ test("rooms covering the same LGA in different Command Centers collate together 
   // the room still cannot list the other rooms' observers or polling units
   assert.equal(ok(await api("obs", { tok: a.R })).length, 1);
   assert.equal(ok(await api("pus", { tok: a.R })).count, 1);
+});
+
+test("zone rooms: a senator's or rep's room covers only its chosen LGAs; an LGA room covers one", async () => {
+  const inv = ok(await api("tenants", { tok: S.A, body: { name: "Zone Test Command", state: "Bauchi" } }));
+  const C = ok(await api("login/command", { body: { user: inv.operator, pass: inv.passcode } })).token;
+  assert.equal((await api("rooms", { tok: C, body: { name: "x", kind: "lga", scope: "Toro,Dass" } })).s, 400, "an LGA room takes one LGA");
+  assert.equal((await api("rooms", { tok: C, body: { name: "x", kind: "senate", scope: "" } })).s, 400, "a zone needs LGAs");
+  const z = ok(await api("rooms", { tok: C, body: { name: "Bauchi South Senatorial District", kind: "senate", scope: "Toro, Dass ,Toro", operator: "Sen. coordinator" } }));
+  ok(await api("rooms/" + z.id + "/status", { tok: C, body: { status: "active" } }));
+  const row = ok(await api("rooms", { tok: C })).find((r) => r.id == z.id);
+  assert.deepEqual([row.kind, row.scope, row.state], ["senate", "Toro,Dass", "Bauchi"]);
+  const R = ok(await api("login/room", { body: { id: z.id, pass: z.passcode } })).token;
+  const mk = (lga, pu) => api("room/obs", { tok: R, body: { state: "Bauchi", lga, ward: "W1", pu, reg: 5000, name: "o" } });
+  const a = ok(await mk("Toro", "001")).code, b = ok(await mk("Dass", "001")).code;
+  assert.equal((await mk("Bauchi", "001")).s, 403, "an LGA outside the zone is refused");
+  for (const [code, v] of [[a, 30], [b, 12]]) {
+    const t = ok(await api("login/observer", { body: { code, pin: "1234", device: "dev-" + code + "-0123456789abcdef" } })).token;
+    ok(await api("observer/tally", { tok: t, body: { party: "LP", v } }));
+  }
+  // an LGA chairman's room inside the zone, and one outside it
+  const lgaRoom = async (lga, v) => {
+    const rm = ok(await api("rooms", { tok: C, body: { kind: "lga", name: lga + " LGA Situation Room", scope: lga } }));
+    ok(await api("rooms/" + rm.id + "/status", { tok: C, body: { status: "active" } }));
+    const T = ok(await api("login/room", { body: { id: rm.id, pass: rm.passcode } })).token;
+    const code = ok(await api("room/obs", { tok: T, body: { state: "Bauchi", lga, ward: "W2", pu: "009", reg: 5000, name: "o" } })).code;
+    const t = ok(await api("login/observer", { body: { code, pin: "1234", device: "dev-" + code + "-0123456789abcdef" } })).token;
+    ok(await api("observer/tally", { tok: t, body: { party: "LP", v } }));
+  };
+  await lgaRoom("Dass", 100);
+  await lgaRoom("Katagum", 1000);
+  // the zone room: its own observers, then its whole zone (the Dass chairman's room too) - never Katagum
+  assert.equal(ok(await api("collation", { tok: R })).sum.totals.LP, 42);
+  const zone = ok(await api("collation?pool=1&level=lga", { tok: R }));
+  assert.equal(zone.sum.totals.LP, 142);
+  assert.deepEqual(zone.rows.map((r) => r.key).sort(), ["Dass", "Toro"]);
 });

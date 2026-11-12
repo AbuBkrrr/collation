@@ -215,7 +215,7 @@ function hist() {
     n = s.counts,
     show = byVotes(c.parties, s.totals).filter((p, i) => (PF() ? p == PF() : i < 10 || s.totals[p] > 0));
   return (
-    `<div class="muted" style="margin-bottom:8px">${n.verified}/${n.pus} PUs verified · ${s.total.toLocaleString()} votes counted · ${n.disputed} disputed (not counted until resolved)${PF() ? " · showing <b>" + PF() + "</b> only" : ""}</div>${c.pooled ? `<div class="muted" style="margin-bottom:8px;background:#ebf8ff;border:1px solid #bee3f8;border-radius:8px;padding:8px 10px"><i class="fas fa-layer-group"></i> <b>${c.pooled.lga ? esc(c.pooled.lga) + " LGA-wide" : esc(c.pooled.state) + " state-wide"}</b>: vote counts from ${c.pooled.lga ? "every Situation Room covering this LGA, across " : ""}${c.pooled.centres} Command Center${c.pooled.centres == 1 ? "" : "s"}. ${c.pooled.extPus ? `<b>${c.pooled.extPus}</b> polling unit${c.pooled.extPus == 1 ? "" : "s"} (<b>${c.pooled.extVotes.toLocaleString()}</b> votes) come from <b>external observers</b> — observers of other ${c.pooled.lga ? "Situation Rooms and " : ""}Command Centers. Vote counts only: their map, video, audio and observer details are not shared.` : "No figures from external observers yet."}</div>` : ""}<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">${Object.keys(SC)
+    `<div class="muted" style="margin-bottom:8px">${n.verified}/${n.pus} PUs verified · ${s.total.toLocaleString()} votes counted · ${n.disputed} disputed (not counted until resolved)${PF() ? " · showing <b>" + PF() + "</b> only" : ""}</div>${c.pooled ? `<div class="muted" style="margin-bottom:8px;background:#ebf8ff;border:1px solid #bee3f8;border-radius:8px;padding:8px 10px"><i class="fas fa-layer-group"></i> <b>${c.pooled.lga ? esc(c.pooled.lga.split(",").join(", ")) + (c.pooled.lga.includes(",") ? " zone-wide" : " LGA-wide") : esc(c.pooled.state) + " state-wide"}</b>: vote counts from ${c.pooled.lga ? "every Situation Room covering " + (c.pooled.lga.includes(",") ? "these LGAs" : "this LGA") + ", across " : ""}${c.pooled.centres} Command Center${c.pooled.centres == 1 ? "" : "s"}. ${c.pooled.extPus ? `<b>${c.pooled.extPus}</b> polling unit${c.pooled.extPus == 1 ? "" : "s"} (<b>${c.pooled.extVotes.toLocaleString()}</b> votes) come from <b>external observers</b> — observers of other ${c.pooled.lga ? "Situation Rooms and " : ""}Command Centers. Vote counts only: their map, video, audio and observer details are not shared.` : "No figures from external observers yet."}</div>` : ""}<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">${Object.keys(SC)
       .filter((k) => n[k])
       .map((k) => pillS(k, n[k]))
       .join("")}</div>` +
@@ -519,10 +519,10 @@ function cardColl() {
       ([k, n]) =>
         `<button class="btn btn-sm ${LVL == k ? "btn-primary" : "btn-outline"}" onclick="LVL='${k}';render()">${n}</button>`,
     )
-    .join("")}${(A.role == "cmd" && TAB == "col" && ME.tenantState) || (A.role == "room" && ME.room?.state) ? `<span style="width:1px;background:#e2e8f0;margin:0 4px"></span><button class="btn btn-sm ${POOLED ? "btn-primary" : "btn-outline"}" onclick="POOLED=true;render()" title="Vote counts from every pooled Command Center">${A.role == "room" ? "Whole LGA" : "Whole state"}</button><button class="btn btn-sm ${!POOLED ? "btn-primary" : "btn-outline"}" onclick="POOLED=false;render()">${A.role == "room" ? "This room only" : "This Command Center only"}</button>` : ""}</div></div><div id="collSlot">${hist()}<div style="margin-top:12px">${drill()}</div></div></div>`;
+    .join("")}${(A.role == "cmd" && TAB == "col" && ME.tenantState) || (A.role == "room" && ME.room?.state) ? `<span style="width:1px;background:#e2e8f0;margin:0 4px"></span><button class="btn btn-sm ${POOLED ? "btn-primary" : "btn-outline"}" onclick="POOLED=true;render()" title="Vote counts from every pooled Command Center">${A.role == "room" ? (String(ME.room.scope || "").includes(",") ? "Whole zone" : "Whole LGA") : "Whole state"}</button><button class="btn btn-sm ${!POOLED ? "btn-primary" : "btn-outline"}" onclick="POOLED=false;render()">${A.role == "room" ? "This room only" : "This Command Center only"}</button>` : ""}</div></div><div id="collSlot">${hist()}<div style="margin-top:12px">${drill()}</div></div></div>`;
 }
 // ---------- results & EC8A review (two observers per PU, supervisor resolves) ----------
-let PUF = "disputed",
+let PUF = "", // show every polling unit by default (disputed ones are listed first); the buttons narrow it down
   PUS_ = null,
   PUK = null,
   RES = null;
@@ -544,7 +544,15 @@ async function loadPus() {
 }
 async function viewEc8a(id) {
   try {
-    window.open(URL.createObjectURL(await A.get("ec8a/" + id + "/file")), "_blank");
+    // shown in the page: a new window opened after waiting on the server is blocked by browsers
+    const url = URL.createObjectURL(await A.get("ec8a/" + id + "/file"));
+    document.getElementById("ecm")?.remove();
+    const w = document.createElement("div");
+    w.id = "ecm";
+    w.style.cssText = "position:fixed;inset:0;background:rgba(15,23,42,.88);z-index:9500;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:12px";
+    w.innerHTML = `<img src="${url}" alt="EC8A result sheet" style="max-width:100%;max-height:82vh;border-radius:10px;background:#fff"><div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center"><a class="btn btn-primary" href="${url}" download="EC8A-${id}.jpg"><i class="fas fa-download"></i> Download</a><a class="btn btn-outline" style="background:#fff" href="${url}" target="_blank" rel="noopener">Open full size</a><button class="btn btn-outline" style="background:#fff" id="ecx">Close</button></div>`;
+    w.onclick = (e) => (e.target == w || e.target.id == "ecx") && w.remove();
+    document.body.appendChild(w);
   } catch (e) {
     toast("⚠️ " + e.message);
   }
