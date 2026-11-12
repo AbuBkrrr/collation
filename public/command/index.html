@@ -570,17 +570,18 @@ ${OFFS.length ? `<table><tr><th>Officer</th><th>Area</th><th>Confirmed</th><th>P
 <div class="card" style="margin-top:20px"><div class="card-header"><h3><i class="fas fa-scale-balanced"></i> Latest officer activity</h3></div>${rec.confirms.length || rec.manual.length ? `<table><tr><th>When</th><th>Officer</th><th>What</th><th>Unit</th><th>Figures</th></tr>${[...rec.confirms.map((c) => ({ ...c, w: c.act == "confirm" ? "Confirmed" : "Corrected", k: c.ckey })), ...rec.manual.map((m) => ({ ...m, w: "Physical result" + (m.boxes != null ? " · " + m.boxes + " boxes" : ""), k: m.area }))].sort((a, b) => new Date(b.ts) - new Date(a.ts)).slice(0, 80).map((r) => `<tr><td>${new Date(r.ts).toLocaleString()}</td><td>${esc(r.name)}</td><td>${esc(r.w)}</td><td class="mono" style="font-size:11px">${esc(r.k.replace(/^(pu|ward|lga):/, ""))}</td><td>${Object.entries(r.fig || {}).map(([p, v]) => esc(p) + " " + v).join(", ")}${r.orig && JSON.stringify(r.orig) != JSON.stringify(r.fig) ? '<br><span class="muted">was: ' + Object.entries(r.orig).map(([p, v]) => esc(p) + " " + v).join(", ") + "</span>" : ""}</td></tr>`).join("")}</table>` : '<div class="muted">Nothing yet.</div>'}</div>`;
       };
       start("cmd", () => ({
+        ...(ME.su ? { tn: ["Command Centers", "sitemap", cTn] } : {}),
         rooms: ["Situation Rooms", "building-columns", cRooms],
         obs: ["Observers & Map", "location-dot", cObs],
         off: ["Collation Officers", "clipboard-check", cOff],
-        bc: ["Broadcast", "bullhorn", cBc],
         col: ["Global Collation", "chart-column", cCol],
         res: ["Results Review", "scale-balanced", () => cardSearch(1, DATA.obs) + '<div style="margin-top:20px">' + tabResults(true) + "</div>"],
+        bc: ["Broadcast", "bullhorn", cBc],
         dat: ["Export & Archive", "download", tabData],
         con: ["Contacts", "address-book", tabContacts],
         radio: ["Radio", "tower-broadcast", cRadio],
         share: ["Share Live View", "share-nodes", tabShare],
-        ...(ME.su ? { loc: ["Locations", "map", cLoc], tn: ["Command Centers", "sitemap", cTn], arch: ["Archive", "box-archive", cArchive], mkt: ["Marketing", "chart-line", cMkt] } : {}),
+        ...(ME.su ? { loc: ["Locations", "map", cLoc], arch: ["Archive", "box-archive", cArchive], mkt: ["Marketing", "chart-line", cMkt] } : {}),
         aud: ["Audit Log", "clipboard-list", tabAudit],
         set: ["App Settings", "gear", cSet],
         help: ["Help", "circle-question", tabHelp],
