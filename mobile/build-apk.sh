@@ -10,7 +10,8 @@ APP="${1:-observer}"
 case "$APP" in
   observer) APPID="ng.com.mysituationroom.observer"; LABEL="Collation Observer" ;;
   room)     APPID="ng.com.mysituationroom.room";     LABEL="Situation Room" ;;
-  *) echo "unknown app '$APP' (use observer or room)"; exit 1 ;;
+  officer)  APPID="ng.com.mysituationroom.officer";  LABEL="Collation Officer" ;;
+  *) echo "unknown app '$APP' (use observer, room or officer)"; exit 1 ;;
 esac
 
 sh build-www.sh "$APP"

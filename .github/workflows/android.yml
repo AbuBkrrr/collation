@@ -9,6 +9,7 @@ on:
       - "mobile/**"
       - "public/observer/**"
       - "public/room/**"
+      - "public/officer/**"
       - "public/shared/**"
       - ".github/workflows/android.yml"
 
@@ -39,6 +40,7 @@ jobs:
           chmod +x mobile/android/gradlew
           sh mobile/build-apk.sh observer
           sh mobile/build-apk.sh room
+          sh mobile/build-apk.sh officer
           ls -la apks
       - uses: actions/upload-artifact@v4
         with:
@@ -52,10 +54,10 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -f apks/observer.apk apks/room.apk
+          git add -f apks/observer.apk apks/room.apk apks/officer.apk
           if git diff --cached --quiet; then
             echo "APKs unchanged — nothing to commit."
           else
-            git commit -m "Build Android APKs (observer + situation room) [skip ci]"
+            git commit -m "Build Android APKs (observer + situation room + officer) [skip ci]"
             git push origin HEAD:${GITHUB_REF_NAME}
           fi

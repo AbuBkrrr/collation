@@ -1,6 +1,6 @@
 const {qsys,qx,RLS,hit,LK,als,express,jwt,bcrypt,http,https,fs,path,crypto,E,PORT,SECRET,DATA,PARTIES,STATES,pool,q,rnd,abbr,aud,h,SCHEMA,app,rate,auth,su,own,mine,tnOf,cfgTenant,roomScope,getS,setS,appName,clean,bus} = require("./src/core");
 const { loadLocations, SEED } = require("./src/locations");
-for (const r of ["auth", "tenants", "rooms", "observers", "ops", "messages", "contacts", "data", "settings", "media", "radio", "locations", "results", "admin", "pitch", "shares", "help", "archive"]) require("./src/routes/" + r);
+for (const r of ["auth", "tenants", "rooms", "observers", "ops", "messages", "contacts", "data", "settings", "media", "radio", "locations", "results", "admin", "pitch", "shares", "help", "archive", "officers"]) require("./src/routes/" + r);
 // front-end libraries are served from this PC (no CDN dependency on election day)
 const V = { maxAge: "7d", immutable: true };
 for (const [u, d] of [
@@ -36,6 +36,11 @@ app.get("/download/room", (req, res) => {
   const p = apkPath("room");
   if (!p) return res.status(404).type("text").send("The Situation Room Android app has not been published yet.");
   res.download(p, "my-situation-room-room.apk");
+});
+app.get("/download/officer", (req, res) => {
+  const p = apkPath("officer");
+  if (!p) return res.status(404).type("text").send("The Collation Officer Android app has not been published yet.");
+  res.download(p, "my-situation-room-officer.apk");
 });
 app.get("/", (req, res) => res.sendFile(path.join(__dirname, "public", "landing", "index.html")));
 const { server } = require("./src/ws");

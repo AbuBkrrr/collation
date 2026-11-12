@@ -56,7 +56,15 @@ app.post(
       return res.status(409).json({ error: "Could not create the Command Center (name clash) — try again" });
     }
     aud("CMD", "Created Command Center " + id + " (" + name + "), operator " + operator);
-    res.json({ id, operator, passcode: pass, loginUrl: "/command/" });
+    // optional: the state-level Collation Officer (3) can be named right here
+    let officer = null;
+    const oc = req.body.officer;
+    if (oc && oc.name && state) {
+      try {
+        officer = await require("./officers").mk(id, { level: "state", name: oc.name, phone: oc.phone });
+      } catch {}
+    }
+    res.json({ id, operator, passcode: pass, loginUrl: "/command/", officer });
   }),
 );
 // Re-issue a shareable invite for a Command Center: resets its earliest operator's passcode and

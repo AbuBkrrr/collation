@@ -396,7 +396,7 @@ test("shared live view: passcode-gated, view-only, scoped, revocable; manuals se
 test("every page and every front-end library the pages load is actually served", async () => {
   // a dependency update that moves a file inside node_modules must fail here, not on election day
   const get = async (p) => (await fetch(BASE + p)).status;
-  const pages = ["/", "/pitch", "/help", "/command/", "/room/", "/observer/", "/share/"];
+  const pages = ["/", "/pitch", "/help", "/command/", "/room/", "/observer/", "/officer/", "/share/"];
   const seen = new Set();
   for (const p of pages) {
     const r = await fetch(BASE + p);
@@ -766,4 +766,86 @@ test("archived and stored data can be found and reviewed (administrator only)", 
   assert.deepEqual([vr.totals.APC, vr.totals.PDP, vr.counts.observers, vr.counts.units, vr.source], [120, 45, 2, 2, "vault"]);
   assert.ok(ok(await api("admin/archive", { tok: S.A })).vault.some((v) => v.name == del.kept));
   assert.equal((await api("admin/vault/..%2F..%2Fetc%2Fpasswd/review", { tok: S.A })).s, 404);
+});
+
+test("collation officers: ward / LGA / state, confirm or correct once, manual (Report B) vs reported (Report A)", async () => {
+  const c = new Client({ connectionString: DB });
+  await c.connect();
+  for (const [lga, ward, pu, reg, name] of [["Akko", "Ward A", "001", 600, "Market"], ["Akko", "Ward A", "002", 650, "School"], ["Akko", "Ward B", "001", 700, "Clinic"], ["Balanga", "Ward C", "001", 800, "Hall"]])
+    await c.query("insert into locations(state,lga,ward,pu,reg,name) values('Gombe',$1,$2,$3,$4,$5)", [lga, ward, pu, reg, name]);
+  await c.end();
+  const inv = ok(await api("tenants", { tok: S.A, body: { name: "Officer Test", state: "Gombe" } }));
+  const C = ok(await api("login/command", { body: { user: inv.operator, pass: inv.passcode } })).token;
+  const rm = ok(await api("rooms", { tok: C, body: { name: "Gombe governor", kind: "governor" } }));
+  ok(await api("rooms/" + rm.id + "/status", { tok: C, body: { status: "active" } }));
+  const R = ok(await api("login/room", { body: { id: rm.id, pass: rm.passcode } })).token;
+  const units = ok(await api("locations/units?state=Gombe&lgas=Akko,Balanga", { tok: R })).map(({ lga, ward, pu }) => ({ lga, ward, pu }));
+  const bulk = ok(await api("room/obs/bulk", { tok: R, body: { per: 1, units, officers: [{ lga: "Akko", ward: "Ward A", name: "Bulk Ward A Officer", phone: "0802" }, { lga: "Akko", ward: "Nowhere", name: "Ignored" }] } }));
+  const made = bulk.created;
+  assert.equal(bulk.officers.length, 1);
+  assert.ok(/^CO1-/.test(bulk.officers[0].code) && bulk.officers[0].ward == "Ward A", "ward officer named while generating observers");
+  const again = ok(await api("room/obs/bulk", { tok: R, body: { per: 1, units, officers: [{ lga: "Akko", ward: "Ward A", name: "Second" }] } }));
+  assert.equal(again.officers[0].existing, true, "a ward that already has an officer is left alone");
+  ok(await api("officers/" + bulk.officers[0].id, { tok: C, method: "DELETE" }));
+  const tok = async (o) => ok(await api("login/observer", { body: { code: o.code, pin: "1234", device: "dev-" + o.code + "-0123456789abcdef" } })).token;
+  const wa1 = made.find((x) => x.ward == "Ward A" && x.pu == "001"), wa2 = made.find((x) => x.ward == "Ward A" && x.pu == "002");
+  const t1 = await tok(wa1), t2 = await tok(wa2);
+  ok(await api("observer/tally", { tok: t1, body: { party: "APC", v: 100 } }));
+  ok(await api("observer/tally", { tok: t1, body: { party: "PDP", v: 40 } }));
+  ok(await api("observer/tally", { tok: t2, body: { party: "APC", v: 30 } }));
+  // creating officers: Command Center only; the state is fixed to the Command Center's
+  assert.equal((await api("officers", { tok: R, body: { level: "state", name: "x" } })).s, 403);
+  const byRoom = ok(await api("officers", { tok: R, body: { level: "ward", name: "Room-added", lga: "Akko", ward: "Ward B" } }));
+  assert.ok(/^CO1-/.test(byRoom.code));
+  ok(await api("officers/" + byRoom.id, { tok: C, method: "DELETE" }));
+  assert.equal((await api("officers", { tok: C, body: { level: "ward", name: "No ward", lga: "Akko" } })).s, 400);
+  const wo = ok(await api("officers", { tok: C, body: { level: "ward", name: "Ward A Officer", phone: "0803", lga: "Akko", ward: "Ward A", state: "Kano" } }));
+  const lo = ok(await api("officers", { tok: C, body: { level: "lga", name: "Akko LGA Officer", lga: "Akko" } }));
+  const so = ok(await api("officers", { tok: C, body: { level: "state", name: "State Officer" } }));
+  assert.ok(/^CO1-/.test(wo.code) && /^CO2-/.test(lo.code) && /^CO3-/.test(so.code) && wo.state == "Gombe");
+  assert.equal((await api("login/officer", { body: { code: wo.code, pass: "wrongpass" } })).s, 401);
+  const W = ok(await api("login/officer", { body: { code: wo.code, pass: wo.passcode } })).token,
+    L = ok(await api("login/officer", { body: { code: lo.code, pass: lo.passcode } })).token,
+    T = ok(await api("login/officer", { body: { code: so.code, pass: so.passcode } })).token;
+  // Report A at ward level = the polling units of that ward only
+  const wu = ok(await api("officer/units", { tok: W }));
+  assert.deepEqual(wu.units.map((u) => u.label.split(" · ")[1]), ["001", "002"]);
+  const u1 = wu.units.find((u) => u.key.includes("|001|") || u.label.endsWith("001"));
+  assert.equal(u1.fig.APC, 100);
+  // confirm once, then no second go; correct once on the other
+  assert.equal(ok(await api("officer/confirm", { tok: W, body: { key: u1.key } })).act, "confirm");
+  assert.equal((await api("officer/confirm", { tok: W, body: { key: u1.key, fig: { APC: 99 } } })).s, 409);
+  const u2 = wu.units.find((u) => u.key != u1.key);
+  assert.equal(ok(await api("officer/confirm", { tok: W, body: { key: u2.key, fig: { APC: 35, PDP: 5 } } })).act, "correct");
+  assert.equal((await api("officer/confirm", { tok: W, body: { key: "pu:nope" } })).s, 404);
+  // the LGA officer collects from the wards — and sees the wards' corrected PU figures, not the raw ones
+  const lu = ok(await api("officer/units", { tok: L }));
+  assert.deepEqual(lu.units.map((u) => u.label), ["Ward A", "Ward B"]);
+  const wardA = lu.units.find((u) => u.label == "Ward A");
+  assert.deepEqual([wardA.fig.APC, wardA.fig.PDP, wardA.reporting, wardA.pus], [135, 45, 2, 2]);
+  assert.equal(ok(await api("officer/confirm", { tok: L, body: { key: wardA.key } })).act, "confirm");
+  // the state officer sees LGAs; cannot reach into another LGA's key via a ward officer's token
+  const su_ = ok(await api("officer/units", { tok: T }));
+  assert.deepEqual(su_.units.map((u) => u.label), ["Akko", "Balanga"]);
+  assert.equal((await api("officer/confirm", { tok: W, body: { key: su_.units[1].key } })).s, 404);
+  // Report B: the physical sheet arrives; compared with Report A
+  ok(await api("officer/manual", { tok: L, body: { key: wardA.key, fig: { APC: 140, PDP: 45 }, boxes: 2, note: "2 boxes" } }));
+  ok(await api("officer/manual", { tok: L, body: { key: wardA.key, fig: { APC: 138, PDP: 45 }, boxes: 2 } }));
+  const wardA2 = ok(await api("officer/units", { tok: L })).units.find((u) => u.label == "Ward A");
+  assert.deepEqual([wardA2.manual.fig.APC, wardA2.manual.revs, wardA2.diff], [138, 1, ["APC"]]);
+  assert.equal((await api("officer/manual", { tok: L, body: { key: wardA.key, fig: { APC: -1 } } })).s, 400);
+  // the Command Center sees who did what; officers cannot reach Command Center data
+  const rec = ok(await api("officers/records", { tok: C }));
+  assert.equal(rec.confirms.length, 3);
+  assert.equal(rec.manual.length, 1);
+  assert.equal(ok(await api("officers", { tok: C })).length, 3);
+  assert.equal((await api("officers", { tok: W })).s, 403);
+  // another Command Center sees none of it
+  assert.equal(ok(await api("officers", { tok: S.A })).filter((o) => o.name.includes("Officer")).length, 0);
+  // switching an officer off ends their access
+  ok(await api("officers/" + lo.id + "/active", { tok: C, body: { active: false } }));
+  assert.equal((await api("officer/units", { tok: L })).s, 401);
+  const nw = ok(await api("officers/" + wo.id + "/reset", { tok: C, body: {} }));
+  assert.equal((await api("login/officer", { body: { code: wo.code, pass: wo.passcode } })).s, 401);
+  assert.ok(ok(await api("login/officer", { body: { code: wo.code, pass: nw.passcode } })).token);
 });

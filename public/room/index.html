@@ -72,7 +72,7 @@
       };
       // an observer's sign-in card: the code + a QR that opens the Observer sign-in with the code filled in
       // ---------- bulk observer codes: pick LGAs, wards and polling units with tick-boxes ----------
-      const BLK = { lgas: new Set(), all: [], loaded: false, rows: [], key: "", wards: new Set(), pus: new Set(), per: 2, busy: false };
+      const BLK = { lgas: new Set(), all: [], loaded: false, rows: [], key: "", wards: new Set(), pus: new Set(), per: 2, busy: false, off: {} };
       const wk = (r) => r.lga + "|" + r.ward,
         pk = (r) => r.lga + "|" + r.ward + "|" + r.pu,
         pn = (v) => String(v || "").split(/[\/-]/).pop().replace(/\D/g, "").padStart(3, "0");
@@ -126,6 +126,17 @@
         return { units: u.length, codes, topped };
       }
       const blkLinks = (f, all) => ` <a href="#" onclick="${f}(true);return false">all</a> · <a href="#" onclick="${f}(false);return false">none</a>`;
+      // Ward Collation Officers (1), named while the observers are generated
+      const blkOffs = () =>
+        [...new Set(blkChosen().map(wk))]
+          .map((k) => ({ k, lga: k.split("|")[0], ward: k.split("|")[1], ...(BLK.off[k] || {}) }))
+          .filter((o) => (o.name || "").trim());
+      function blkOffForm() {
+        const ws = [...new Set(blkChosen().map(wk))];
+        if (!ws.length || ws.length > 40) return ws.length ? '<div class="muted" style="margin:8px 0">Add ward officers from the <b>Collation Officers</b> tab for a batch this large.</div>' : "";
+        return `<details style="margin:8px 0"><summary style="cursor:pointer;font-weight:600"><i class="fas fa-clipboard-check"></i> Ward Collation Officer 1 — optional (${blkOffs().length} named)</summary><div class="muted" style="margin:6px 0">Name the supervisor for each ward now; they get a sign-in QR. Leave a ward blank to skip it.</div>${ws.map((k) => { const [l, w] = k.split("|"), o = BLK.off[k] || {}; return `<div style="display:flex;gap:6px;align-items:center;margin:4px 0;flex-wrap:wrap"><span style="min-width:110px;font-size:13px"><b>${esc(w)}</b>${BLK.all.length > 1 ? ` <span class="muted">${esc(l)}</span>` : ""}</span><input class="fi" style="flex:1;min-width:120px;margin:0" placeholder="Officer name" value="${esc(o.name || "")}" oninput="blkOff('${esc(k)}','name',this.value)"><input class="fi" style="flex:1;min-width:110px;margin:0" type="tel" placeholder="Phone" value="${esc(o.phone || "")}" oninput="blkOff('${esc(k)}','phone',this.value)"></div>`; }).join("")}</details>`;
+      }
+      const blkOff = (k, f, v) => ((BLK.off[k] = BLK.off[k] || {})[f] = v);
       function blkPicker() {
         setTimeout(blkInit, 0);
         if (!BLK.loaded) return '<div class="muted">Loading the LGAs…</div>';
@@ -140,14 +151,16 @@
           <div class="muted" style="margin:4px 0">Polling units <b>${plan.units}</b> of ${pus.length} ${blkLinks("blkPuAll")}</div>${box(pus.map((r) => `<label><input type="checkbox" ${BLK.pus.has(pk(r)) ? "checked" : ""} onchange="blkPu(this.dataset.v,this.checked)" data-v="${esc(pk(r))}"> ${esc(r.pu)}${r.name ? ` <span class="muted">· ${esc(r.name)}</span>` : ""}${BLK.wards.size > 1 ? ` <span class="muted">· ${esc(r.ward)}</span>` : ""}</label>`).join(""))}` : BLK.lgas.size ? '<div class="muted">No polling units are loaded for that LGA yet.</div>' : '<div class="muted">Tick at least one LGA.</div>'}
           <div style="display:flex;gap:10px;align-items:center;margin:10px 0 6px;flex-wrap:wrap"><span>Observers per polling unit</span><select class="fi" style="width:auto;margin:0;flex:none" onchange="BLK.per=+this.value;render()">${[1, 2, 3, 4, 5].map((n) => `<option value="${n}" ${BLK.per == n ? "selected" : ""}>${n}${n == 2 ? " (recommended)" : ""}</option>`).join("")}</select></div>
           <div class="muted" style="margin-bottom:8px"><b>${plan.units}</b> polling unit${plan.units == 1 ? "" : "s"} → <b>${plan.codes}</b> new code${plan.codes == 1 ? "" : "s"}${plan.topped ? ` · ${plan.topped} unit${plan.topped == 1 ? " already has" : "s already have"} observers and only get what is missing` : ""}</div>
-          <button class="btn btn-primary" ${plan.codes && !BLK.busy ? "" : "disabled"} onclick="blkGo()"><i class="fas fa-key"></i> Generate ${plan.codes} code${plan.codes == 1 ? "" : "s"}</button>`;
+          ${blkOffForm()}
+          <button class="btn btn-primary" ${(plan.codes || blkOffs().length) && !BLK.busy ? "" : "disabled"} onclick="blkGo()"><i class="fas fa-key"></i> Generate ${plan.codes} code${plan.codes == 1 ? "" : "s"}</button>`;
       }
       async function blkGo() {
         BLK.busy = true;
         render();
         try {
-          const r = await A.post("room/obs/bulk", { per: BLK.per, units: blkChosen().map(({ lga, ward, pu }) => ({ lga, ward, pu })) });
+          const r = await A.post("room/obs/bulk", { per: BLK.per, units: blkChosen().map(({ lga, ward, pu }) => ({ lga, ward, pu })), officers: blkOffs().map((o) => ({ lga: o.lga, ward: o.ward, name: o.name, phone: o.phone })) });
           BLK.busy = false;
+          BLK.off = {};
           await loadAll();
           blkDone(r);
         } catch (e) {
@@ -161,9 +174,11 @@
         const w = document.createElement("div");
         w.id = "credm";
         w.style.cssText = "position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:9000;display:flex;align-items:center;justify-content:center;padding:14px;overflow:auto";
-        w.innerHTML = `<div class="card" style="max-width:460px;width:100%;margin:auto"><div class="card-header"><h3><i class="fas fa-circle-check" style="color:#38a169"></i> ${r.created.length} observer code${r.created.length == 1 ? "" : "s"} created</h3></div><div class="muted" style="margin-bottom:10px">${r.skipped ? r.skipped + " polling unit" + (r.skipped == 1 ? "" : "s") + " already had enough observers. " : ""}Print the QR cards and hand them out. Type each observer's name in the <b>Name</b> box of the list whenever you have it.</div><div class="mono" style="max-height:160px;overflow:auto;font-size:12px;border:1px solid #e2e8f0;border-radius:8px;padding:8px;margin-bottom:12px">${r.created.map((c) => esc(c.code) + " · " + esc(c.lga) + " · PU " + esc(c.pu)).join("<br>")}</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary" id="bq"><i class="fas fa-print"></i> Print QR cards</button><button class="btn btn-outline" id="bc"><i class="fas fa-file-csv"></i> Download list</button><button class="btn btn-outline" id="bd">Done</button></div></div>`;
+        w.innerHTML = `<div class="card" style="max-width:460px;width:100%;margin:auto"><div class="card-header"><h3><i class="fas fa-circle-check" style="color:#38a169"></i> ${r.created.length} observer code${r.created.length == 1 ? "" : "s"} created</h3></div><div class="muted" style="margin-bottom:10px">${r.skipped ? r.skipped + " polling unit" + (r.skipped == 1 ? "" : "s") + " already had enough observers. " : ""}Print the QR cards and hand them out. Type each observer's name in the <b>Name</b> box of the list whenever you have it.</div><div class="mono" style="max-height:160px;overflow:auto;font-size:12px;border:1px solid #e2e8f0;border-radius:8px;padding:8px;margin-bottom:12px">${r.created.map((c) => esc(c.code) + " · " + esc(c.lga) + " · PU " + esc(c.pu)).join("<br>")}</div>${(r.officers || []).filter((o) => o.code).length ? `<div style="background:#faf5ff;border:1px solid #d6bcfa;border-radius:8px;padding:8px;margin-bottom:12px"><b>Collation Officers created</b><div class="mono" style="font-size:12px;margin:4px 0">${r.officers.filter((o) => o.code).map((o) => esc(o.name) + " (" + esc(o.ward) + ") · " + esc(o.code) + " · " + esc(o.passcode)).join("<br>")}</div><button class="btn btn-sm btn-outline" id="bo"><i class="fas fa-print"></i> Print officer QR cards</button><div class="muted" style="font-size:11px;margin-top:4px">Passcodes are shown once.</div></div>` : ""}${(r.officers || []).some((o) => o.existing) ? '<div class="muted" style="margin-bottom:8px">A ward that already has an officer was left as it is.</div>' : ""}<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary" id="bq"><i class="fas fa-print"></i> Print QR cards</button><button class="btn btn-outline" id="bc"><i class="fas fa-file-csv"></i> Download list</button><button class="btn btn-outline" id="bd">Done</button></div></div>`;
         document.body.appendChild(w);
         w.querySelector("#bq").onclick = () => printCreds("Observer sign-in sheets", r.created.map((c) => ({ title: "Observer sign-in — PU " + c.pu, lines: [["Sign in at", ORIGIN.replace(/^https?:\/\//, "") + "/observer/ (or the Observer app)"], ["Code", c.code], ["Polling unit", [c.lga, c.ward, "PU " + c.pu].join(" / ")]], link: loginLink("obs", c.code) })));
+        const bo = w.querySelector("#bo");
+        if (bo) bo.onclick = () => printCreds("Collation officer sign-in sheets", r.officers.filter((o) => o.code).map((o) => ({ title: o.title + " — " + o.name, lines: [["Sign in at", ORIGIN.replace(/^https?:\/\//, "") + "/officer/"], ["Officer code", o.code], ["Passcode", o.passcode], ["Area", [o.lga, o.ward].join(" / ")]], link: loginLink("officer", o.code, o.passcode) })));
         w.querySelector("#bc").onclick = () => {
           const a = document.createElement("a");
           a.href = URL.createObjectURL(new Blob(["code,lga,ward,pu,pu_name,registered_voters,name\n" + r.created.map((c) => [c.code, c.lga, c.ward, c.pu, c.pu_name, c.reg, ""].map((v) => '"' + String(v).replace(/"/g, '""') + '"').join(",")).join("\n")], { type: "text/csv" }));
@@ -202,10 +217,48 @@
           toast("⚠️ " + e.message);
         }
       }
+      // ---- Collation Officers (ward / LGA) for this room's area ----
+      let OFFS = null;
+      const OFFT = { ward: "Collation Officer 1 · Ward", lga: "Collation Officer 2 · LGA", state: "Collation Officer 3 · State" };
+      async function offLoad() {
+        try { OFFS = await A.get("officers"); } catch { OFFS = []; }
+        render();
+      }
+      async function offLga() {
+        const mine = String(ME.room.scope || "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
+        try {
+          $("#dl-ol").innerHTML = (await A.get("locations?state=" + encodeURIComponent(ME.room.state))).filter((x) => !mine.length || mine.includes(x.lga.toLowerCase())).map((x) => `<option>${esc(x.lga)}`).join("");
+        } catch {}
+      }
+      async function offWards() {
+        try { $("#dl-ow").innerHTML = (await A.get("locations?state=" + encodeURIComponent(ME.room.state) + "&lga=" + encodeURIComponent($("#olg").value))).map((x) => `<option>${esc(x.ward)}`).join(""); } catch {}
+      }
+      async function offAdd() {
+        const lv = $("#ol").value;
+        try {
+          const r = await A.post("officers", { level: lv, name: $("#on").value, phone: $("#op").value, lga: $("#olg").value, ward: $("#ow").value });
+          credModal({ title: r.title + " — sign-in", lines: [["Name", r.name], ["Sign in at", ORIGIN.replace(/^https?:\/\//, "") + "/officer/"], ["Officer code", r.code], ["Passcode", r.passcode]], link: loginLink("officer", r.code, r.passcode), note: "Shown once. Ask the Command Center to reset it if lost." });
+          ["on", "op", "ow"].forEach((i) => ($("#" + i).value = ""));
+          offLoad();
+        } catch (e) { toast("⚠️ " + e.message); }
+      }
+      const rOff = () => {
+        if (!OFFS) { offLoad(); return '<div class="card muted">Loading…</div>'; }
+        setTimeout(offLga, 60);
+        const mine = String(ME.room.scope || "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean),
+          list = OFFS.filter((o) => o.level != "state" && (!mine.length || mine.includes((o.lga || "").toLowerCase())));
+        return `<div class="muted" style="margin-bottom:10px">Polling-unit observers → <b>Collation Officer 1 (ward)</b> → <b>Collation Officer 2 (LGA)</b> → Command Center.</div><div class="dashboard-grid side"><div class="card"><div class="card-header"><h3><i class="fas fa-plus"></i> Add a Collation Officer</h3></div>
+<select class="fi" id="ol"><option value="ward">Collation Officer 1 — Ward</option><option value="lga">Collation Officer 2 — LGA</option></select>
+<input class="fi" id="on" placeholder="Full name"><input class="fi" id="op" type="tel" placeholder="Phone number">
+<input class="fi" id="olg" list="dl-ol" placeholder="LGA" onchange="offWards()"><datalist id="dl-ol"></datalist><input class="fi" id="ow" list="dl-ow" placeholder="Ward (for a ward officer)" onfocus="offWards()"><datalist id="dl-ow"></datalist>
+<button class="btn btn-primary" onclick="offAdd()"><i class="fas fa-user-plus"></i> Add officer &amp; get sign-in QR</button></div>
+<div class="card"><div class="card-header"><h3><i class="fas fa-clipboard-check"></i> Collation Officers (${list.length})</h3></div>${list.length ? `<table><tr><th>Officer</th><th>Area</th><th>Confirmed</th></tr>${list.map((o) => `<tr><td><b>${esc(o.name)}</b><br><span class="muted">${esc(OFFT[o.level])}${o.phone ? " · " + esc(o.phone) : ""}</span></td><td>${esc([o.lga, o.ward].filter(Boolean).join(" › "))}</td><td>${o.confirmed}</td></tr>`).join("")}</table>` : '<div class="muted">None yet.</div>'}</div></div>`;
+      };
       start("room", () => ({
         dash: ["Situation Room Dashboard", "building-columns", () => roomDash(ME.id, false)],
         res: ["Results & EC8A", "scale-balanced", () => cardSearch(0, DATA.obs) + '<div style="margin-top:20px">' + tabResults(false) + "</div>"],
         obs: ["Observer Manager", "user-gear", rObs],
+        off: ["Collation Officers", "clipboard-check", rOff],
         con: ["Contacts", "address-book", tabContacts],
         dat: ["Data Download", "download", tabData],
         share: ["Share Live View", "share-nodes", tabShare],

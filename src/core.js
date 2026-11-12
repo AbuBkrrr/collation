@@ -149,6 +149,9 @@ create table if not exists radio(id serial primary key,room_id text,ts timestamp
 create table if not exists locations(state text,lga text,ward text,pu text,reg int);
 create index if not exists loc_i on locations(state,lga,ward);
 alter table locations add column if not exists name text;alter table observers add column if not exists pu_name text;alter table observers add column if not exists pend int default 0;
+create table if not exists officers(id serial primary key,tenant text,level text,name text,phone text,state text,lga text,ward text,code text unique,pass_hash text,active bool default true,seen timestamptz,ts timestamptz default now());
+create table if not exists officer_confirms(id serial primary key,tenant text,officer_id int references officers(id) on delete cascade,ckey text,act text,fig jsonb,orig jsonb,ts timestamptz default now(),unique(officer_id,ckey));
+create table if not exists officer_manual(id serial primary key,tenant text,officer_id int references officers(id) on delete cascade,area text,fig jsonb,boxes int,note text,revs int default 0,ts timestamptz default now(),unique(officer_id,area));
 create table if not exists cmd_users(id serial primary key,name text unique,pass_hash text,active bool default true);
 create table if not exists radio_keys(room_id text primary key,key_hash text);
 create table if not exists tenants(id text primary key,name text,active bool default true);
@@ -189,6 +192,9 @@ create or replace function app_room() returns text language sql stable as $f$ se
 ${[
   ["rooms", "tenant=app_tn() and (app_room() is null or id=app_room())"],
   ["tenants", "id=app_tn()"],
+  ["officers", "tenant=app_tn()"],
+  ["officer_confirms", "tenant=app_tn()"],
+  ["officer_manual", "tenant=app_tn()"],
   ["cmd_users", "tenant=app_tn()"],
   ["messages", "tenant=app_tn()"],
   ["audit", "tenant=app_tn()"],
@@ -334,6 +340,13 @@ const auth =
           return res.status(401).json({ error: "Session ended: this code was reset to another device" });
         u.room = o.room_id;
         u.tn = o.tenant;
+      }
+      if (u.role == "officer") {
+        const [o] = await q("select o.*,t.active ta from officers o join tenants t on t.id=o.tenant where o.id=$1", [u.id]);
+        if (!o || !o.active || !o.ta) return res.status(401).json({ error: "Access revoked" });
+        u.tn = o.tenant;
+        u.off = o;
+        u.name = o.name || o.code;
       }
       req.u = u;
       als.run({ name: u.name, tn: u.tn, room: u.role == "cmd" ? "" : u.room }, () => next());

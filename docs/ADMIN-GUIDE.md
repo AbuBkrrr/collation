@@ -49,6 +49,7 @@ This is your main job. Go to the **Command Centres** tab.
    - **First operator name** — *leave blank* and the system makes a unique one from the name
      (`kano-state-command`, then `-2` if taken). Type one only if you want a specific login name;
      it must be unique across the whole platform.
+   - **State Collation Officer — name / phone (optional)** — creates the state-level Collation Officer 3 for this client with a sign-in QR.
    - **Operator passcode / Confirm** — *leave blank* to auto-generate a strong one, or type your own
      (min 8 characters) and confirm it. Use **Show** to check what you typed.
 2. Click **Create Command Centre**.
@@ -188,12 +189,13 @@ demo. It never touches real client data.
 
 ## 6. The Android apps
 
-Two apps are built by CI and published on the landing page automatically:
+Three apps are built by CI and published on the landing page automatically:
 
 - **Observer app** — `/download/app`
 - **Situation Room app** — `/download/room`
+- **Collation Officer app** — `/download/officer`
 
-Both also run in any browser. You don't build these by hand — a push that changes the app rebuilds
+All three also run in any browser. You don't build these by hand — a push that changes the app rebuilds
 them (see `mobile/README.md`). On the landing page each shows a **Download (.apk)** button and a QR
 code once built.
 
