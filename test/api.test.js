@@ -828,6 +828,14 @@ test("collation officers: ward / LGA / state, confirm or correct once, manual (R
   const su_ = ok(await api("officer/units", { tok: T }));
   assert.deepEqual(su_.units.map((u) => u.label), ["Akko", "Balanga"]);
   assert.equal((await api("officer/confirm", { tok: W, body: { key: su_.units[1].key } })).s, 404);
+  // an officer sees their whole area from the location list, even before any observer has reported there
+  const so2 = ok(await api("officers", { tok: C, body: { level: "ward", name: "Empty ward", lga: "Balanga", ward: "Ward C" } }));
+  const E = ok(await api("login/officer", { body: { code: so2.code, pass: so2.passcode } })).token;
+  const eu = ok(await api("officer/units", { tok: E })).units;
+  assert.equal(eu.length, 1);
+  assert.equal(eu[0].pus, 1);
+  assert.equal(eu[0].reporting, 0);
+  ok(await api("officers/" + so2.id, { tok: C, method: "DELETE" }));
   // Report B: the physical sheet arrives; compared with Report A
   ok(await api("officer/manual", { tok: L, body: { key: wardA.key, fig: { APC: 140, PDP: 45 }, boxes: 2, note: "2 boxes" } }));
   ok(await api("officer/manual", { tok: L, body: { key: wardA.key, fig: { APC: 138, PDP: 45 }, boxes: 2 } }));

@@ -125,6 +125,32 @@ async function fetchUnits(req) {
     } else if (o.level == "lga") add("ward:" + [x.state, x.lga, x.ward, ck].join("|"), x.ward, x);
     else add("lga:" + [x.state, x.lga, ck].join("|"), x.lga, x);
   }
+  // The officer's whole area from the state's location list, even where no observer has reported yet
+  const lw = ["state=$1"], la = [o.state];
+  if (o.lga) (la.push(o.lga), lw.push("lga=$" + la.length));
+  if (o.ward) (la.push(o.ward), lw.push("ward=$" + la.length));
+  const locs = await q("select lga,ward,pu,name from locations where " + lw.join(" and ") + " order by lga,ward,pu", la),
+    nz = (v) => String(v == null ? "" : v).replace(/^0+(?=.)/, ""),
+    covered = new Set(pus.map((x) => [x.lga, x.ward, nz(x.pu)].join("|"))),
+    count = {};
+  for (const r of locs) {
+    const area = o.level == "ward" ? null : o.level == "lga" ? "ward:" + [o.state, r.lga, r.ward].join("|") : "lga:" + [o.state, r.lga].join("|");
+    if (area) count[area] = (count[area] || 0) + 1;
+    if (covered.has([r.lga, r.ward, nz(r.pu)].join("|"))) continue;
+    const x = { key: [o.state, r.lga, r.ward, r.pu, "general"].join("|"), contest: "", state: o.state, lga: r.lga, ward: r.ward, pu: r.pu, pu_name: r.name, status: "pending", fig: null, verified: false, obs: [], anomaly: false, ec8a: 0 };
+    if (o.level == "ward") {
+      const u = add("pu:" + x.key, (r.name || r.pu) + " · " + r.pu, x);
+      u.pu = { code: r.pu, status: "pending", obs: 0, anomaly: false, ec8a: 0, wardConf: null, raw: null };
+    } else if (o.level == "lga") add("ward:" + [o.state, r.lga, r.ward, ""].join("|"), r.ward, x);
+    else add("lga:" + [o.state, r.lga, ""].join("|"), r.lga, x);
+  }
+  // an area with no report at all shows once; one with contests shows per contest and is not duplicated by an empty line
+  const reported = new Set(Object.values(units).filter((u) => u.contest).map((u) => u.key.replace(/\|[^|]*$/, "")));
+  for (const k of Object.keys(units)) if (!units[k].contest && reported.has(k.replace(/\|[^|]*$/, ""))) delete units[k];
+  for (const u of Object.values(units)) {
+    const ck = u.key.startsWith("pu:") ? null : u.key.replace(/\|[^|]*$/, "");
+    if (ck && count[ck] > u.pus) u.pus = count[ck];
+  }
   const out = Object.values(units)
     .map((u) => {
       const fig = sum(u.figs),
