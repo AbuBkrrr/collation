@@ -15,8 +15,9 @@ async function puList(u, f) {
   const ck = JSON.stringify([u.tn, u.role, u.id, f]),
     hit_ = cache.get(ck);
   if (hit_ && Date.now() - hit_.t < 2000) return hit_.v;
-  const w = ["o.active", "o.room_id in (select id from rooms where not coalesce(archived,false))"],
+  const w = ["o.active"],
     a = [];
+  if (!f.withArchived) w.push("o.room_id in (select id from rooms where not coalesce(archived,false))"); // internal: the administrator reviewing archived data
   const add = (c, v) => {
     a.push(v);
     w.push(c + "=$" + a.length);

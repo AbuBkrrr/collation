@@ -801,7 +801,7 @@ async function loadAll() {
   // a Command Center locked to one state: its LGA list, for the room form and the search filters
   if (A.role == "cmd" && ME.tenantState && !DATA.lgas) DATA.lgas = (await g("locations?state=" + encodeURIComponent(ME.tenantState))).map((x) => x.lga);
   if (A.role == "cmd" && ME.su) DATA.bk = await A.get("backups").catch(() => null);
-  if (A.role == "cmd" && ME.su) DATA.vault = await g("admin/vault");
+  if (A.role == "cmd" && ME.su) DATA.arch = await A.get("admin/archive").catch(() => null);
   if (A.role == "cmd" && ME.su) DATA.mkt = await A.get("pitch/stats").catch(() => null);
   if ($("#collSlot")) loadColl();
   if (TAB == "res" && PUS_) loadPus();
@@ -821,7 +821,7 @@ function refresh() {
   render();
 }
 function render() {
-  if (document.activeElement && /^(rc_|bm$)/.test(document.activeElement.id)) return; // a frequency is being typed
+  if (document.activeElement && /^(rc_|bm$|on_)/.test(document.activeElement.id)) return; // a frequency is being typed
   const tb = {
     ...TABS(),
     ...(A.role == "cmd" && DRILL

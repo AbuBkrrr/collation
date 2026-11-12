@@ -30,8 +30,8 @@
           locLoad("lga");
           if ($("#gl")?.value) locLoad("ward");
         }, 60);
-        return `<div class="dashboard-grid"><div class="card"><div class="card-header"><h3><i class="fas fa-key"></i> Generate Observer Code</h3></div>${ME.room.state ? `<input type="hidden" id="gs" value="${esc(ME.room.state)}"><div class="fi" style="background:#f7fafc;color:#4a5568"><i class="fas fa-lock" style="font-size:11px"></i> State: <b>${esc(ME.room.state)}</b> <span class="muted">(fixed for this room)</span></div>` : `<select class="fi" id="gs" onchange="locLoad('lga')">${CFG.states.map((s) => `<option ${s == ME.room.state ? "selected" : ""}>${s}</option>`).join("")}</select>`}<input class="fi" id="gl" list="dl-lga" placeholder="${ME.room.scope && ME.room.scope.includes(",") ? "LGA (one of: " + esc(ME.room.scope.split(",").join(", ")) + ")" : "LGA"}" value="${esc(ME.room.scope && !ME.room.scope.includes(",") ? ME.room.scope : "")}" ${ME.room.scope && !ME.room.scope.includes(",") ? "readonly" : ""} onchange="locLoad('ward')"><datalist id="dl-lga"></datalist><input class="fi" id="gw" list="dl-ward" placeholder="Ward" onchange="locLoad('pu')"><datalist id="dl-ward"></datalist><input class="fi" id="gp" list="dl-pu" placeholder="PU code (e.g. 012)" onchange="puReg()"><datalist id="dl-pu"></datalist><input class="fi" id="gr" type="number" placeholder="Registered voters (default 500)"><input class="fi" id="gn" placeholder="Observer name (optional)"><button class="btn btn-primary" onclick="genCode()"><i class="fas fa-key"></i> Generate Code</button><div class="muted" style="margin-top:8px">The code is the ONLY login link. It binds one observer to this room and one PU. Generate two codes per PU: the two observers' figures are compared automatically. On first login the code locks to that phone with a PIN the observer chooses; use "Reset phone" if a phone is lost.</div></div>
-<div class="card"><div class="card-header"><h3><i class="fas fa-users"></i> Observers (${all.length})</h3><button class="btn btn-sm btn-outline" onclick="printCreds('Observer sign-in sheets',flt(DATA.obs).filter(o=>o.active&&!o.bound).slice(0,400).map(o=>obsCredOf(o.code)))"><i class="fas fa-print"></i> Print QR sheet (unused codes)</button><input placeholder="Search code, name, PU…" value="${esc(F.q || "")}" onchange="setF('q',this.value)" style="padding:6px 10px;border-radius:8px;border:1px solid #cbd5e0"></div><div class="tw"><table><tr><th>Code</th><th>Name</th><th>Location</th><th>Reg.</th><th>Status</th><th>Phone</th><th>Tallies (hover = edit history)</th><th>Actions</th></tr>${flt(all).slice(0, 500).map((o) => `<tr><td class="mono">${esc(o.code)}</td><td>${esc(o.name)}</td><td>${esc(o.state)}/${esc(o.lga)}/${esc(o.ward)}/PU ${esc(o.pu)}</td><td>${o.reg}</td><td>${o.active ? pill(st(o)) : '<span class="pill r">Revoked</span>'}</td><td>${o.bound ? '<span class="pill g">Locked</span>' : '<span class="pill s">Not used yet</span>'}</td><td>${tallyCell(o)}</td><td><button class="btn btn-sm btn-outline" onclick="SEL='${o.code}';TAB='dash';render()">Feed</button> <button class="btn btn-sm btn-outline" onclick="navigator.clipboard?.writeText('${o.code}');toast('Copied')">Copy</button> <button class="btn btn-sm btn-outline" onclick="obsCred('${o.code}')"><i class="fas fa-qrcode"></i> QR</button> ${o.bound ? `<button class="btn btn-sm btn-outline" onclick="resetDev('${o.code}')">Reset phone</button> ` : ""}<button class="btn btn-sm ${o.active ? "btn-danger" : "btn-success"}" onclick="A.post('obs/${o.code}/toggle')">${o.active ? "Revoke" : "Activate"}</button></td></tr>`).join("")}</table></div></div></div>`;
+        return `<div class="dashboard-grid side"><div class="card"><div class="card-header"><h3><i class="fas fa-key"></i> Generate observer codes</h3></div>${CFG.loc ? blkPicker() : ""}<details ${CFG.loc ? "" : "open"} style="margin-top:12px"><summary style="cursor:pointer;font-weight:600;color:#2b6cb0">${CFG.loc ? "Add one observer by typing the details" : "Add an observer (type the details)"}</summary><div style="margin-top:10px">${ME.room.state ? `<input type="hidden" id="gs" value="${esc(ME.room.state)}"><div class="fi" style="background:#f7fafc;color:#4a5568"><i class="fas fa-lock" style="font-size:11px"></i> State: <b>${esc(ME.room.state)}</b> <span class="muted">(fixed for this room)</span></div>` : `<select class="fi" id="gs" onchange="locLoad('lga')">${CFG.states.map((s) => `<option ${s == ME.room.state ? "selected" : ""}>${s}</option>`).join("")}</select>`}<input class="fi" id="gl" list="dl-lga" placeholder="${ME.room.scope && ME.room.scope.includes(",") ? "LGA (one of: " + esc(ME.room.scope.split(",").join(", ")) + ")" : "LGA"}" value="${esc(ME.room.scope && !ME.room.scope.includes(",") ? ME.room.scope : "")}" ${ME.room.scope && !ME.room.scope.includes(",") ? "readonly" : ""} onchange="locLoad('ward')"><datalist id="dl-lga"></datalist><input class="fi" id="gw" list="dl-ward" placeholder="Ward" onchange="locLoad('pu')"><datalist id="dl-ward"></datalist><input class="fi" id="gp" list="dl-pu" placeholder="PU code (e.g. 012)" onchange="puReg()"><datalist id="dl-pu"></datalist><input class="fi" id="gr" type="number" placeholder="Registered voters (default 500)"><input class="fi" id="gn" placeholder="Observer name (optional)"><button class="btn btn-primary" onclick="genCode()"><i class="fas fa-key"></i> Generate Code</button><div class="muted" style="margin-top:8px">The code is the ONLY login link. It binds one observer to this room and one PU. Generate two codes per PU: the two observers' figures are compared automatically. On first login the code locks to that phone with a PIN the observer chooses; use "Reset phone" if a phone is lost.</div></div></details></div>
+<div class="card"><div class="card-header"><h3><i class="fas fa-users"></i> Observers (${all.length})</h3><button class="btn btn-sm btn-outline" onclick="printCreds('Observer sign-in sheets',flt(DATA.obs).filter(o=>o.active&&!o.bound).slice(0,400).map(o=>obsCredOf(o.code)))"><i class="fas fa-print"></i> Print QR sheet (unused codes)</button><input placeholder="Search code, name, PU…" value="${esc(F.q || "")}" onchange="setF('q',this.value)" style="padding:6px 10px;border-radius:8px;border:1px solid #cbd5e0"></div><div class="tw"><table><tr><th>Code</th><th>Name</th><th>Location</th><th>Reg.</th><th>Status</th><th>Phone</th><th>Tallies (hover = edit history)</th><th>Actions</th></tr>${flt(all).slice(0, 500).map((o) => `<tr><td class="mono">${esc(o.code)}</td><td><input class="fi" id="on_${o.code}" style="margin:0;min-width:130px;padding:6px 8px" value="${esc(o.name)}" placeholder="Add name" onchange="setObsName('${o.code}',this.value)"></td><td>${esc(o.state)}/${esc(o.lga)}/${esc(o.ward)}/PU ${esc(o.pu)}</td><td>${o.reg}</td><td>${o.active ? pill(st(o)) : '<span class="pill r">Revoked</span>'}</td><td>${o.bound ? '<span class="pill g">Locked</span>' : '<span class="pill s">Not used yet</span>'}</td><td>${tallyCell(o)}</td><td><button class="btn btn-sm btn-outline" onclick="SEL='${o.code}';TAB='dash';render()">Feed</button> <button class="btn btn-sm btn-outline" onclick="navigator.clipboard?.writeText('${o.code}');toast('Copied')">Copy</button> <button class="btn btn-sm btn-outline" onclick="obsCred('${o.code}')"><i class="fas fa-qrcode"></i> QR</button> ${o.bound ? `<button class="btn btn-sm btn-outline" onclick="resetDev('${o.code}')">Reset phone</button> ` : ""}<button class="btn btn-sm ${o.active ? "btn-danger" : "btn-success"}" onclick="A.post('obs/${o.code}/toggle')">${o.active ? "Revoke" : "Activate"}</button></td></tr>`).join("")}</table></div></div></div>`;
       };
       let PUS = [];
       async function locLoad(next) {
@@ -73,6 +73,115 @@
         if (p) $("#gr").value = p.reg;
       };
       // an observer's sign-in card: the code + a QR that opens the Observer sign-in with the code filled in
+      // ---------- bulk observer codes: pick LGAs, wards and polling units with tick-boxes ----------
+      const BLK = { lgas: new Set(), all: [], loaded: false, rows: [], key: "", wards: new Set(), pus: new Set(), per: 2, busy: false };
+      const wk = (r) => r.lga + "|" + r.ward,
+        pk = (r) => r.lga + "|" + r.ward + "|" + r.pu,
+        pn = (v) => String(v || "").split(/[\/-]/).pop().replace(/\D/g, "").padStart(3, "0");
+      async function blkInit() {
+        if (BLK.loaded || !CFG.loc) return;
+        BLK.loaded = true;
+        const mine = String(ME.room.scope || "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
+        BLK.all = (await A.get("locations?state=" + encodeURIComponent(ME.room.state)).catch(() => [])).map((x) => x.lga).filter((l) => !mine.length || mine.includes(l.toLowerCase()));
+        if (BLK.all.length == 1) BLK.lgas.add(BLK.all[0]);
+        await blkUnits();
+        render();
+      }
+      async function blkUnits() {
+        const key = [...BLK.lgas].sort().join(",");
+        if (key === BLK.key) return;
+        BLK.key = key;
+        BLK.rows = key ? await A.get("locations/units?state=" + encodeURIComponent(ME.room.state) + "&lgas=" + encodeURIComponent(key)).catch(() => []) : [];
+        BLK.wards = new Set(BLK.rows.map(wk)); // everything ticked to begin with: untick what you do not want
+        BLK.pus = new Set(BLK.rows.map(pk));
+      }
+      const blkRender = () => blkUnits().then(render);
+      const blkLga = (l, on) => (on ? BLK.lgas.add(l) : BLK.lgas.delete(l), blkRender());
+      const blkLgaAll = (on) => ((BLK.lgas = on ? new Set(BLK.all) : new Set()), blkRender());
+      function blkWard(k, on) {
+        on ? BLK.wards.add(k) : BLK.wards.delete(k);
+        BLK.rows.filter((r) => wk(r) == k).forEach((r) => (on ? BLK.pus.add(pk(r)) : BLK.pus.delete(pk(r))));
+        render();
+      }
+      function blkWardAll(on) {
+        BLK.wards = on ? new Set(BLK.rows.map(wk)) : new Set();
+        BLK.pus = on ? new Set(BLK.rows.map(pk)) : new Set();
+        render();
+      }
+      const blkPu = (k, on) => (on ? BLK.pus.add(k) : BLK.pus.delete(k), render());
+      function blkPuAll(on) {
+        BLK.rows.filter((r) => BLK.wards.has(wk(r))).forEach((r) => (on ? BLK.pus.add(pk(r)) : BLK.pus.delete(pk(r))));
+        render();
+      }
+      const blkChosen = () => BLK.rows.filter((r) => BLK.pus.has(pk(r)) && BLK.wards.has(wk(r)));
+      function blkPlan() {
+        const have = {};
+        DATA.obs.filter((o) => o.active).forEach((o) => (have[[o.lga, o.ward, o.pu].join("|")] = (have[[o.lga, o.ward, o.pu].join("|")] || 0) + 1));
+        let codes = 0,
+          topped = 0;
+        const u = blkChosen();
+        u.forEach((r) => {
+          const need = Math.max(0, BLK.per - (have[[r.lga, r.ward, pn(r.pu)].join("|")] || 0));
+          codes += need;
+          if (need < BLK.per) topped++;
+        });
+        return { units: u.length, codes, topped };
+      }
+      const blkLinks = (f, all) => ` <a href="#" onclick="${f}(true);return false">all</a> · <a href="#" onclick="${f}(false);return false">none</a>`;
+      function blkPicker() {
+        setTimeout(blkInit, 0);
+        if (!BLK.loaded) return '<div class="muted">Loading the LGAs…</div>';
+        const wards = [...new Set(BLK.rows.map(wk))],
+          pus = BLK.rows.filter((r) => BLK.wards.has(wk(r))),
+          plan = blkPlan(),
+          multi = BLK.all.length > 1,
+          box = (h) => `<div class="lgabox" style="max-height:170px">${h}</div>`;
+        return `<div class="muted" style="margin-bottom:8px">Tick the LGAs, wards and polling units this batch is for — everything under a ticked LGA starts ticked, so you only untick what you don't want. Names are optional and can be typed in the list afterwards.</div>
+          ${multi ? `<div class="muted" style="margin:4px 0">LGAs <b>${BLK.lgas.size}</b> of ${BLK.all.length} ${blkLinks("blkLgaAll")}</div>${box(BLK.all.map((l) => `<label><input type="checkbox" ${BLK.lgas.has(l) ? "checked" : ""} onchange="blkLga(this.dataset.v,this.checked)" data-v="${esc(l)}"> ${esc(l)}</label>`).join(""))}` : `<div class="fi" style="background:#f7fafc;color:#4a5568">LGA: <b>${esc(BLK.all[0] || "—")}</b></div>`}
+          ${wards.length ? `<div class="muted" style="margin:4px 0">Wards <b>${BLK.wards.size}</b> of ${wards.length} ${blkLinks("blkWardAll")}</div>${box(wards.map((k) => { const [l, w] = k.split("|"); return `<label><input type="checkbox" ${BLK.wards.has(k) ? "checked" : ""} onchange="blkWard(this.dataset.v,this.checked)" data-v="${esc(k)}"> ${esc(w)}${multi ? ` <span class="muted">· ${esc(l)}</span>` : ""}</label>`; }).join(""))}
+          <div class="muted" style="margin:4px 0">Polling units <b>${plan.units}</b> of ${pus.length} ${blkLinks("blkPuAll")}</div>${box(pus.map((r) => `<label><input type="checkbox" ${BLK.pus.has(pk(r)) ? "checked" : ""} onchange="blkPu(this.dataset.v,this.checked)" data-v="${esc(pk(r))}"> ${esc(r.pu)}${r.name ? ` <span class="muted">· ${esc(r.name)}</span>` : ""}${BLK.wards.size > 1 ? ` <span class="muted">· ${esc(r.ward)}</span>` : ""}</label>`).join(""))}` : BLK.lgas.size ? '<div class="muted">No polling units are loaded for that LGA yet.</div>' : '<div class="muted">Tick at least one LGA.</div>'}
+          <div style="display:flex;gap:10px;align-items:center;margin:10px 0 6px;flex-wrap:wrap"><span>Observers per polling unit</span><select class="fi" style="width:auto;margin:0;flex:none" onchange="BLK.per=+this.value;render()">${[1, 2, 3, 4, 5].map((n) => `<option value="${n}" ${BLK.per == n ? "selected" : ""}>${n}${n == 2 ? " (recommended)" : ""}</option>`).join("")}</select></div>
+          <div class="muted" style="margin-bottom:8px"><b>${plan.units}</b> polling unit${plan.units == 1 ? "" : "s"} → <b>${plan.codes}</b> new code${plan.codes == 1 ? "" : "s"}${plan.topped ? ` · ${plan.topped} unit${plan.topped == 1 ? " already has" : "s already have"} observers and only get what is missing` : ""}</div>
+          <button class="btn btn-primary" ${plan.codes && !BLK.busy ? "" : "disabled"} onclick="blkGo()"><i class="fas fa-key"></i> Generate ${plan.codes} code${plan.codes == 1 ? "" : "s"}</button>`;
+      }
+      async function blkGo() {
+        BLK.busy = true;
+        render();
+        try {
+          const r = await A.post("room/obs/bulk", { per: BLK.per, units: blkChosen().map(({ lga, ward, pu }) => ({ lga, ward, pu })) });
+          BLK.busy = false;
+          await loadAll();
+          blkDone(r);
+        } catch (e) {
+          BLK.busy = false;
+          render();
+          toast("⚠️ " + e.message);
+        }
+      }
+      function blkDone(r) {
+        document.getElementById("credm")?.remove();
+        const w = document.createElement("div");
+        w.id = "credm";
+        w.style.cssText = "position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:9000;display:flex;align-items:center;justify-content:center;padding:14px;overflow:auto";
+        w.innerHTML = `<div class="card" style="max-width:460px;width:100%;margin:auto"><div class="card-header"><h3><i class="fas fa-circle-check" style="color:#38a169"></i> ${r.created.length} observer code${r.created.length == 1 ? "" : "s"} created</h3></div><div class="muted" style="margin-bottom:10px">${r.skipped ? r.skipped + " polling unit" + (r.skipped == 1 ? "" : "s") + " already had enough observers. " : ""}Print the QR cards and hand them out. Type each observer's name in the <b>Name</b> box of the list whenever you have it.</div><div class="mono" style="max-height:160px;overflow:auto;font-size:12px;border:1px solid #e2e8f0;border-radius:8px;padding:8px;margin-bottom:12px">${r.created.map((c) => esc(c.code) + " · " + esc(c.lga) + " · PU " + esc(c.pu)).join("<br>")}</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary" id="bq"><i class="fas fa-print"></i> Print QR cards</button><button class="btn btn-outline" id="bc"><i class="fas fa-file-csv"></i> Download list</button><button class="btn btn-outline" id="bd">Done</button></div></div>`;
+        document.body.appendChild(w);
+        w.querySelector("#bq").onclick = () => printCreds("Observer sign-in sheets", r.created.map((c) => ({ title: "Observer sign-in — PU " + c.pu, lines: [["Sign in at", ORIGIN.replace(/^https?:\/\//, "") + "/observer/ (or the Observer app)"], ["Code", c.code], ["Polling unit", [c.lga, c.ward, "PU " + c.pu].join(" / ")]], link: loginLink("obs", c.code) })));
+        w.querySelector("#bc").onclick = () => {
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(new Blob(["code,lga,ward,pu,pu_name,registered_voters,name\n" + r.created.map((c) => [c.code, c.lga, c.ward, c.pu, c.pu_name, c.reg, ""].map((v) => '"' + String(v).replace(/"/g, '""') + '"').join(",")).join("\n")], { type: "text/csv" }));
+          a.download = "observer_codes.csv";
+          a.click();
+        };
+        w.querySelector("#bd").onclick = () => w.remove();
+      }
+      async function setObsName(code, v) {
+        try {
+          await A.post("obs/" + code + "/name", { name: v });
+          toast("✅ Name saved");
+        } catch (e) {
+          toast("⚠️ " + e.message);
+        }
+      }
       const obsCredOf = (code) => {
         const o = DATA.obs.find((x) => x.code == code) || {};
         return { title: "Observer sign-in" + (o.pu ? " — PU " + o.pu : ""), lines: [["Sign in at", ORIGIN.replace(/^https?:\/\//, "") + "/observer/ (or the Observer app)"], ["Code", code], ...(o.lga ? [["Polling unit", [o.lga, o.ward, "PU " + o.pu].join(" / ")]] : [])], link: loginLink("obs", code) };

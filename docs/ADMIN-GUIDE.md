@@ -96,15 +96,19 @@ Clients can suspend or deactivate their own rooms, but **only the platform admin
 delete** — Command Centres, Situation Rooms and election data.
 
 - **Archive** (Command Centres tab → **Archive**, or **Archive** on a room) switches it off and hides it
-  everywhere (lists, collation, broadcasts). **Nothing is deleted** — open **Archived Command Centres** and
-  press **Restore** to bring it back (then **Enable** it).
+  everywhere (lists, collation, broadcasts). **Nothing is deleted.**
+- **The Archive tab** (next to Command Centers) is where you find it all: **archived Command Centres**,
+  **archived Situation Rooms** and **Stored records** (the copies kept when something was deleted or cleared).
+  Press **Review** on any of them to read its results right there — votes by party, every polling unit with its
+  status and figures, and every observer with theirs. **Restore** brings an archived item back (then **Enable** /
+  activate it); **Delete** removes it for good (a stored copy is kept).
 - **Delete** removes things **with everything under them**, and asks you to **type the ID** to confirm:
   - deleting a **Command Centre** deletes **all its Situation Rooms and every observer** under them, its
     operators, messages and audit trail;
   - deleting a **Situation Room** deletes **all its observers** and their results, photos and clips.
 - **Stored records.** Nothing collected is lost silently. Before anything is deleted or cleared, a full copy
   — observers, tallies, results, EC8A records, incidents, radio, messages and audit — is saved to **Stored
-  records** (Command Centres tab, **Download** as a file), and the photos, clips and radio audio are moved to
+  records** (Archive tab: **Review** it on screen or **Download** it as a file), and the photos, clips and radio audio are moved to
   the server's `archive` folder. They stay until you remove them on the server. Everything live is also in the
   database, which is backed up automatically (every 30 minutes by default).
 - **Rooms** (on a Command Centre row) opens that centre's rooms: archive, restore or delete any of them,

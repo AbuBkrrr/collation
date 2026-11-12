@@ -691,3 +691,79 @@ test("elections: Governor / Presidential rooms cover the whole state; contests a
   assert.equal(ok(await api("collation?pool=1", { tok: gov.R })).sum.totals.APC, 100);
   assert.equal(ok(await api("collation?pool=1", { tok: pres.R })).sum.totals.APC, 700);
 });
+
+test("bulk observer codes: several LGAs / wards / polling units at once, names added later", async () => {
+  const c = new Client({ connectionString: DB });
+  await c.connect();
+  // a small polling-unit list for two LGAs of Plateau
+  for (const [lga, ward, pu, reg, name] of [["Jos North", "Ward 1", "001", 600, "Market"], ["Jos North", "Ward 1", "002", 650, "School"], ["Jos North", "Ward 2", "001", 700, "Clinic"], ["Jos South", "Ward 9", "001", 800, "Hall"], ["Bokkos", "Ward 5", "001", 900, "Not in this room"]])
+    await c.query("insert into locations(state,lga,ward,pu,reg,name) values('Plateau',$1,$2,$3,$4,$5)", [lga, ward, pu, reg, name]);
+  await c.end();
+  const inv = ok(await api("tenants", { tok: S.A, body: { name: "Bulk Obs Test", state: "Plateau" } }));
+  const C = ok(await api("login/command", { body: { user: inv.operator, pass: inv.passcode } })).token;
+  const rm = ok(await api("rooms", { tok: C, body: { name: "Jos zone", kind: "reps", scope: "Jos North,Jos South" } }));
+  ok(await api("rooms/" + rm.id + "/status", { tok: C, body: { status: "active" } }));
+  const R = ok(await api("login/room", { body: { id: rm.id, pass: rm.passcode } })).token;
+  const units = ok(await api("locations/units?state=Plateau&lgas=Jos North,Jos South", { tok: R }));
+  assert.equal(units.length, 4, "one call returns every polling unit of the chosen LGAs");
+  const pick = units.map(({ lga, ward, pu }) => ({ lga, ward, pu }));
+  const r1 = ok(await api("room/obs/bulk", { tok: R, body: { per: 2, units: pick } }));
+  assert.equal(r1.created.length, 8, "4 polling units x 2 observers");
+  assert.equal(new Set(r1.created.map((x) => x.code)).size, 8, "codes are unique");
+  assert.deepEqual(r1.created.filter((x) => x.pu == "002").map((x) => x.reg), [650, 650], "registered voters come from the unit list");
+  assert.equal(ok(await api("obs", { tok: R })).length, 8);
+  // asking again tops up only what is missing
+  const r2 = ok(await api("room/obs/bulk", { tok: R, body: { per: 3, units: pick.slice(0, 2) } }));
+  assert.equal(r2.created.length, 2, "2 units x (3 wanted - 2 already there)");
+  const r3 = ok(await api("room/obs/bulk", { tok: R, body: { per: 2, units: pick } }));
+  assert.deepEqual([r3.created.length, r3.skipped], [0, 4], "nothing to add when they all have enough");
+  // only this room's LGAs, only real polling units
+  assert.equal((await api("room/obs/bulk", { tok: R, body: { per: 2, units: [{ lga: "Bokkos", ward: "Ward 5", pu: "001" }] } })).s, 403);
+  assert.equal((await api("room/obs/bulk", { tok: R, body: { per: 2, units: [{ lga: "Jos North", ward: "Ward 1", pu: "999" }] } })).s, 400);
+  assert.equal((await api("room/obs/bulk", { tok: R, body: { per: 2, units: [] } })).s, 400);
+  // names can be added one by one afterwards, by the room or its Command Center, and not by anyone else
+  const code = r1.created[0].code;
+  ok(await api("obs/" + code + "/name", { tok: R, body: { name: "Musa Bello" } }));
+  assert.equal(ok(await api("obs", { tok: C })).find((o) => o.code == code).name, "Musa Bello");
+  assert.ok([403, 404].includes((await api("obs/" + code + "/name", { tok: S.A, body: { name: "x" } })).s));
+  // the codes work: an observer signs in with one
+  assert.ok(ok(await api("login/observer", { body: { code, pin: "1234", device: "dev-" + code + "-0123456789abcdef" } })).token);
+});
+
+test("archived and stored data can be found and reviewed (administrator only)", async () => {
+  const inv = ok(await api("tenants", { tok: S.A, body: { name: "Review Me", state: "Nasarawa" } }));
+  const C = ok(await api("login/command", { body: { user: inv.operator, pass: inv.passcode } })).token;
+  const rm = ok(await api("rooms", { tok: C, body: { name: "Keffi", kind: "lga", scope: "Keffi" } }));
+  ok(await api("rooms/" + rm.id + "/status", { tok: C, body: { status: "active" } }));
+  const R = ok(await api("login/room", { body: { id: rm.id, pass: rm.passcode } })).token;
+  const sub = async (pu, party, v) => {
+    const code = ok(await api("room/obs", { tok: R, body: { state: "Nasarawa", lga: "Keffi", ward: "W1", pu, reg: 5000, name: "o" + pu } })).code;
+    const t = ok(await api("login/observer", { body: { code, pin: "1234", device: "dev-" + code + "-0123456789abcdef" } })).token;
+    ok(await api("observer/tally", { tok: t, body: { party, v } }));
+  };
+  await sub("001", "APC", 120);
+  await sub("002", "PDP", 45);
+  // a Command Center cannot see the archive or review anything
+  for (const p of ["admin/archive", "admin/review?tenant=" + inv.id, "admin/vault/x.json/review"]) assert.equal((await api(p, { tok: C })).s, 403, p);
+  // archive the room, then the center: both are listed, and reviewable although hidden everywhere else
+  ok(await api("admin/rooms/" + rm.id + "/archive", { tok: S.A, body: { on: true } }));
+  let arch = ok(await api("admin/archive", { tok: S.A }));
+  assert.ok(arch.rooms.some((r) => r.id == rm.id && r.tenant_name == "Review Me" && r.obs == 2));
+  const rr = ok(await api("admin/review?room=" + rm.id, { tok: S.A }));
+  assert.deepEqual([rr.totals.APC, rr.totals.PDP, rr.counts.observers, rr.counts.units], [120, 45, 2, 2], "an archived room's results are reviewable");
+  assert.equal(ok(await api("collation", { tok: C })).sum.total, 0, "...but hidden from the client's collation");
+  ok(await api("admin/rooms/" + rm.id + "/archive", { tok: S.A, body: { on: false } }));
+  ok(await api("tenants/" + inv.id + "/archive", { tok: S.A, body: { on: true } }));
+  arch = ok(await api("admin/archive", { tok: S.A }));
+  assert.ok(arch.centers.some((t) => t.id == inv.id && t.rooms == 1 && t.observers == 2));
+  const tr = ok(await api("admin/review?tenant=" + inv.id, { tok: S.A }));
+  assert.deepEqual([tr.totals.APC, tr.totals.PDP, tr.title.includes("Review Me")], [120, 45, true]);
+  assert.ok(tr.observers.every((o) => o.t && Object.keys(o.t).length) && tr.units.length == 2);
+  // delete it: the stored copy can still be reviewed, with the same figures
+  const del = ok(await api("tenants/" + inv.id + "/delete", { tok: S.A, body: { confirm: inv.id } }));
+  assert.equal(ok(await api("admin/archive", { tok: S.A })).centers.some((t) => t.id == inv.id), false);
+  const vr = ok(await api("admin/vault/" + del.kept + "/review", { tok: S.A }));
+  assert.deepEqual([vr.totals.APC, vr.totals.PDP, vr.counts.observers, vr.counts.units, vr.source], [120, 45, 2, 2, "vault"]);
+  assert.ok(ok(await api("admin/archive", { tok: S.A })).vault.some((v) => v.name == del.kept));
+  assert.equal((await api("admin/vault/..%2F..%2Fetc%2Fpasswd/review", { tok: S.A })).s, 404);
+});
