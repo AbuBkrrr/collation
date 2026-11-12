@@ -176,6 +176,7 @@ create index if not exists shares_tn on shares(tenant);
 alter table tenants add column if not exists pool bool default true;
 alter table rooms add column if not exists kind text;
 alter table tenants add column if not exists archived bool default false;alter table rooms add column if not exists archived bool default false;
+alter table pitch_views add column if not exists vid text,add column if not exists dsig text;alter table pitch_leads add column if not exists vid text;
 create table if not exists radio_ctl(room_id text primary key references rooms(id),power bool default false,freq float8,mode text default 'fm',squelch int default 40,presets jsonb default '[]',updated_at timestamptz default now(),updated_by text,gw_seen timestamptz,gw_status jsonb);`;
 // Row-level security: applied to the restricted role used inside authenticated requests.
 const RLS = `do $$ begin if not exists(select 1 from pg_roles where rolname='collation_app') then create role collation_app nologin; end if; end $$;

@@ -591,9 +591,17 @@
 /* First-party view beacon: records this open to your own server for marketing analytics.
    ?ref=<label> on the link lets you attribute each open to the person or channel you shared with. */
 (function(){
+  /* a random id kept in this browser (not a person): lets the owner tell "the same phone opened it again" from "someone else opened it" */
+  function vid(){var k="mv",v=null;try{v=localStorage.getItem(k);}catch(e){}
+    if(!v){var m=document.cookie.match(/(?:^|; )mv=([^;]+)/);v=m&&m[1];}
+    if(!v){v=(window.crypto&&crypto.randomUUID?crypto.randomUUID():(Math.random().toString(36).slice(2)+Date.now().toString(36)+Math.random().toString(36).slice(2))).replace(/[^A-Za-z0-9_-]/g,"");}
+    try{localStorage.setItem(k,v);}catch(e){}
+    try{document.cookie="mv="+v+";max-age=31536000;path=/;SameSite=Lax";}catch(e){}
+    return v;}
+  window.__vid=vid;
   try{
     var ref=new URLSearchParams(location.search).get("ref")||"";
-    var payload=JSON.stringify({ref:ref,screen:(screen.width+"x"+screen.height),tz:((Intl.DateTimeFormat().resolvedOptions()||{}).timeZone||""),path:location.pathname});
+    var payload=JSON.stringify({ref:ref,vid:vid(),screen:(screen.width+"x"+screen.height),tz:((Intl.DateTimeFormat().resolvedOptions()||{}).timeZone||""),path:location.pathname});
     if(navigator.sendBeacon){navigator.sendBeacon("/api/pitch/view",new Blob([payload],{type:"application/json"}));}
     else{fetch("/api/pitch/view",{method:"POST",headers:{"Content-Type":"application/json"},body:payload,keepalive:true}).catch(function(){});}
   // Demo request: capture the details the visitor chooses to give (a page cannot read a phone
@@ -605,7 +613,7 @@
     var msg=document.getElementById("demoMsg");
     if(!phone){msg.textContent="Please add a phone number.";return false;}
     msg.textContent="Sending…";
-    fetch("/api/pitch/lead",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ref:ref,name:name,phone:phone,org:org})}).catch(function(){});
+    fetch("/api/pitch/lead",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ref:ref,vid:vid(),name:name,phone:phone,org:org})}).catch(function(){});
     var wa="Hello, I'd like a demo of My Situation Room."+(name?" My name is "+name+".":"")+(org?" I'm with "+org+".":"")+(phone?" Phone: "+phone+".":"");
     msg.innerHTML="✅ Thank you — opening WhatsApp to finish. If it doesn't open, <a href=\"https://wa.me/2348127337603\" style=\"color:#edc050\">message us here</a>.";
     setTimeout(function(){window.location.href="https://wa.me/2348127337603?text="+encodeURIComponent(wa);},400);
