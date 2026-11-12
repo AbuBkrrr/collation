@@ -49,6 +49,25 @@ If someone loses their authenticator phone, clear their two-step login so they c
 
 A Situation Room is one area of responsibility — usually one LGA. **Situation Rooms** tab:
 
+### One room at a time — LGA chairman, senator, House of Reps or custom zone
+
+**Situation Rooms** tab → **Create Situation Room**. The first drop-down is **who the room is for**:
+
+| Choose | Covers | You pick |
+|---|---|---|
+| **LGA Chairman** | exactly one LGA | one LGA (round buttons) |
+| **Senator — senatorial district** | several LGAs | tick each LGA in the district |
+| **House of Reps — federal constituency** | several LGAs | tick each LGA in the constituency |
+| **Custom zone** | any LGAs | tick the ones you want |
+
+Choose the state (it is fixed if your Command Centre belongs to one state), then pick the LGAs — the list of
+that state's LGAs appears, with **select all / clear** for zones. If the LGA list for a state has not been loaded,
+type the LGA names separated by commas. Name the room (or leave it blank for an automatic name such as
+"Senatorial District: Dala, Fagge, Gwale"), add the operator, and press **Create Room**.
+
+The room can then issue observer codes **only in its LGAs**, and its collation can show the whole zone.
+A room's row in the list shows its type and its LGAs.
+
 ### One room at a time
 1. Under **Create Situation Room**, type a **Room name** (e.g. `Nassarawa LGA Situation Room`).
 2. Your **state is fixed** (it is set when your Command Centre is created and cannot be changed here).
