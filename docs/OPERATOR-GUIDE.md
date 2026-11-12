@@ -178,6 +178,34 @@ LGAs, and its **Whole zone** collation view adds up every room covering them.
 
 ---
 
+## 4a. Collation Officers — the reporting chain
+
+Information flows up a clear chain of command:
+
+| Level | Who | Does what |
+|---|---|---|
+| 1 | **Command Center** (state) | Overall monitoring, supervision, information management and coordination |
+| 2 | **LGA coordination** — Situation Room + **Collation Officer 2** | Supervises all wards of the LGA |
+| 3 | **Ward supervision** — **Collation Officer 1** | Coordinates the polling units of the ward; handles security and reports coming from them |
+| 4 | **Polling-unit observers** | Gather and submit verified information (tallies, EC8A, video, GPS) |
+| 5 | **Technical & data team** (platform administrator) | Platform administration, support, data integrity, maintenance |
+
+A third officer, **Collation Officer 3**, sits at **state** level and oversees all LGAs.
+
+**Adding officers — at the moment you create things:**
+- **New Command Center** (platform administrator): fill *State Collation Officer — name / phone*.
+- **Create Situation Room** for an LGA chairman: fill *LGA Collation Officer — name / phone*.
+- **Generate observer codes** (Situation Room): open *Ward Collation Officer 1 — optional* and type a name and phone for each ward in the batch.
+- Any time later: the **Collation Officers** tab (Command Center, and the Situation Room for its own LGAs).
+
+Each officer gets a **code and passcode with a QR sign-in** (shown once; *QR / Reset* issues a new one). They sign in at `/officer/` or in the **Collation Officer** Android app.
+
+**What an officer does** (sees only their own ward / LGA / state):
+- **Report A — Reported tallies.** The figures coming up from below (polling units for a ward officer, wards for the LGA officer, LGAs for the state officer). For each unit the officer presses **Confirm as reported**, or **Correct once** and types the right figures. Either can be done **only once** per unit. A ward officer's confirmed or corrected polling-unit figure is the one the LGA and state officers see.
+- **Report B — Physical results.** When the boxes / result sheets physically arrive at the ward, LGA or state collation centre, the officer enters the figures (and number of boxes). The app shows at once whether Report B **matches** Report A or which parties **differ**.
+
+The Command Center's **Collation Officers** tab lists every officer, how many figures they confirmed and how many physical results they entered, and a feed of the latest confirmations and corrections (with the original figure beside any correction).
+
 ## 5. Watch the field live (video, GPS, talk-back)
 
 **Observers & Map** tab (Command Centre), or the map inside a room.

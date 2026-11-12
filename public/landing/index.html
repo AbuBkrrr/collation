@@ -178,6 +178,12 @@
           <p>For field observers. Use the Android app below, or open the web app and sign in with your code.</p>
           <span class="btn btn-primary">Open Observer web app</span>
         </a>
+        <a class="role" href="/officer/">
+          <div class="ic" style="background: #805ad5"><i class="fas fa-clipboard-check"></i></div>
+          <h3>Collation Officer</h3>
+          <p>For ward, LGA and state collation officers. Confirm or correct the tallies from your area, and record the physical results.</p>
+          <span class="btn btn-primary">Open Collation Officer app</span>
+        </a>
       </div>
 
       <div class="dlgrid">
@@ -220,9 +226,29 @@
           </div>
           <div class="qr"></div>
         </div>
+
+        <div class="dl" data-app="officer">
+          <div class="ic" style="background: #805ad5; width: 52px; height: 52px; font-size: 24px">
+            <i class="fab fa-android"></i>
+          </div>
+          <div class="txt">
+            <h3>Collation Officer Android app</h3>
+            <p>
+              For ward, LGA and state collation officers: collect and confirm tallies from your area and record the
+              physical results as the boxes arrive. Open it, enter this site's address, then sign in with your officer code.
+            </p>
+            <div style="margin-top: 12px; display: flex; gap: 10px; flex-wrap: wrap">
+              <a class="btn btn-primary dlbtn" href="/download/officer" style="display: none"
+                ><i class="fas fa-download"></i> Download (.apk)</a
+              >
+              <span class="btn btn-outline dlsoon" style="pointer-events: none">Android app coming soon</span>
+            </div>
+          </div>
+          <div class="qr"></div>
+        </div>
       </div>
       <p style="text-align: center; font-size: 12px; color: #718096">
-        Both apps also run in any browser from the buttons above. When Android warns about installing outside
+        All apps also run in any browser from the buttons above. When Android warns about installing outside
         the Play Store, allow it for these downloads.
       </p>
 
@@ -238,7 +264,7 @@
             document.getElementById("pname").textContent = c.appName;
             document.title = c.appName;
           }
-          const apps = { observer: { has: !!c.apk, url: "/download/app" }, room: { has: !!c.apkRoom, url: "/download/room" } };
+          const apps = { observer: { has: !!c.apk, url: "/download/app" }, room: { has: !!c.apkRoom, url: "/download/room" }, officer: { has: !!c.apkOfficer, url: "/download/officer" } };
           document.querySelectorAll(".dl[data-app]").forEach((card) => {
             const a = apps[card.getAttribute("data-app")],
               btn = card.querySelector(".dlbtn"),

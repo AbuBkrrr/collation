@@ -41,6 +41,7 @@ app.get(
       lk: !!(LK && E.LIVEKIT_URL && E.LIVEKIT_API_KEY),
       apk: hasApk("observer"),
       apkRoom: hasApk("room"),
+      apkOfficer: hasApk("officer"),
     });
   }),
 );

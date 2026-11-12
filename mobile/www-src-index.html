@@ -41,11 +41,11 @@ async function scan(){
   (function tick(){if(!live)return;if(v.videoWidth){var k=Math.min(1,640/v.videoWidth);cv.width=v.videoWidth*k;cv.height=v.videoHeight*k;cx.drawImage(v,0,0,cv.width,cv.height);var r=jsQR(cx.getImageData(0,0,cv.width,cv.height).data,cv.width,cv.height);if(r&&r.data)return end(r.data);}setTimeout(tick,160);})();
 }
 function got(text){
-  var e=document.getElementById('err'),names={cmd:'Command Center',room:'Situation Room',obs:'Observer'};
+  var e=document.getElementById('err'),names={cmd:'Command Center',room:'Situation Room',obs:'Observer',officer:'Collation Officer'};
   try{
-    var url=new URL(String(text).trim()),m=url.pathname.match(/\/(command|room|observer)\/?$/),hp=new URLSearchParams(url.hash.slice(1));
+    var url=new URL(String(text).trim()),m=url.pathname.match(/\/(command|room|observer|officer)\/?$/),hp=new URLSearchParams(url.hash.slice(1));
     if(!m||!hp.get('u'))throw 0;
-    var kind={command:'cmd',room:'room',observer:'obs'}[m[1]],mine=APP=='room'?'room':'obs';
+    var kind={command:'cmd',room:'room',observer:'obs',officer:'officer'}[m[1]],mine=APP=='room'?'room':APP=='officer'?'officer':'obs';
     if(kind!=mine){e.textContent='That QR is a '+names[kind]+' sign-in. This is the '+names[mine]+' app.';return;}
     localStorage.setItem('mcc_login',JSON.stringify({kind:kind,u:hp.get('u'),p:hp.get('p')||''}));
     document.getElementById('url').value=url.origin;save();

@@ -81,6 +81,23 @@ app.post(
     const known = new Map((await q("select lga,ward,pu,reg,name from locations where state=$1 and lga=any($2)", [st, lgas])).map((r) => [[r.lga, r.ward, r.pu].join("|"), r]));
     const bad = units.find((u) => !known.has([u.lga, u.ward, u.pu].join("|")));
     if (bad) return res.status(400).json({ error: "Not a polling unit of " + st + ": " + [bad.lga, bad.ward, bad.pu].join(" / ") });
+    // Ward Collation Officers named in the same step (one per ward; a ward that already has one is left alone)
+    const offs = [];
+    if (Array.isArray(b.officers)) {
+      const { mk } = require("./officers"),
+        wards = new Set(units.map((u) => u.lga + "|" + u.ward));
+      for (const o of b.officers.slice(0, 200)) {
+        if (!o || !String(o.name || "").trim() || !wards.has(o.lga + "|" + o.ward)) continue;
+        const dup = await q("select 1 from officers where level='ward' and active and lower(state)=lower($1) and lower(lga)=lower($2) and lower(ward)=lower($3)", [st, o.lga, o.ward]);
+        if (dup.length) {
+          offs.push({ lga: o.lga, ward: o.ward, existing: true });
+          continue;
+        }
+        try {
+          offs.push(await mk(req.u.tn, { level: "ward", name: o.name, phone: o.phone, lga: o.lga, ward: o.ward, state: st }));
+        } catch {}
+      }
+    }
     // top up: a unit that already has observers only gets what is missing to reach "per"
     const have = new Map((await q("select lga,ward,pu,count(*)::int n from observers where room_id=$1 and active group by 1,2,3", [req.u.id])).map((r) => [[r.lga, r.ward, r.pu].join("|"), r.n]));
     const want = [];
@@ -91,7 +108,7 @@ app.post(
       if (need <= 0) skipped++;
       for (let i = 0; i < need; i++) want.push({ u, r: known.get(k) });
     }
-    if (!want.length) return res.json({ created: [], skipped });
+    if (!want.length) return res.json({ created: [], skipped, officers: offs });
     if (want.length > 5000) return res.status(400).json({ error: "That would create " + want.length + " codes; choose fewer units (max 5000)" });
     const used = new Set(),
       codes = [];
@@ -111,7 +128,7 @@ app.post(
       [codes, req.u.id, st, want.map((w) => w.u.lga), want.map((w) => w.u.ward), want.map((w) => puNorm(w.u.pu)), want.map((w) => +w.r.reg || 500), want.map((w) => w.r.name || null)],
     );
     aud(req.u.id, "Generated " + codes.length + " observer codes in bulk (" + units.length + " polling units)");
-    res.json({ created: want.map((w, i) => ({ code: codes[i], lga: w.u.lga, ward: w.u.ward, pu: puNorm(w.u.pu), pu_name: w.r.name || "", reg: +w.r.reg || 500 })), skipped });
+    res.json({ created: want.map((w, i) => ({ code: codes[i], lga: w.u.lga, ward: w.u.ward, pu: puNorm(w.u.pu), pu_name: w.r.name || "", reg: +w.r.reg || 500 })), skipped, officers: offs });
   }),
 );
 // an observer's name can be added or changed any time (the room, or its Command Center)

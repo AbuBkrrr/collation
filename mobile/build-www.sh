@@ -3,14 +3,15 @@
 # UI and talks to the Command Center server (chosen on first launch) for API, WebSocket, LiveKit video,
 # maps and the Vosk model.
 #
-# Usage:  sh build-www.sh [observer|room]      (default: observer)
+# Usage:  sh build-www.sh [observer|room|officer]      (default: observer)
 set -e
 cd "$(dirname "$0")"
 APP="${1:-observer}"
 case "$APP" in
   observer) LABEL="Collation Observer" ;;
   room)     LABEL="Situation Room" ;;
-  *) echo "unknown app '$APP' (use observer or room)"; exit 1 ;;
+  officer)  LABEL="Collation Officer" ;;
+  *) echo "unknown app '$APP' (use observer, room or officer)"; exit 1 ;;
 esac
 ROOT=..
 rm -rf www && mkdir -p www/shared www/vendor www/vendor/fa/css www/vendor/fa/webfonts www/vendor/leaflet www/vendor/fonts/inter/files www/vendor/fonts/jetbrains-mono/files

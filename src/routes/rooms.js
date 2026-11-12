@@ -51,7 +51,15 @@ app.post(
       kind,
     ]);
     aud("CMD", "Created room " + id);
-    res.json({ id, passcode: pass });
+    // optional: name the LGA Collation Officer (2) for a single-LGA room while creating it
+    let officer = null;
+    const oc = b.officer;
+    if (oc && oc.name && lgas.length == 1) {
+      try {
+        officer = await require("./officers").mk(req.u.tn, { level: "lga", name: oc.name, phone: oc.phone, lga: lgas[0], state: b.state });
+      } catch {}
+    }
+    res.json({ id, passcode: pass, officer });
   }),
 );
 app.patch(

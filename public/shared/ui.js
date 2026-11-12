@@ -892,7 +892,7 @@ async function start(role, tabsFn) {
 const ORIGIN = BASE || location.origin;
 // the sign-in link a QR carries. The details sit after "#", which browsers never send to a server.
 const loginLink = (kind, u, p) =>
-  ORIGIN + "/" + (kind == "cmd" ? "command" : kind == "room" ? "room" : "observer") + "/#u=" + encodeURIComponent(u) + (p ? "&p=" + encodeURIComponent(p) : "");
+  ORIGIN + "/" + (kind == "cmd" ? "command" : kind == "room" ? "room" : kind == "officer" ? "officer" : "observer") + "/#u=" + encodeURIComponent(u) + (p ? "&p=" + encodeURIComponent(p) : "");
 function qrSvg(text, cell) {
   if (!window.qrcode) return "";
   const q = qrcode(0, "M");
@@ -920,10 +920,10 @@ function takeCreds(kind) {
 function parseLoginQR(text) {
   try {
     const url = new URL(String(text).trim()),
-      m = url.pathname.match(/\/(command|room|observer)\/?$/),
+      m = url.pathname.match(/\/(command|room|observer|officer)\/?$/),
       hp = new URLSearchParams(url.hash.slice(1));
     if (!m || !hp.get("u")) return null;
-    return { kind: { command: "cmd", room: "room", observer: "obs" }[m[1]], origin: url.origin, u: hp.get("u"), p: hp.get("p") || "" };
+    return { kind: { command: "cmd", room: "room", observer: "obs", officer: "officer" }[m[1]], origin: url.origin, u: hp.get("u"), p: hp.get("p") || "" };
   } catch {
     return null;
   }
@@ -987,7 +987,7 @@ async function scanLogin(kind, fill) {
     const t = await scanQR();
     if (!t) return;
     const c = parseLoginQR(t),
-      names = { cmd: "Command Center", room: "Situation Room", obs: "Observer" };
+      names = { cmd: "Command Center", room: "Situation Room", obs: "Observer", officer: "Collation Officer" };
     if (!c) return toast("❌ That is not a sign-in QR code");
     if (c.kind != kind) return toast("❌ That QR is for the " + names[c.kind] + " sign-in");
     if (c.origin != ORIGIN) return toast("❌ That QR belongs to another server: " + c.origin);

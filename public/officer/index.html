@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Collation Officer · My Collation Center</title>
+    <link rel="stylesheet" href="/vendor/fa/css/all.min.css" />
+    <link href="/shared/fonts.css" rel="stylesheet" />
+    <link rel="stylesheet" href="/shared/style.css" />
+    <style>.badge{display:inline-block;background:#edf2f7;color:#2d3748;border-radius:12px;padding:3px 10px;font-size:12px}</style>
+  </head>
+  <body>
+    <div class="toast" id="toast"></div>
+    <div id="app"></div>
+    <script src="/vendor/qrcode.js"></script>
+    <script src="/shared/ui.js"></script>
+    <script>
+      let OFFI = null, D = null, OTAB = "a", OFILT = "", PARTIES_ = [];
+      const OLVL = { ward: "Ward", lga: "LGA", state: "State" },
+        OUNIT = { ward: "polling units", lga: "wards", state: "LGAs" };
+      function login() {
+        const LC = takeCreds("officer");
+        if (LC && LC.p) setTimeout(go, 50);
+        $("#app").innerHTML = `<div class="mockup-container"><div class="topbar"><div class="brand"><i class="fas fa-clipboard-check"></i><h1>${esc(CFG?.appName || "My Collation Center")} <span>· Collation Officer</span></h1></div></div><div class="card" style="max-width:420px"><input class="fi" id="li" placeholder="Officer code (e.g. CO1-AB3XYZ)" value="${esc(LC?.u || "")}" autocapitalize="characters" autocomplete="username"><input class="fi" id="lp" type="password" placeholder="Passcode" value="${esc(LC?.p || "")}" onkeydown="event.key=='Enter'&&go()"><button class="btn btn-primary" onclick="go()">Enter</button><button class="btn btn-outline" style="margin-top:8px" onclick="scanLogin('officer',(c)=>{$('#li').value=c.u;$('#lp').value=c.p;go()})"><i class="fas fa-qrcode"></i> Scan QR code instead</button><div class="muted" style="margin-top:8px">Your code and passcode are issued by your Command Center.</div></div></div>`;
+      }
+      async function go() {
+        try {
+          const r = await A.post("login/officer", { code: $("#li").value.trim(), pass: $("#lp").value });
+          sessionStorage.setItem("t", r.token);
+          boot();
+        } catch (e) {
+          toast("❌ " + e.message);
+        }
+      }
+      function out() {
+        sessionStorage.removeItem("t");
+        location.reload();
+      }
+      async function boot() {
+        try {
+          D = await A.get("officer/units");
+        } catch {
+          sessionStorage.removeItem("t");
+          return login();
+        }
+        OFFI = D.officer;
+        PARTIES_ = D.parties;
+        draw();
+      }
+      const sum = (f) => Object.values(f || {}).reduce((a, b) => a + b, 0);
+      const figs = (f) => Object.entries(f || {}).filter(([, v]) => v || v === 0).map(([p, v]) => `<span class="badge" style="margin:1px"><b>${esc(p)}</b> ${v}</span>`).join("") || '<span class="muted">nothing reported yet</span>';
+      function draw() {
+        if (!OFFI) return;
+        const list = D.units.filter((u) => !OFILT || (u.label + " " + u.contest).toLowerCase().includes(OFILT.toLowerCase())),
+          nConf = D.units.filter((u) => u.mine).length,
+          nMan = D.units.filter((u) => u.manual).length,
+          nDiff = D.units.filter((u) => u.diff && u.diff.length).length;
+        $("#app").innerHTML = `<div class="mockup-container"><div class="topbar"><div class="brand"><i class="fas fa-clipboard-check"></i><h1>${esc(OFFI.title)} <span>· ${esc(OFFI.name)}</span></h1></div><button class="btn btn-sm btn-outline" onclick="out()">Sign out</button></div>
+        <div class="card"><div class="muted">${esc(OFFI.state)}${OFFI.lga ? " › " + esc(OFFI.lga) : ""}${OFFI.ward ? " › " + esc(OFFI.ward) : ""} — you collate the ${OUNIT[OFFI.level]} under your area. Confirm each figure as received, or correct it — <b>once only</b>.</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0"><span class="badge">${D.units.length} ${OUNIT[OFFI.level]}</span><span class="badge">${nConf} confirmed / corrected</span><span class="badge">${nMan} physical results entered</span>${nDiff ? `<span class="badge" style="background:#fed7d7;color:#9b2c2c">${nDiff} differ from what was reported</span>` : ""}</div>
+        <div style="display:flex;gap:8px;margin-bottom:10px"><button class="btn ${OTAB == "a" ? "btn-primary" : "btn-outline"}" onclick="OTAB='a';draw()">Report A · Reported tallies</button><button class="btn ${OTAB == "b" ? "btn-primary" : "btn-outline"}" onclick="OTAB='b';draw()">Report B · Physical results</button><button class="btn btn-outline" onclick="reload()" title="Refresh"><i class="fas fa-rotate"></i></button></div>
+        <input class="fi" placeholder="Search ${OUNIT[OFFI.level]}…" value="${esc(OFILT)}" oninput="OFILT=this.value;clearTimeout(window._ft);window._ft=setTimeout(()=>{draw();const e=$('#sf');e&&(e.focus(),e.setSelectionRange(99,99))},250)" id="sf"></div>
+        ${list.length ? list.map((u, i) => (OTAB == "a" ? cardA(u) : cardB(u))).join("") : '<div class="card muted">Nothing here yet.</div>'}</div>`;
+      }
+      const kid = (k) => esc(k).replace(/'/g, "&#39;");
+      function cardA(u) {
+        const m = u.mine;
+        return `<div class="card"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>${esc(u.label)}</b><span class="muted">${esc(u.contest || "")}</span></div>
+        <div class="muted" style="font-size:12px">${u.reporting}/${u.pus} polling units reporting${u.disputed ? " · " + u.disputed + " disputed" : ""}${u.verified ? " · " + u.verified + " verified" : ""}${u.pu?.wardConf ? "" : ""}</div>
+        <div style="margin:6px 0">${figs(u.fig)} <b>= ${u.total}</b></div>
+        ${m ? `<div style="background:#f0fff4;border:1px solid #9ae6b4;border-radius:8px;padding:8px;font-size:13px">✓ You ${m.act == "confirm" ? "confirmed" : "corrected"} this ${new Date(m.ts).toLocaleString()}${m.act == "correct" ? "<br>Your figures: " + figs(m.fig) : ""}</div>` : `<div id="cf_${btoa(u.key).replace(/=/g, "")}"><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary" ${u.total || sum(u.fig) ? "" : "disabled"} onclick="confirmU('${kid(u.key)}')">✓ Confirm as reported</button><button class="btn btn-outline" onclick="corrU('${kid(u.key)}')">✎ Correct once</button></div></div>`}</div>`;
+      }
+      function cardB(u) {
+        const m = u.manual, id = btoa(u.key).replace(/=/g, "");
+        return `<div class="card"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>${esc(u.label)}</b><span class="muted">${esc(u.contest || "")}</span></div>
+        <div class="muted" style="font-size:12px">Reported (A): ${figs(u.fig)}</div>
+        <div id="mf_${id}" style="margin-top:6px">${m ? `<div>Physical (B): ${figs(m.fig)} ${m.boxes != null ? '<span class="badge">' + m.boxes + " boxes</span>" : ""}</div>${u.diff && u.diff.length ? `<div style="color:#c53030;font-weight:600;margin:4px 0">⚠ Differs from Report A: ${u.diff.map(esc).join(", ")}</div>` : '<div style="color:#2f855a;margin:4px 0">✓ Matches Report A</div>'}${m.note ? '<div class="muted">' + esc(m.note) + "</div>" : ""}` : '<div class="muted">No physical result entered yet.</div>'}
+        <button class="btn btn-outline btn-sm" style="margin-top:6px" onclick="manU('${kid(u.key)}')">${m ? "✎ Update" : "＋ Enter result from the boxes / sheet"}</button></div></div>`;
+      }
+      const U = (k) => D.units.find((u) => u.key == k);
+      async function reload() {
+        try {
+          D = await A.get("officer/units");
+          draw();
+        } catch (e) {
+          toast("❌ " + e.message);
+        }
+      }
+      async function confirmU(k) {
+        const u = U(k);
+        if (!confirm("Confirm " + u.label + " exactly as reported (" + u.total + " votes)? You can only do this once.")) return;
+        try {
+          await A.post("officer/confirm", { key: k });
+          toast("✓ Confirmed");
+          reload();
+        } catch (e) {
+          toast("❌ " + e.message);
+          reload();
+        }
+      }
+      function form(k, init, extra, onsubmit, label) {
+        const w = document.createElement("div");
+        w.style.cssText = "position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:9000;display:flex;align-items:center;justify-content:center;padding:14px;overflow:auto";
+        w.innerHTML = `<div class="card" style="max-width:440px;width:100%;margin:auto;max-height:96vh;overflow:auto"><div class="card-header"><h3>${esc(label)}</h3></div>${PARTIES_.map((p) => `<div style="display:flex;align-items:center;gap:8px;margin:4px 0"><b style="width:70px">${esc(p)}</b><input class="fi" style="margin:0" type="number" inputmode="numeric" min="0" id="f_${esc(p)}" value="${init[p] ?? ""}"></div>`).join("")}${extra}<div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-primary" id="fs">Save</button><button class="btn btn-outline" id="fc">Cancel</button></div></div>`;
+        document.body.appendChild(w);
+        w.querySelector("#fc").onclick = () => w.remove();
+        w.querySelector("#fs").onclick = async () => {
+          const fig = {};
+          PARTIES_.forEach((p) => {
+            const v = w.querySelector("#f_" + p).value;
+            if (v !== "") fig[p] = +v;
+          });
+          try {
+            await onsubmit(fig, w);
+            w.remove();
+            reload();
+          } catch (e) {
+            toast("❌ " + e.message);
+          }
+        };
+      }
+      function corrU(k) {
+        const u = U(k);
+        form(k, u.fig, '<div class="muted" style="margin-top:8px">⚠ You can correct a figure only once. Enter the full corrected figures.</div>', (fig) => {
+          if (!confirm("Submit this correction for " + u.label + "? It cannot be changed afterwards.")) throw new Error("Cancelled");
+          return A.post("officer/confirm", { key: k, fig });
+        }, "Correct · " + u.label);
+      }
+      function manU(k) {
+        const u = U(k), m = u.manual;
+        form(k, m ? m.fig : {}, `<input class="fi" type="number" inputmode="numeric" min="0" id="f_boxes" placeholder="Number of boxes received (optional)" value="${m?.boxes ?? ""}" style="margin-top:8px"><input class="fi" id="f_note" placeholder="Note (optional)" value="${esc(m?.note || "")}">`, (fig, w) =>
+          A.post("officer/manual", { key: k, fig, boxes: w.querySelector("#f_boxes").value, note: w.querySelector("#f_note").value }), "Physical result · " + u.label);
+      }
+      (async () => {
+        try { CFG = await A.get("config"); } catch {}
+        A.tok ? boot() : login();
+      })();
+    </script>
+  </body>
+</html>
