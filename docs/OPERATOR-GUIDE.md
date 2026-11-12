@@ -200,7 +200,8 @@ A third officer, **Collation Officer 3**, sits at **state** level and oversees a
 - **New Command Center** (platform administrator): fill *State Collation Officer — name / phone*.
 - **Create Situation Room** for an LGA chairman: fill *LGA Collation Officer — name / phone*.
 - **Generate observer codes** (Situation Room): open *Ward Collation Officer 1 — optional* and type a name and phone for each ward in the batch.
-- Any time later: the **Collation Officers** tab (Command Center, and the Situation Room for its own LGAs).
+- **One room per LGA**: the button asks for each LGA's officer (LGA, name, phone — one per line) in the same step.
+- Afterwards, the **Officer** button on a Command Center, Situation Room or observer row shows that officer's sign-in card and QR again.
 
 Each officer gets a **code and passcode with a QR sign-in** (shown once; *QR / Reset* issues a new one). They sign in at `/officer/` or in the **Collation Officer** Android app.
 
@@ -208,7 +209,7 @@ Each officer gets a **code and passcode with a QR sign-in** (shown once; *QR / R
 - **Report A — Reported tallies.** The figures coming up from below (polling units for a ward officer, wards for the LGA officer, LGAs for the state officer). For each unit the officer presses **Confirm as reported**, or **Correct once** and types the right figures. Either can be done **only once** per unit. A ward officer's confirmed or corrected polling-unit figure is the one the LGA and state officers see.
 - **Report B — Physical results.** When the boxes / result sheets physically arrive at the ward, LGA or state collation centre, the officer enters the figures (and number of boxes). The app shows at once whether Report B **matches** Report A or which parties **differ**.
 
-The Command Center's **Collation Officers** tab lists every officer, how many figures they confirmed and how many physical results they entered, and a feed of the latest confirmations and corrections (with the original figure beside any correction).
+Officers are added only in the forms above — there is no separate officers screen.
 
 ## 5. Watch the field live (video, GPS, talk-back)
 

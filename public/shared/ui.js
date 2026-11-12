@@ -848,11 +848,17 @@ function render() {
   mapMount();
   if ($("#collSlot") && DATA.collKey !== collKey()) loadColl();
 }
+// which door this is, in big letters, with one-tap links to the others — and no browser autofill from another portal
+const PORTALS = { cmd: ["COMMAND CENTER", "#1a365d", "/command/"], room: ["SITUATION ROOM", "#2b6cb0", "/room/"], obs: ["OBSERVER", "#38a169", "/observer/"], officer: ["COLLATION OFFICER", "#805ad5", "/officer/"] };
+function portalBar(kind) {
+  const [n, c] = PORTALS[kind];
+  return `<div style="margin-bottom:12px"><span style="display:inline-block;background:${c};color:#fff;font-weight:700;letter-spacing:.06em;font-size:12px;padding:5px 12px;border-radius:14px">${n} · SIGN IN</span><div class="muted" style="font-size:12px;margin-top:8px">Not the right place? ${Object.entries(PORTALS).filter(([k]) => k != kind).map(([, [l, , h]]) => `<a href="${h}">${l.charAt(0) + l.slice(1).toLowerCase()}</a>`).join(" · ")}</div></div>`;
+}
 function loginView(role) {
   const LC = takeCreds(role);
   if (LC && LC.p) setTimeout(doLogin, 50); // arrived by QR: sign straight in
   $("#app").innerHTML =
-    `<div class="mockup-container"><div class="topbar"><div class="brand"><i class="fas fa-shield-halved"></i><h1>${esc(CFG?.appName || "My Collation Center")} <span>· ${role == "cmd" ? "Command Center" : "Situation Room"}</span></h1></div></div><div class="card" style="max-width:420px"><input class="fi" id="li" placeholder="${role == "room" ? "Room ID (e.g. SR-KN-AB3)" : "Operator name (e.g. admin)"}" value="${esc(LC?.u || "")}" autocapitalize="none" autocomplete="username"><input class="fi" id="lp" type="password" placeholder="${role == "cmd" ? "Command passcode" : "Room passcode"}" value="${esc(LC?.p || "")}" onkeydown="event.key=='Enter'&&doLogin()">${role == "cmd" ? `<input class="fi" id="lo" inputmode="numeric" maxlength="6" placeholder="6-digit code (only if two-step login is on)" onkeydown="event.key=='Enter'&&doLogin()">` : ""}<button class="btn btn-primary" onclick="doLogin()">Enter</button><button class="btn btn-outline" style="margin-top:8px" onclick="scanLogin('${role}',(c)=>{$('#li').value=c.u;$('#lp').value=c.p;doLogin()})"><i class="fas fa-qrcode"></i> Scan QR code instead</button><div class="muted" style="margin-top:8px">${role == "cmd" ? "First login: operator <b>admin</b>; the passcode is printed once in the server console (or set COMMAND_PASSCODE)." : "Your room must be activated by Command Center. Passcode is issued by Command Center."}</div></div></div>`;
+    `<div class="mockup-container"><div class="topbar"><div class="brand"><i class="fas fa-shield-halved"></i><h1>${esc(CFG?.appName || "My Collation Center")} <span>· ${role == "cmd" ? "Command Center" : "Situation Room"}</span></h1></div></div><div class="card" style="max-width:420px">${portalBar(role)}<input class="fi" id="li" name="${role}-id" autocomplete="off" placeholder="${role == "room" ? "Room ID (e.g. SR-KN-AB3)" : "Operator name (e.g. admin)"}" value="${esc(LC?.u || "")}" autocapitalize="none"><input class="fi" id="lp" name="${role}-pass" autocomplete="new-password" type="password" placeholder="${role == "cmd" ? "Command passcode" : "Room passcode"}" value="${esc(LC?.p || "")}" onkeydown="event.key=='Enter'&&doLogin()">${role == "cmd" ? `<input class="fi" id="lo" inputmode="numeric" maxlength="6" placeholder="6-digit code (only if two-step login is on)" onkeydown="event.key=='Enter'&&doLogin()">` : ""}<button class="btn btn-primary" onclick="doLogin()">Enter</button><button class="btn btn-outline" style="margin-top:8px" onclick="scanLogin('${role}',(c)=>{$('#li').value=c.u;$('#lp').value=c.p;doLogin()})"><i class="fas fa-qrcode"></i> Scan QR code instead</button><div class="muted" style="margin-top:8px">${role == "cmd" ? "First login: operator <b>admin</b>; the passcode is printed once in the server console (or set COMMAND_PASSCODE)." : "Your room must be activated by Command Center. Passcode is issued by Command Center."}</div></div></div>`;
 }
 async function doLogin() {
   try {
@@ -878,6 +884,8 @@ async function start(role, tabsFn) {
   if (!A.tok) return loginView(role);
   try {
     ME = await A.get("me");
+    // a login left over from another app in this tab (observer / officer) must never open this one
+    if (ME.role !== role) throw new Error("wrong sign-in for this page");
     CFG = await A.get("config");
   } catch {
     sessionStorage.removeItem("t");

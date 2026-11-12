@@ -181,7 +181,7 @@ app.post(
 );
 app.get(
   "/api/me",
-  auth(),
+  auth("cmd", "room", "obs", "officer"),
   h(async (req, res) => {
     const u = req.u;
     if (u.role == "cmd")
@@ -200,6 +200,8 @@ app.get(
       const [t] = await qsys("select name,state from tenants where id=$1", [u.tn]);
       return res.json({ role: "room", id: u.id, room: r, cc: t?.name, ccState: t?.state });
     }
+    if (u.role == "officer") return res.json({ role: "officer", id: u.off.code, name: u.off.name, level: u.off.level });
+    if (u.role != "obs") return res.sendStatus(403);
     const [o] = await q(
       "select o.*,r.name room_name from observers o join rooms r on r.id=o.room_id where code=$1",
       [u.id],

@@ -135,13 +135,24 @@ app.post(
     const out = [],
       needOfficer = [],
       O = require("./officers"),
-      must = await O.required();
+      must = await O.required(),
+      given = new Map((Array.isArray(req.body.officers) ? req.body.officers : []).filter((o) => o && String(o.name || "").trim()).map((o) => [String(o.lga || "").toLowerCase(), o])),
+      madeOfficers = [];
     for (const lga of lgas) {
       if (have.has(lga.toLowerCase())) continue;
       // a room never exists without its LGA Collation Officer
       if (must && !(await O.hasOfficer(req.u.tn, "lga", st, lga))) {
-        needOfficer.push(lga);
-        continue;
+        const g = given.get(lga.toLowerCase());
+        if (!g) {
+          needOfficer.push(lga);
+          continue;
+        }
+        try {
+          madeOfficers.push(await O.mk(req.u.tn, { level: "lga", name: g.name, phone: g.phone, lga, state: st }));
+        } catch {
+          needOfficer.push(lga);
+          continue;
+        }
       }
       const id = "SR-" + abbr(st) + "-" + rnd(3),
         pass = rnd(10),
@@ -153,7 +164,7 @@ app.post(
       out.push({ id, name: lga + " LGA Situation Room", lga, passcode: pass });
     }
     aud("CMD", "Created " + out.length + " LGA Situation Rooms for " + st);
-    res.json({ created: out, skipped: lgas.length - out.length - needOfficer.length, needOfficer });
+    res.json({ created: out, skipped: lgas.length - out.length - needOfficer.length, needOfficer, officers: madeOfficers });
   }),
 );
 // ---- map imagery: Esri (free) always; Google Map Tiles API and Mapbox when a key/token is configured ----

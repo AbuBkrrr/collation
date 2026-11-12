@@ -317,6 +317,8 @@ const auth =
       const t = (req.headers.authorization || "").slice(7) || req.query.t,
         u = jwt.verify(t, SECRET);
       if (roles.length && !roles.includes(u.role)) return res.status(403).json({ error: "Forbidden" });
+      // a route open to "any signed-in user" means Command Center / Situation Room / Observer; an officer must be named explicitly
+      if (!roles.length && u.role == "officer") return res.status(403).json({ error: "Forbidden" });
       if (u.role == "cmd") {
         u.name = u.name || "admin";
         const [c] = await q(

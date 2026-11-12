@@ -927,3 +927,33 @@ test("issued sign-ins can be viewed again by whoever issued them (and only them)
   ok(await api("settings/passcode", { tok: C, body: { old: inv.passcode, pass: "my-own-new-pass-1" } }));
   assert.equal(ok(await api("tenants/" + inv.id + "/credential", { tok: S.A })).passcode, null);
 });
+
+test("a token from one app is not accepted as another: /api/me by role", async () => {
+  const inv = ok(await api("tenants", { tok: S.A, body: { name: "Me Role CC", state: "Gombe" } }));
+  const C = ok(await api("login/command", { body: { user: inv.operator, pass: inv.passcode } })).token;
+  const o = ok(await api("officers", { tok: C, body: { level: "state", name: "Me Officer" } }));
+  const O = ok(await api("login/officer", { body: { code: o.code, pass: o.passcode } })).token;
+  assert.equal(ok(await api("me", { tok: O })).role, "officer");
+  assert.equal(ok(await api("me", { tok: C })).role, "cmd");
+  assert.equal((await api("rooms", { tok: O })).s, 403, "an officer token cannot use Command Center APIs");
+  assert.equal((await api("obs", { tok: O })).s, 403);
+});
+
+test("officers are named inside the forms: bulk rooms and a state-wide room", async () => {
+  await setReq("1");
+  try {
+    const c = new Client({ connectionString: DB });
+    await c.connect();
+    await c.query("insert into locations(state,lga,ward,pu,reg,name) values('Sokoto','Wamako','W1','001',500,'a'),('Sokoto','Kware','W2','001',500,'b')");
+    await c.end();
+    const inv = ok(await api("tenants", { tok: S.A, body: { name: "Form Officers CC", state: "Sokoto", officer: { name: "Sokoto State Officer" } } }));
+    const C = ok(await api("login/command", { body: { user: inv.operator, pass: inv.passcode } })).token;
+    const none = ok(await api("rooms/bulk", { tok: C, body: {} }));
+    assert.deepEqual([none.created.length, none.needOfficer.length], [0, 2], "no room without its LGA officer");
+    const some = ok(await api("rooms/bulk", { tok: C, body: { officers: [{ lga: "Wamako", name: "Wamako Officer", phone: "1" }] } }));
+    assert.deepEqual([some.created.length, some.officers.length, some.needOfficer], [1, 1, ["Kware"]]);
+    ok(await api("rooms", { tok: C, body: { name: "Sokoto governor", kind: "governor" } })); // the state officer already exists, so a state-wide room is allowed
+  } finally {
+    await setReq("0");
+  }
+});

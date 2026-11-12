@@ -45,8 +45,8 @@ app.post(
         if (lgas.length == 1) {
           if (!String(b.officer?.name || "").trim() && !(await O.hasOfficer(req.u.tn, "lga", b.state, lgas[0])))
             return res.status(400).json({ error: "Name the LGA Collation Officer (Officer 2) for " + lgas[0] + " — a Situation Room needs its supervisor" });
-        } else if (!(await O.hasOfficer(req.u.tn, "state", b.state)) && !(await O.hasOfficer(req.u.tn, "federal", null)))
-          return res.status(400).json({ error: "Add the State (Officer 3) or Federal (Officer 4) Collation Officer first — open the Collation Officers tab" });
+        } else if (!String(b.officer?.name || "").trim() && !(await O.hasOfficer(req.u.tn, "state", b.state)) && !(await O.hasOfficer(req.u.tn, "federal", null)))
+          return res.status(400).json({ error: "Name the State Collation Officer (Officer 3) for this room — it is needed once for the centre" });
       }
     }
     const id = "SR-" + abbr(b.state) + "-" + rnd(3),
@@ -66,7 +66,11 @@ app.post(
     // optional: name the LGA Collation Officer (2) for a single-LGA room while creating it
     let officer = null;
     const oc = b.officer;
-    if (oc && oc.name && lgas.length == 1 && !(await require("./officers").hasOfficer(req.u.tn, "lga", b.state, lgas[0]))) {
+    if (oc && oc.name && lgas.length != 1 && !(await require("./officers").hasOfficer(req.u.tn, "state", b.state)) && !(await require("./officers").hasOfficer(req.u.tn, "federal", null))) {
+      try {
+        officer = await require("./officers").mk(req.u.tn, { level: "state", name: oc.name, phone: oc.phone, state: b.state });
+      } catch {}
+    } else if (oc && oc.name && lgas.length == 1 && !(await require("./officers").hasOfficer(req.u.tn, "lga", b.state, lgas[0]))) {
       try {
         officer = await require("./officers").mk(req.u.tn, { level: "lga", name: oc.name, phone: oc.phone, lga: lgas[0], state: b.state });
       } catch {}

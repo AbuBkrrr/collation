@@ -131,6 +131,12 @@ app.post(
     res.json({ ok: 1 });
   }),
 );
+// the client's state / federal officer sign-in (platform administrator)
+app.get("/api/tenants/:id/officer", auth("cmd"), su, h(async (req, res) => {
+  const [o] = await qsys("select * from officers where tenant=$1 and level in ('state','federal') order by id limit 1", [req.params.id]);
+  if (!o) return res.status(404).json({ error: "No officer" });
+  res.json({ id: o.id, level: o.level, tag: o.level.toUpperCase(), title: "Collation Officer " + (o.level == "federal" ? 4 : 3), name: o.name, state: o.state, code: o.code, passcode: unseal(o.pass_enc) });
+}));
 // show a client's operator sign-in again (platform administrator; only while the passcode is the one issued here)
 app.get("/api/tenants/:id/credential", auth("cmd"), su, h(async (req, res) => {
   const [t] = await qsys("select * from tenants where id=$1", [req.params.id]);

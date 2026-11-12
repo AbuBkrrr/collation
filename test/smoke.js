@@ -23,19 +23,21 @@ const { spawn, execSync } = require("child_process"), { chromium } = require("pl
   const VP = { phone: { width: 375, height: 740 }, tablet: { width: 820, height: 1100 }, desktop: { width: 1366, height: 820 } }, issues = [];
   for (const [vn, vp] of Object.entries(VP)) {
     const ctx = await br.newContext({ viewport: vp });
-    const run = async (name, url, tok, tabs) => {
+    const run = async (name, url, tok, tabs, expectSel) => {
       const pg = await ctx.newPage(), errs = [];
       pg.on("console", (m) => m.type() == "error" && !/favicon|tile|arcgis|openstreetmap|ERR_|example\.test|Failed to load resource.*(40[34])/i.test(m.text()) && errs.push("console: " + m.text().slice(0, 150)));
       pg.on("pageerror", (e) => errs.push("pageerror: " + e.message.slice(0, 150)));
-      pg.on("response", (r) => { const u = r.url(); if (r.status() >= 400 && u.startsWith(B) && !/favicon/.test(u)) errs.push("http " + r.status() + " " + u.replace(B, "")); });
+      pg.on("response", (r) => { const u = r.url(); if (r.status() >= 400 && u.startsWith(B) && !/favicon/.test(u) && !(expectSel && [401, 403].includes(r.status()))) errs.push("http " + r.status() + " " + u.replace(B, "")); });
       if (tok) await pg.addInitScript((t) => sessionStorage.setItem("t", t), tok);
       await pg.goto(B + url, { waitUntil: "domcontentloaded" }); await pg.waitForTimeout(1500);
       const chk = async (l) => { const r = await pg.evaluate(() => ({ sw: document.documentElement.scrollWidth, w: innerWidth })); if (r.sw > r.w + 2) errs.push(`sideways scroll at ${l} (${r.sw}>${r.w})`); };
       await chk("load");
       if (tabs) { const n = await pg.locator(".nav-tab").count(); for (let i = 0; i < n; i++) { const t = pg.locator(".nav-tab").nth(i), l = (await t.innerText()).trim(); await t.click(); await pg.waitForTimeout(700); await chk(l); } }
+      if (expectSel && !(await pg.locator(expectSel).count())) errs.push("expected " + expectSel + " (a sign-in from another app must not open this page)");
       errs.forEach((e) => issues.push(`[${vn}] ${name}: ${e}`)); await pg.close();
     };
     for (const [n, u] of [["landing", "/"], ["pitch", "/pitch"], ["help", "/help"], ["command-login", "/command/"], ["room-login", "/room/"], ["observer-login", "/observer/"], ["officer-login", "/officer/"]]) await run(n, u);
+    await run("room-with-officer-token", "/room/", offs.ward, 0, "#lp"); await run("command-with-officer-token", "/command/", offs.ward, 0, "#lp"); await run("room-with-command-token", "/room/", demo, 0, "#lp"); await run("observer-with-officer-token", "/observer/", offs.ward, 0, "#lc"); await run("officer-with-room-token", "/officer/", rtok, 0, "#li");
     await run("cmd-demo", "/command/", demo, 1); await run("cmd-admin", "/command/", adm, 1); await run("room", "/room/", rtok, 1); await run("observer", "/observer/", otok);
     for (const [lv, t] of Object.entries(offs)) await run("officer-" + lv, "/officer/", t);
     await ctx.close();

@@ -53,7 +53,7 @@ app.post(
     {
       const O = require("./officers");
       if ((await O.required()) && !(await O.hasOfficer(req.u.tn, "ward", b.state, b.lga, b.ward)))
-        return res.status(400).json({ error: "Ward " + b.ward + " has no Ward Collation Officer (Officer 1) yet — add one in the Collation Officers tab first" });
+        return res.status(400).json({ error: "Ward " + b.ward + " has no Ward Collation Officer (Officer 1) yet — name one in the observer-code form (Generate observer codes) first" });
     }
     let code;
     do code = "OBS-" + (1000 + crypto.randomInt(9000)) + "-PU" + pu + "-" + abbr(b.state);
