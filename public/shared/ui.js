@@ -801,6 +801,7 @@ async function loadAll() {
   // a Command Center locked to one state: its LGA list, for the room form and the search filters
   if (A.role == "cmd" && ME.tenantState && !DATA.lgas) DATA.lgas = (await g("locations?state=" + encodeURIComponent(ME.tenantState))).map((x) => x.lga);
   if (A.role == "cmd" && ME.su) DATA.bk = await A.get("backups").catch(() => null);
+  if (A.role == "cmd" && ME.su) DATA.vault = await g("admin/vault");
   if (A.role == "cmd" && ME.su) DATA.mkt = await A.get("pitch/stats").catch(() => null);
   if ($("#collSlot")) loadColl();
   if (TAB == "res" && PUS_) loadPus();
@@ -841,6 +842,7 @@ function render() {
       .join("")}</div><div class="view">${tb[TAB][2]()}</div></div>`;
   const s = $("#vslot");
   if (s && SEL) s.appendChild(vv);
+  stackTables();
   mapMount();
   if ($("#collSlot") && DATA.collKey !== collKey()) loadColl();
 }
@@ -1221,3 +1223,16 @@ const toggleTheme = () => applyTheme(document.documentElement.getAttribute("data
   document.body.appendChild(b);
   applyTheme(t);
 })();
+
+
+// On a phone a many-column table becomes one card per row, each value labelled with its column (CSS does the layout;
+// this only copies the header text onto each cell). Wide tables such as the collation grid keep scrolling sideways.
+function stackTables() {
+  document.querySelectorAll(".view table").forEach((t) => {
+    const rows = [...t.querySelectorAll("tr")],
+      heads = [...(rows[0]?.querySelectorAll("th") || [])].map((h) => h.textContent.trim());
+    if (heads.length < 3 || heads.length > 9 || t.querySelector("td[colspan]")) return;
+    t.classList.add("stack");
+    rows.slice(1).forEach((r) => [...r.children].forEach((c, i) => c.setAttribute("data-label", heads[i] || "")));
+  });
+}

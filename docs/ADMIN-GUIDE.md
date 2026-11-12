@@ -98,14 +98,22 @@ delete** — Command Centres, Situation Rooms and election data.
 - **Archive** (Command Centres tab → **Archive**, or **Archive** on a room) switches it off and hides it
   everywhere (lists, collation, broadcasts). **Nothing is deleted** — open **Archived Command Centres** and
   press **Restore** to bring it back (then **Enable** it).
-- **Delete permanently** is only offered for something already archived, and asks you to **type its ID**.
-  It removes the Command Centre, its rooms, observers, results, EC8A photos, clips, radio and messages. It
-  cannot be undone — take a backup first (Export & Archive).
-- **Rooms** (on a Command Centre row) opens that centre's rooms: archive, restore or delete any of them, or
-  **Clear data** (removes a room's observers and results but keeps the room).
-- **Clear all election data** (in that panel) empties a whole Command Centre of results and observers but
-  keeps the centre, its rooms and operators — handy after a demo or a rehearsal.
-- You cannot archive or delete your own Command Centre.
+- **Delete** removes things **with everything under them**, and asks you to **type the ID** to confirm:
+  - deleting a **Command Centre** deletes **all its Situation Rooms and every observer** under them, its
+    operators, messages and audit trail;
+  - deleting a **Situation Room** deletes **all its observers** and their results, photos and clips.
+- **Stored records.** Nothing collected is lost silently. Before anything is deleted or cleared, a full copy
+  — observers, tallies, results, EC8A records, incidents, radio, messages and audit — is saved to **Stored
+  records** (Command Centres tab, **Download** as a file), and the photos, clips and radio audio are moved to
+  the server's `archive` folder. They stay until you remove them on the server. Everything live is also in the
+  database, which is backed up automatically (every 30 minutes by default).
+- **Rooms** (on a Command Centre row) opens that centre's rooms: archive, restore or delete any of them,
+  **Delete ALL rooms**, or **Clear data** (removes a room's observers and results but keeps the room).
+- **Clear all election data** empties a whole Command Centre of results and observers but keeps the centre, its
+  rooms and operators — handy after a demo or a rehearsal.
+- You cannot archive or delete your own Command Centre. **Rooms listed on your own Situation Rooms tab belong
+  to your Main Command Centre**: deleting another Command Centre does not touch them — use **Delete** on a room
+  there, or **Rooms → Delete ALL rooms** on the Main Command Centre row.
 
 ### Your Global Collation covers every state
 

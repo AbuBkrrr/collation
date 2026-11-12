@@ -93,3 +93,23 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:8px;borde
 html[data-theme="dark"]{filter:invert(1) hue-rotate(180deg) brightness(.94) contrast(.96);background:#fff}
 html[data-theme="dark"] video,html[data-theme="dark"] img,html[data-theme="dark"] canvas,html[data-theme="dark"] svg,html[data-theme="dark"] .leaflet-container{filter:invert(1) hue-rotate(180deg)}
 html[data-theme="dark"] .leaflet-container svg,html[data-theme="dark"] .leaflet-container img,html[data-theme="dark"] .leaflet-container canvas{filter:none}
+
+/* LGA pick-lists: rows keep their height (they were squashed and overlapping), long names wrap */
+.lgabox{grid-auto-rows:max-content;align-content:start;max-height:210px}
+.lgabox label{display:block;line-height:1.45;padding:3px 0;overflow:visible;white-space:normal;text-overflow:clip}
+/* a form beside a long list: the list gets the room, the form stays a sensible width; one column on tablets and phones */
+.dashboard-grid.side{grid-template-columns:minmax(300px,390px) minmax(0,1fr)}
+@media(max-width:1280px){.dashboard-grid.side{grid-template-columns:minmax(0,1fr)}}
+/* the action buttons in a table's last column wrap onto more lines instead of forcing the whole table to scroll sideways */
+td:last-child{white-space:normal}td:last-child .btn{margin:2px 2px 2px 0}
+
+@media(max-width:640px){
+  .view table.stack,.view table.stack tbody{display:block;width:100%}
+  .view table.stack tr:first-child{display:none}
+  .view table.stack tr{display:block;border:1px solid #e2e8f0;border-radius:12px;padding:6px 10px;margin:8px 0;background:#fff}
+  .view table.stack td{display:flex;justify-content:space-between;align-items:center;gap:12px;white-space:normal;border:0;border-bottom:1px solid #f1f5f9;padding:7px 0;text-align:right}
+  .view table.stack td:last-child{border-bottom:0;justify-content:flex-end;flex-wrap:wrap}
+  .view table.stack td::before{content:attr(data-label);font-weight:600;color:#4a5568;text-align:left;flex:none;max-width:42%}
+  .view table.stack td:empty{display:none}
+  .view table.stack td:last-child::before{display:none}
+}
