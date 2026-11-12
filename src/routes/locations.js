@@ -37,6 +37,15 @@ app.post(
     res.json(x);
   }),
 );
+// every polling unit of the chosen LGAs in one go (for bulk observer creation): GET /api/locations/units?state=Kano&lgas=Rogo,Karaye
+app.get(
+  "/api/locations/units",
+  auth("cmd", "room"),
+  h(async (req, res) => {
+    const lg = String(req.query.lgas || "").split(",").map((x) => x.trim()).filter(Boolean).slice(0, 60);
+    res.json(lg.length ? await q("select lga,ward,pu,reg,name from locations where state=$1 and lga=any($2) order by lga,ward,pu limit 20000", [String(req.query.state || ""), lg]) : []);
+  }),
+);
 app.get(
   "/api/locations",
   auth("cmd", "room"),

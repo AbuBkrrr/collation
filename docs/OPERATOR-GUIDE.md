@@ -122,14 +122,23 @@ A supervisor only ever sees their own room.
 
 ## 4. Add observers (done inside a Situation Room)
 
-Observer codes are created **in the room**, by its supervisor, so each code is tied to the right area.
+Observer codes are created **in the room**, by its supervisor, so each code is tied to the right area. Do a
+whole batch at once:
 
-1. In the Situation Room, open the **Observers** manager.
-2. Choose the **polling unit** (state → LGA → ward → PU — limited to the room's area).
-3. **Generate a code**. A card with the code and its **QR** appears — copy, print, or let the agent
-   scan it. Aim for **two observers per polling unit** — that's what makes a result trustworthy
-   (section 7). **QR** on any row shows the card again, and **Print QR sheet (unused codes)** prints
-   a card for every code not yet claimed.
+1. In the Situation Room open **Observer Manager** → **Generate observer codes**.
+2. **Tick the LGAs** the batch is for (a room covering Rogo and Karaye shows both; tick one, both, or use *all*).
+   Everything under a ticked LGA starts ticked — its **wards** and **polling units** — so you only **untick** what
+   you do not want. *all / none* links speed this up for LGAs, wards and polling units.
+3. Choose **Observers per polling unit** (2 is recommended: two independent witnesses make a result trustworthy).
+   The screen shows the total: for example *18 polling units → 36 new codes*. Units that already have observers
+   only get what is missing, so you can safely run it again.
+4. Press **Generate**. A window offers **Print QR cards** (one card per observer to hand out) and **Download
+   list** (a spreadsheet of the codes).
+5. **Names are optional.** Type each observer's name in the **Name** box of the Observers list whenever you have
+   it — it saves as you leave the box.
+
+To add a single observer by typing the LGA, ward and polling unit, open **Add one observer by typing the details**.
+Registered voters for each unit come from the polling-unit list automatically.
 
 ### The observer's first login (they do this)
 1. Install the **Observer app** from `/download/app` (or open `/observer/`).

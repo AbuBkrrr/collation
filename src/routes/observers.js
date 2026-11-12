@@ -61,6 +61,70 @@ app.post(
     res.json({ code });
   }),
 );
+// ---- bulk: several LGAs / wards / polling units at once, N observers per unit (names can be added later) ----
+const puNorm = (v) => String(v || "").split(/[\/-]/).pop().replace(/\D/g, "").padStart(3, "0");
+app.post(
+  "/api/room/obs/bulk",
+  auth("room"),
+  h(async (req, res) => {
+    const b = req.body || {},
+      per = Math.min(5, Math.max(1, parseInt(b.per, 10) || 2)),
+      units = Array.isArray(b.units) ? b.units.slice(0, 3000) : [];
+    if (!units.length) return res.status(400).json({ error: "Choose at least one polling unit" });
+    const [rm] = await q("select state,scope from rooms where id=$1", [req.u.id]),
+      sc = String(rm?.scope || "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean),
+      st = rm?.state;
+    if (!STATES.includes(st)) return res.status(400).json({ error: "This room has no state" });
+    const lgas = [...new Set(units.map((u) => String(u.lga || "")))];
+    if (sc.length && lgas.some((l) => !sc.includes(l.trim().toLowerCase()))) return res.status(403).json({ error: "This room covers " + rm.scope + " only" });
+    // every unit must exist in the state's polling-unit list; its registered voters and name come from there
+    const known = new Map((await q("select lga,ward,pu,reg,name from locations where state=$1 and lga=any($2)", [st, lgas])).map((r) => [[r.lga, r.ward, r.pu].join("|"), r]));
+    const bad = units.find((u) => !known.has([u.lga, u.ward, u.pu].join("|")));
+    if (bad) return res.status(400).json({ error: "Not a polling unit of " + st + ": " + [bad.lga, bad.ward, bad.pu].join(" / ") });
+    // top up: a unit that already has observers only gets what is missing to reach "per"
+    const have = new Map((await q("select lga,ward,pu,count(*)::int n from observers where room_id=$1 and active group by 1,2,3", [req.u.id])).map((r) => [[r.lga, r.ward, r.pu].join("|"), r.n]));
+    const want = [];
+    let skipped = 0;
+    for (const u of units) {
+      const k = [u.lga, u.ward, u.pu].join("|"),
+        need = per - (have.get(k) || 0);
+      if (need <= 0) skipped++;
+      for (let i = 0; i < need; i++) want.push({ u, r: known.get(k) });
+    }
+    if (!want.length) return res.json({ created: [], skipped });
+    if (want.length > 5000) return res.status(400).json({ error: "That would create " + want.length + " codes; choose fewer units (max 5000)" });
+    const used = new Set(),
+      codes = [];
+    for (const w of want) {
+      let c;
+      do c = "OBS-" + (1000 + crypto.randomInt(9000)) + "-PU" + puNorm(w.u.pu) + "-" + abbr(st);
+      while (used.has(c));
+      used.add(c);
+      codes.push(c);
+    }
+    const clash = new Set((await q("select code from observers where code=any($1)", [codes])).map((x) => x.code));
+    for (let i = 0; i < codes.length; i++)
+      while (clash.has(codes[i]) || codes.indexOf(codes[i]) != i) codes[i] = "OBS-" + (1000 + crypto.randomInt(9000)) + "-PU" + puNorm(want[i].u.pu) + "-" + abbr(st);
+    await q(
+      `insert into observers(code,room_id,name,state,lga,ward,pu,reg,pu_name)
+       select t.c,$2,'',$3,t.l,t.w,t.p,t.r,t.n from unnest($1::text[],$4::text[],$5::text[],$6::text[],$7::int[],$8::text[]) as t(c,l,w,p,r,n)`,
+      [codes, req.u.id, st, want.map((w) => w.u.lga), want.map((w) => w.u.ward), want.map((w) => puNorm(w.u.pu)), want.map((w) => +w.r.reg || 500), want.map((w) => w.r.name || null)],
+    );
+    aud(req.u.id, "Generated " + codes.length + " observer codes in bulk (" + units.length + " polling units)");
+    res.json({ created: want.map((w, i) => ({ code: codes[i], lga: w.u.lga, ward: w.u.ward, pu: puNorm(w.u.pu), pu_name: w.r.name || "", reg: +w.r.reg || 500 })), skipped });
+  }),
+);
+// an observer's name can be added or changed any time (the room, or its Command Center)
+app.post(
+  "/api/obs/:code/name",
+  auth("cmd", "room"),
+  h(async (req, res) => {
+    const o = await own(req.u, req.params.code);
+    if (!o) return res.sendStatus(404);
+    await q("update observers set name=$2 where code=$1", [o.code, String(req.body.name || "").trim().slice(0, 80)]);
+    res.json({ ok: 1 });
+  }),
+);
 app.post(
   "/api/obs/:code/toggle",
   auth("cmd", "room"),

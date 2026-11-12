@@ -1,4 +1,5 @@
-const {qsys,fs,path,DATA,pool,aud,h,app,auth,su} = require("../core");
+const {qsys,als,fs,path,DATA,pool,aud,h,app,auth,su} = require("../core");
+const { puList } = require("./results");
 // ---- Platform administrator only: archive (hide, keep, restorable) or permanently delete Command Centers,
 // Situation Rooms and their election data. Clients can only suspend / deactivate; they cannot archive or delete.
 // Deleting a Command Center deletes all its Situation Rooms; deleting a Situation Room deletes all its observers.
@@ -189,4 +190,79 @@ app.get("/api/admin/vault/:name", auth("cmd"), su, h(async (req, res) => {
   const n = String(req.params.name);
   if (!/^[A-Za-z0-9_.-]+\.json$/.test(n) || !fs.existsSync(path.join(VAULT, n))) return res.sendStatus(404);
   res.download(path.join(VAULT, n), n);
+}));
+
+// ---- review archived data: archived Command Centers / rooms (still in the database) and vault copies of deleted ones ----
+const slimUnits = (l) => l.slice(0, 3000).map((x) => ({ lga: x.lga, ward: x.ward, pu: x.pu, pu_name: x.pu_name, contest: x.contest, status: x.status, total: x.total, fig: x.fig, verified: x.verified, ec8a: x.ec8a, room_id: x.room_id }));
+function summary(title, units, observers, rooms, extra) {
+  const totals = {},
+    counts = { units: units.length, reporting: units.filter((x) => x.status != "pending").length, verified: units.filter((x) => x.verified).length, disputed: units.filter((x) => x.status == "disputed").length, observers: observers.length, rooms: rooms.length, ec8a: units.reduce((s, x) => s + (x.ec8a || 0), 0) };
+  units.forEach((x) => x.fig && Object.entries(x.fig).forEach(([p, v]) => (totals[p] = (totals[p] || 0) + v)));
+  return { title, totals, total: Object.values(totals).reduce((a, b) => a + b, 0), counts, units: slimUnits(units), observers: observers.slice(0, 3000), rooms, truncated: units.length > 3000 || observers.length > 3000, ...extra };
+}
+const obsRows = async (rooms) => {
+  const o = await qsys("select code,name,room_id,state,lga,ward,pu,active from observers where room_id=any($1) order by room_id,code limit 3001", [rooms]),
+    t = await qsys("select code,party,v from tallies where code=any($1)", [o.map((x) => x.code)]),
+    m = {};
+  t.forEach((x) => ((m[x.code] = m[x.code] || {})[x.party] = x.v));
+  return o.map((x) => ({ ...x, t: m[x.code] || {} }));
+};
+app.get("/api/admin/archive", auth("cmd"), su, h(async (req, res) => {
+  res.json({
+    centers: await qsys("select t.id,t.name,t.state,(select count(*)::int from rooms where tenant=t.id) rooms,(select count(*)::int from observers o join rooms r on r.id=o.room_id where r.tenant=t.id) observers from tenants t where coalesce(t.archived,false) order by t.id"),
+    rooms: await qsys("select r.id,r.name,r.state,r.scope,r.kind,r.tenant,t.name tenant_name,(select count(*)::int from observers where room_id=r.id) obs from rooms r join tenants t on t.id=r.tenant where coalesce(r.archived,false) order by r.tenant,r.id"),
+    vault: fs.readdirSync(VAULT).filter((n) => /\.json$/.test(n)).map((n) => {
+      const s = fs.statSync(path.join(VAULT, n));
+      return { name: n, size: s.size, ts: s.mtime, media: fs.existsSync(path.join(VAULT, n.replace(/\.json$/, "") + "_media")) };
+    }).sort((a, b) => (a.name < b.name ? 1 : -1)),
+  });
+}));
+app.get("/api/admin/review", auth("cmd"), su, h(async (req, res) => {
+  let tn, rooms, f = { withArchived: true }, title;
+  if (req.query.room) {
+    const [r] = await qsys("select r.id,r.name,r.tenant,r.state,r.scope,r.kind,r.status,coalesce(r.archived,false) archived from rooms r where id=$1", [String(req.query.room)]);
+    if (!r) return res.sendStatus(404);
+    (tn = r.tenant), (rooms = [r]), (f.room = r.id), (title = "Situation Room " + r.name + " (" + r.id + ")");
+  } else {
+    const [t] = await qsys("select id,name from tenants where id=$1", [String(req.query.tenant || "")]);
+    if (!t) return res.sendStatus(404);
+    (tn = t.id), (title = "Command Center " + t.name + " (" + t.id + ")");
+    rooms = await qsys("select id,name,state,scope,kind,status,coalesce(archived,false) archived from rooms where tenant=$1 order by id", [tn]);
+  }
+  const units = await als.run({ name: "review", tn, room: "" }, () => puList({ role: "cmd", tn, id: "review" }, f));
+  res.json(summary(title, units, await obsRows(rooms.map((r) => r.id)), rooms, { source: "live" }));
+}));
+// the same review from a vault copy (the live rows are gone): figures are reconciled exactly as the live collation does
+app.get("/api/admin/vault/:name/review", auth("cmd"), su, h(async (req, res) => {
+  const n = String(req.params.name);
+  if (!/^[A-Za-z0-9_.-]+\.json$/.test(n) || !fs.existsSync(path.join(VAULT, n))) return res.sendStatus(404);
+  const snap = JSON.parse(fs.readFileSync(path.join(VAULT, n), "utf8")),
+    kind = Object.fromEntries(snap.rooms.map((r) => [r.id, r.kind || "general"])),
+    key = (o) => [o.state, o.lga, o.ward, o.pu, kind[o.room_id] || "general"].join("|"),
+    T = {};
+  snap.tallies.forEach((t) => ((T[t.code] = T[t.code] || {})[t.party] = t.v));
+  const R = Object.fromEntries(snap.pu_results.map((r) => [key(r), r])),
+    P = {},
+    G = {};
+  snap.ec8a.forEach((e) => (P[key(e)] = (P[key(e)] || 0) + 1));
+  snap.observers.forEach((o) => (G[key(o)] = G[key(o)] || []).push(o));
+  const units = Object.entries(G).map(([k, l]) => {
+    const subs = l.filter((o) => T[o.code] && Object.keys(T[o.code]).length),
+      rs = R[k];
+    let status, fig = null;
+    if (rs) (status = "resolved"), (fig = rs.final);
+    else if (!subs.length) status = "pending";
+    else if (subs.length == 1) (status = "single"), (fig = T[subs[0].code]);
+    else {
+      const ps = [...new Set(subs.flatMap((o) => Object.keys(T[o.code])))],
+        conflict = ps.some((p) => new Set(subs.filter((o) => p in T[o.code]).map((o) => T[o.code][p])).size > 1),
+        full = ps.every((p) => subs.every((o) => p in T[o.code]));
+      status = conflict ? "disputed" : full ? "matched" : "partial";
+      if (!conflict) fig = Object.assign({}, ...subs.map((o) => T[o.code]));
+    }
+    const o0 = l[0],
+      photos = P[k] || 0;
+    return { lga: o0.lga, ward: o0.ward, pu: o0.pu, pu_name: o0.pu_name, contest: kind[o0.room_id], status, fig, total: fig ? Object.values(fig).reduce((a, b) => a + b, 0) : 0, verified: (status == "matched" || status == "resolved") && photos > 0, ec8a: photos, room_id: o0.room_id };
+  });
+  res.json(summary("Stored copy " + n.replace(/\.json$/, ""), units, snap.observers.map((o) => ({ ...o, t: T[o.code] || {} })), snap.rooms, { source: "vault", taken_at: snap.taken_at, file: n }));
 }));
