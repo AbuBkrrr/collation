@@ -175,7 +175,7 @@ const hav = (a, b, c, d) => {
 const COLL_KEYS = ["state", "lga", "ward", "pu", "room"];
 let CR = null; // room id when Command drills into one room
 let POOLED = true; // Global Collation: whole state (all pooled Command Centers) or this Command Center only
-const poolOn = () => POOLED && !F.room && (A.role == "cmd" ? TAB == "col" && !!ME.tenantState : A.role == "room");
+const poolOn = () => POOLED && !F.room && (A.role == "cmd" ? TAB == "col" && (!!ME.tenantState || !!ME.su) : A.role == "room");
 const collKey = () => JSON.stringify([LVL, poolOn(), ...COLL_KEYS.map((k) => (k == "room" ? F.room || CR || "" : F[k] || ""))]);
 async function loadColl() {
   const k = collKey(),
@@ -215,7 +215,7 @@ function hist() {
     n = s.counts,
     show = byVotes(c.parties, s.totals).filter((p, i) => (PF() ? p == PF() : i < 10 || s.totals[p] > 0));
   return (
-    `<div class="muted" style="margin-bottom:8px">${n.verified}/${n.pus} PUs verified · ${s.total.toLocaleString()} votes counted · ${n.disputed} disputed (not counted until resolved)${PF() ? " · showing <b>" + PF() + "</b> only" : ""}</div>${c.pooled ? `<div class="muted" style="margin-bottom:8px;background:#ebf8ff;border:1px solid #bee3f8;border-radius:8px;padding:8px 10px"><i class="fas fa-layer-group"></i> <b>${c.pooled.lga ? esc(c.pooled.lga.split(",").join(", ")) + (c.pooled.lga.includes(",") ? " zone-wide" : " LGA-wide") : esc(c.pooled.state) + " state-wide"}</b>: vote counts from ${c.pooled.lga ? "every Situation Room covering " + (c.pooled.lga.includes(",") ? "these LGAs" : "this LGA") + ", across " : ""}${c.pooled.centres} Command Center${c.pooled.centres == 1 ? "" : "s"}. ${c.pooled.extPus ? `<b>${c.pooled.extPus}</b> polling unit${c.pooled.extPus == 1 ? "" : "s"} (<b>${c.pooled.extVotes.toLocaleString()}</b> votes) come from <b>external observers</b> — observers of other ${c.pooled.lga ? "Situation Rooms and " : ""}Command Centers. Vote counts only: their map, video, audio and observer details are not shared.` : "No figures from external observers yet."}</div>` : ""}<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">${Object.keys(SC)
+    `<div class="muted" style="margin-bottom:8px">${n.verified}/${n.pus} PUs verified · ${s.total.toLocaleString()} votes counted · ${n.disputed} disputed (not counted until resolved)${PF() ? " · showing <b>" + PF() + "</b> only" : ""}</div>${c.pooled ? `<div class="muted" style="margin-bottom:8px;background:#ebf8ff;border:1px solid #bee3f8;border-radius:8px;padding:8px 10px"><i class="fas fa-layer-group"></i> <b>${c.pooled.all ? "All states · platform-wide" : c.pooled.lga ? esc(c.pooled.lga.split(",").join(", ")) + (c.pooled.lga.includes(",") ? " zone-wide" : " LGA-wide") : esc(c.pooled.state) + " state-wide"}</b>: vote counts from ${c.pooled.lga ? "every Situation Room covering " + (c.pooled.lga.includes(",") ? "these LGAs" : "this LGA") + ", across " : ""}${c.pooled.centres} Command Center${c.pooled.centres == 1 ? "" : "s"}. ${c.pooled.extPus ? `<b>${c.pooled.extPus}</b> polling unit${c.pooled.extPus == 1 ? "" : "s"} (<b>${c.pooled.extVotes.toLocaleString()}</b> votes) come from <b>external observers</b> — observers of other ${c.pooled.lga ? "Situation Rooms and " : ""}Command Centers. Vote counts only: their map, video, audio and observer details are not shared.` : "No figures from external observers yet."}</div>` : ""}<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">${Object.keys(SC)
       .filter((k) => n[k])
       .map((k) => pillS(k, n[k]))
       .join("")}</div>` +
@@ -277,6 +277,7 @@ function cardSearch(cmd, all) {
       // one-state Command Center (or a room): the state is fixed, and every LGA of that state is listed
       if (k == "state" && FIXST) return `<select disabled title="This ${cmd ? "Command Center" : "room"} covers ${esc(FIXST)} only"><option>STATE: ${esc(FIXST)}</option></select>`;
       if (k == "lga" && cmd && DATA.lgas) v = [...new Set([...v, ...DATA.lgas])];
+      if (k == "state" && cmd && ME.su && DATA.coll?.states) v = [...new Set([...v, ...DATA.coll.states])]; // every state on the platform
       v.sort();
       return `<select onchange="setF('${k}',this.value)"><option value="">${k.toUpperCase()}: All</option>${v.map((x) => `<option ${F[k] == x ? "selected" : ""}>${esc(x)}</option>`).join("")}</select>`;
     })
@@ -519,7 +520,7 @@ function cardColl() {
       ([k, n]) =>
         `<button class="btn btn-sm ${LVL == k ? "btn-primary" : "btn-outline"}" onclick="LVL='${k}';render()">${n}</button>`,
     )
-    .join("")}${(A.role == "cmd" && TAB == "col" && ME.tenantState) || (A.role == "room" && ME.room?.state) ? `<span style="width:1px;background:#e2e8f0;margin:0 4px"></span><button class="btn btn-sm ${POOLED ? "btn-primary" : "btn-outline"}" onclick="POOLED=true;render()" title="Vote counts from every pooled Command Center">${A.role == "room" ? (String(ME.room.scope || "").includes(",") ? "Whole zone" : "Whole LGA") : "Whole state"}</button><button class="btn btn-sm ${!POOLED ? "btn-primary" : "btn-outline"}" onclick="POOLED=false;render()">${A.role == "room" ? "This room only" : "This Command Center only"}</button>` : ""}</div></div><div id="collSlot">${hist()}<div style="margin-top:12px">${drill()}</div></div></div>`;
+    .join("")}${(A.role == "cmd" && TAB == "col" && (ME.tenantState || ME.su)) || (A.role == "room" && ME.room?.state) ? `<span style="width:1px;background:#e2e8f0;margin:0 4px"></span><button class="btn btn-sm ${POOLED ? "btn-primary" : "btn-outline"}" onclick="POOLED=true;render()" title="Vote counts from every pooled Command Center">${A.role == "room" ? (String(ME.room.scope || "").includes(",") ? "Whole zone" : "Whole LGA") : ME.su ? "All states" : "Whole state"}</button><button class="btn btn-sm ${!POOLED ? "btn-primary" : "btn-outline"}" onclick="POOLED=false;render()">${A.role == "room" ? "This room only" : "This Command Center only"}</button>` : ""}</div></div><div id="collSlot">${hist()}<div style="margin-top:12px">${drill()}</div></div></div>`;
 }
 // ---------- results & EC8A review (two observers per PU, supervisor resolves) ----------
 let PUF = "", // show every polling unit by default (disputed ones are listed first); the buttons narrow it down
@@ -817,7 +818,7 @@ function refresh() {
   render();
 }
 function render() {
-  if (document.activeElement && /^rc_/.test(document.activeElement.id)) return; // a frequency is being typed
+  if (document.activeElement && /^(rc_|bm$)/.test(document.activeElement.id)) return; // a frequency is being typed
   const tb = {
     ...TABS(),
     ...(A.role == "cmd" && DRILL
@@ -1192,3 +1193,29 @@ function cardRadioCtl() {
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${(c.presets || []).map((p, i) => `<span class="tag" style="cursor:pointer" onclick="radioSet({freq:${p.freq}})" title="Tune to ${p.freq.toFixed(4)} MHz">${esc(p.name)} · ${p.freq.toFixed(4)} <b onclick="event.stopPropagation();radioSet({presets:DATA.rctl.presets.filter((_, j) => j != ${i})})" title="Remove" style="margin-left:4px">×</b></span>`).join("")}<button class="btn btn-sm btn-outline" onclick="radioSavePreset()">☆ Save this channel</button></div>
     <div class="muted" style="margin-top:8px;font-size:12px">Nigerian bands: VHF 138–174 MHz, UHF 403–470 MHz. Changes reach the listening post (RTL-SDR + antenna running <code>tuner.js</code>) within about 5 seconds, and what it hears appears below. Only monitor channels you are authorised to monitor.</div></div>`;
 }
+
+
+// ================= Dark / light mode (every dashboard) =================
+function applyTheme(t) {
+  document.documentElement.setAttribute("data-theme", t);
+  try {
+    localStorage.setItem("theme", t);
+  } catch {}
+  const b = document.getElementById("themeBtn");
+  if (b) b.innerHTML = t == "dark" ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+}
+const toggleTheme = () => applyTheme(document.documentElement.getAttribute("data-theme") == "dark" ? "light" : "dark");
+(() => {
+  if (window.NO_THEME) return;
+  let t = "light";
+  try {
+    t = localStorage.getItem("theme") || "light";
+  } catch {}
+  const b = document.createElement("button");
+  b.id = "themeBtn";
+  b.title = "Dark / light mode";
+  b.setAttribute("aria-label", "Dark / light mode");
+  b.onclick = toggleTheme;
+  document.body.appendChild(b);
+  applyTheme(t);
+})();

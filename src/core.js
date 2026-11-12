@@ -128,7 +128,7 @@ const aud = (w, a, tn) => {
   return q(
     "insert into audit(who,action,tenant) values($1,$2,coalesce($3,(select tenant from rooms where id=$1),(select r.tenant from observers o join rooms r on r.id=o.room_id where o.code=$1)))",
     [w == "CMD" && st?.name ? "CMD:" + st.name : w, a, tn || st?.tn || null],
-  );
+  ).catch((e) => console.error("audit log failed:", e.message)); // a failed log entry must never take the server down
 };
 const h = (f) => (req, res) =>
   f(req, res).catch((e) => {
@@ -175,6 +175,7 @@ create table if not exists shares(token text primary key,tenant text,room_id tex
 create index if not exists shares_tn on shares(tenant);
 alter table tenants add column if not exists pool bool default true;
 alter table rooms add column if not exists kind text;
+alter table tenants add column if not exists archived bool default false;alter table rooms add column if not exists archived bool default false;
 create table if not exists radio_ctl(room_id text primary key references rooms(id),power bool default false,freq float8,mode text default 'fm',squelch int default 40,presets jsonb default '[]',updated_at timestamptz default now(),updated_by text,gw_seen timestamptz,gw_status jsonb);`;
 // Row-level security: applied to the restricted role used inside authenticated requests.
 const RLS = `do $$ begin if not exists(select 1 from pg_roles where rolname='collation_app') then create role collation_app nologin; end if; end $$;

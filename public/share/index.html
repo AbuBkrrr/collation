@@ -64,6 +64,11 @@
       .err { color: #fca5a5; font-size: 13px; min-height: 18px; }
       .toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); background: #020617; border: 1px solid #334155; padding: 10px 16px; border-radius: 10px; font-size: 13.5px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 9999; max-width: 92vw; }
       .toast.show { opacity: 1; }
+      /* light mode: this page is dark by design, so light is the inverted version (media inverted back) */
+      #themeBtn { position: fixed; right: 14px; bottom: 14px; z-index: 9400; width: 44px; height: 44px; border-radius: 50%; border: 1px solid #334155; background: #1e293b; color: #e2e8f0; font-size: 18px; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.4); }
+      html[data-theme="light"] { filter: invert(1) hue-rotate(180deg); background: #0f172a; }
+      html[data-theme="light"] video, html[data-theme="light"] img, html[data-theme="light"] canvas, html[data-theme="light"] svg, html[data-theme="light"] .leaflet-container { filter: invert(1) hue-rotate(180deg); }
+      html[data-theme="light"] .leaflet-container svg, html[data-theme="light"] .leaflet-container img, html[data-theme="light"] .leaflet-container canvas { filter: none; }
     </style>
   </head>
   <body>
@@ -293,6 +298,21 @@
         clearInterval(window.TIMER);
         window.TIMER = setInterval(() => TOK && document.visibilityState == "visible" && load(), 5000);
       }
+      (() => {
+        const set = (t) => {
+          document.documentElement.setAttribute("data-theme", t);
+          try { localStorage.setItem("theme-share", t); } catch {}
+          b.innerHTML = t == "light" ? '<i class="fas fa-moon"></i>' : '<i class="fas fa-sun"></i>';
+        };
+        const b = document.createElement("button");
+        b.id = "themeBtn";
+        b.title = "Dark / light mode";
+        b.onclick = () => set(document.documentElement.getAttribute("data-theme") == "light" ? "dark" : "light");
+        document.body.appendChild(b);
+        let t = "dark";
+        try { t = localStorage.getItem("theme-share") || "dark"; } catch {}
+        set(t);
+      })();
       addEventListener("pagehide", stop);
       TOK ? boot() : gate();
     </script>

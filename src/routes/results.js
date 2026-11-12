@@ -11,7 +11,7 @@ async function puList(u, f) {
   const ck = JSON.stringify([u.tn, u.role, u.id, f]),
     hit_ = cache.get(ck);
   if (hit_ && Date.now() - hit_.t < 2000) return hit_.v;
-  const w = ["o.active"],
+  const w = ["o.active", "o.room_id in (select id from rooms where not coalesce(archived,false))"],
     a = [];
   const add = (c, v) => {
     a.push(v);
@@ -92,6 +92,8 @@ async function puList(u, f) {
   if (cache.size > 500) cache.delete(cache.keys().next().value);
   return out;
 }
+const POOL_RANK = { pending: 0, disputed: 1, single: 2, partial: 3, matched: 4, resolved: 5 };
+const poolScore = (x) => (x.fig ? 10 : 0) + (x.verified ? 6 : POOL_RANK[x.status] || 0);
 const filt = (qq) => Object.fromEntries(["room", ...LV].filter((k) => qq[k]).map((k) => [k, String(qq[k])]));
 const blank = () => ({ pus: 0, pending: 0, single: 0, partial: 0, matched: 0, disputed: 0, resolved: 0, verified: 0, anomaly: 0, ec8a: 0 });
 function agg(l) {
@@ -116,11 +118,38 @@ app.get(
       lvl = LV.includes(req.query.level) ? req.query.level : "nat";
     if (f.room && req.u.role == "cmd" && !(await mine(req.u, f.room))) return res.sendStatus(403);
     let l = await puList(req.u, f),
-      pooled = null;
+      pooled = null,
+      scope = null,
+      states = null;
+    // Platform administrator: every state and every active Command Center, vote counts only. The search lists
+    // (scope) are built from the unfiltered data so choosing a state does not hide the other states.
+    if (req.u.role == "cmd" && req.u.su && req.query.pool == "1" && !f.room) {
+      const ts = await qsys("select id from tenants where active and not coalesce(archived,false)"),
+        match = (x) => LV.every((k) => !f[k] || String(x[k]) == f[k]),
+        best = new Map(),
+        keys = new Set();
+      const take = (x, own) => {
+        keys.add(x.key);
+        if (!match(x)) return;
+        const cur = best.get(x.key);
+        if (!cur || (!(cur.own && cur.x.fig) && poolScore(x) > poolScore(cur.x))) best.set(x.key, { x, own });
+      };
+      (await puList(req.u, {})).forEach((x) => take(x, true));
+      for (const t of ts) {
+        if (t.id == req.u.tn) continue;
+        (await als.run({ name: "pool", tn: t.id, room: "" }, () => puList({ role: "cmd", tn: t.id, id: "pool" }, {}))).forEach((x) => take(x, false));
+      }
+      const all = [...best.values()],
+        ext = all.filter((b) => !b.own);
+      l = all.map((b) => b.x);
+      scope = [...keys].slice(0, 40000);
+      states = (await qsys("select state from tenants where state is not null and active and not coalesce(archived,false) union select state from rooms where state is not null and not coalesce(archived,false)")).map((r) => r.state);
+      pooled = { all: true, state: null, lga: null, centres: ts.length, extPus: ext.length, extVotes: ext.reduce((s, b) => s + (b.x.total || 0), 0) };
+    }
     // State-wide view (Global Collation of a Command Center): vote counts of every pooled Command Center
     // of the same state, one figure per polling unit. Only these aggregates leave another command -
     // never its observers, codes, photos, video, audio or map positions.
-    if (req.query.pool == "1" && !f.room) {
+    else if (req.query.pool == "1" && !f.room) {
       const [me] = await qsys("select state,pool from tenants where id=$1", [req.u.tn]);
       if (me?.state && me.pool) {
         const isRoom = req.u.role == "room",
@@ -157,6 +186,8 @@ app.get(
       parties: PARTIES,
       level: lvl,
       pooled,
+      scope,
+      states,
       sum: agg(l),
       rows: Object.entries(g)
         .sort((a, b) => String(a[0]).localeCompare(String(b[0])))

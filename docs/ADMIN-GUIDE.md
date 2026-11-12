@@ -90,6 +90,29 @@ a centre that has a state). **Untick it for any client whose figures must stay p
 example when two clients in the same state are competitors. A centre that is not pooled neither
 contributes to nor sees the state-wide total.
 
+### Archiving and deleting (only you can)
+
+Clients can suspend or deactivate their own rooms, but **only the platform administrator can archive or
+delete** — Command Centres, Situation Rooms and election data.
+
+- **Archive** (Command Centres tab → **Archive**, or **Archive** on a room) switches it off and hides it
+  everywhere (lists, collation, broadcasts). **Nothing is deleted** — open **Archived Command Centres** and
+  press **Restore** to bring it back (then **Enable** it).
+- **Delete permanently** is only offered for something already archived, and asks you to **type its ID**.
+  It removes the Command Centre, its rooms, observers, results, EC8A photos, clips, radio and messages. It
+  cannot be undone — take a backup first (Export & Archive).
+- **Rooms** (on a Command Centre row) opens that centre's rooms: archive, restore or delete any of them, or
+  **Clear data** (removes a room's observers and results but keeps the room).
+- **Clear all election data** (in that panel) empties a whole Command Centre of results and observers but
+  keeps the centre, its rooms and operators — handy after a demo or a rehearsal.
+- You cannot archive or delete your own Command Centre.
+
+### Your Global Collation covers every state
+
+On your own Global Collation tab the search lists **every state on the platform** and the totals add up all
+active Command Centres (vote counts only — never maps, video, audio or observer details). A switch limits it
+to your own centre.
+
 ### Turning a Command Centre off / on
 
 On the client's row, click **Disable (suspends its rooms)**. The client can no longer log in and all

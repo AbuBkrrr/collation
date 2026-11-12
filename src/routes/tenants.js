@@ -7,7 +7,7 @@ app.get(
   h(async (req, res) =>
     res.json(
       await qsys(
-        "select t.id,t.name,t.state,t.active,t.pool,(select count(*)::int from rooms where tenant=t.id) rooms,(select count(*)::int from cmd_users where tenant=t.id) operators from tenants t order by t.id",
+        "select t.id,t.name,t.state,t.active,t.pool,coalesce(t.archived,false) archived,(select count(*)::int from rooms where tenant=t.id) rooms,(select count(*)::int from cmd_users where tenant=t.id) operators from tenants t order by t.id",
       ),
     ),
   ),
