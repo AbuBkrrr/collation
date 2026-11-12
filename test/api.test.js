@@ -957,3 +957,18 @@ test("officers are named inside the forms: bulk rooms and a state-wide room", as
     await setReq("0");
   }
 });
+
+test("all officer sign-ins in one list: Command Center sees all, a room only its own LGAs, nobody else", async () => {
+  const inv = ok(await api("tenants", { tok: S.A, body: { name: "Sheet CC", state: "Gombe", officer: { name: "Sheet State Officer" } } }));
+  const C = ok(await api("login/command", { body: { user: inv.operator, pass: inv.passcode } })).token;
+  const rm = ok(await api("rooms", { tok: C, body: { name: "Akko", kind: "lga", scope: "Akko", officer: { name: "Sheet Akko Officer" } } }));
+  ok(await api("rooms/" + rm.id + "/status", { tok: C, body: { status: "active" } }));
+  const R = ok(await api("login/room", { body: { id: rm.id, pass: rm.passcode } })).token;
+  ok(await api("officers", { tok: C, body: { level: "lga", name: "Other LGA Officer", lga: "Balanga" } }));
+  const all = ok(await api("officers/credentials", { tok: C }));
+  assert.deepEqual(all.map((o) => o.level).sort(), ["lga", "lga", "state"]);
+  assert.ok(all.every((o) => o.passcode && o.code));
+  const mine = ok(await api("officers/credentials", { tok: R }));
+  assert.deepEqual(mine.map((o) => o.name), ["Sheet Akko Officer"], "a room sees only the officers of its own LGAs, never the state officer");
+  assert.equal((await api("officers/credentials")).s, 401);
+});

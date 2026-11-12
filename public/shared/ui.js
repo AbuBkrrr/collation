@@ -1006,6 +1006,38 @@ async function scanLogin(kind, fill) {
 }
 const credText = (c) => [c.title, ...c.lines.map(([k, v]) => k + ": " + v), c.link ? "Sign-in link: " + c.link : ""].filter(Boolean).join("\n");
 // one credential: text + QR, with copy / print. c = { title, lines:[[label,value]], link, note }
+// show a second card only after the first one has been closed (so a new officer card never covers the room / centre card)
+function afterModal(fn) {
+  const t = setInterval(() => {
+    if (!document.getElementById("credm")) {
+      clearInterval(t);
+      fn();
+    }
+  }, 400);
+}
+// every collation officer's sign-in in one list: copy it, print the QR sheets, or open one card
+async function officerSheet() {
+  let l;
+  try {
+    l = await A.get("officers/credentials");
+  } catch (e) {
+    return toast("⚠️ " + e.message);
+  }
+  const card = (o) => ({ title: "Collation Officer " + { ward: 1, lga: 2, state: 3, federal: 4 }[o.level] + " (" + o.tag + ") — " + o.name, lines: [["Name", o.name], ...(o.phone ? [["Phone", o.phone]] : []), ["Area", [o.state, o.lga, o.ward].filter(Boolean).join(" › ") || "All states"], ["Sign in at", ORIGIN.replace(/^https?:\/\//, "") + "/officer/"], ["Officer code", o.code], ["Passcode", o.passcode || "(changed by the officer — use Reset)"]], link: o.passcode ? loginLink("officer", o.code, o.passcode) : "" });
+  document.getElementById("credm")?.remove();
+  const w = document.createElement("div");
+  w.id = "credm";
+  w.style.cssText = "position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:9000;display:flex;align-items:center;justify-content:center;padding:14px;overflow:auto";
+  w.innerHTML = `<div class="card" style="max-width:760px;width:100%;margin:auto;max-height:96vh;overflow:auto"><div class="card-header"><h3><i class="fas fa-clipboard-check"></i> Collation Officer sign-ins (${l.length})</h3></div>${l.length ? `<div style="overflow:auto"><table><tr><th>Level</th><th>Officer</th><th>Area</th><th>Code</th><th>Passcode</th><th></th></tr>${l.map((o, i) => `<tr><td><span class="otag otag-${o.level}">${esc(o.tag)}</span></td><td><b>${esc(o.name)}</b><br><span class="muted">${esc(o.phone || "")}</span></td><td>${esc([o.lga, o.ward].filter(Boolean).join(" › ") || o.state || "All states")}</td><td class="mono">${esc(o.code)}</td><td class="mono">${o.passcode ? esc(o.passcode) : '<span class="muted">changed</span>'}</td><td><button class="btn btn-sm btn-outline" data-i="${i}">QR</button></td></tr>`).join("")}</table></div>` : '<div class="muted">No collation officers yet. Name them when you create a Command Center, a Situation Room or observer codes.</div>'}<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px"><button class="btn btn-primary" id="osp"${l.length ? "" : " disabled"}><i class="fas fa-print"></i> Print all QR cards</button><button class="btn btn-outline" id="osc"${l.length ? "" : " disabled"}><i class="fas fa-copy"></i> Copy all</button><button class="btn btn-outline" id="osd">Close</button></div></div>`;
+  document.body.appendChild(w);
+  w.querySelector("#osd").onclick = () => w.remove();
+  w.querySelector("#osp").onclick = () => printCreds("Collation officer sign-in sheets", l.map(card));
+  w.querySelector("#osc").onclick = () => {
+    navigator.clipboard?.writeText(l.map((o) => credText(card(o))).join("\n\n"));
+    toast("📋 All officer sign-ins copied");
+  };
+  w.querySelectorAll("button[data-i]").forEach((b) => (b.onclick = () => credModal(card(l[+b.dataset.i]))));
+}
 function credModal(c) {
   document.getElementById("credm")?.remove();
   const w = document.createElement("div");

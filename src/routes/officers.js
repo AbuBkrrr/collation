@@ -87,6 +87,16 @@ app.delete("/api/officers/:id", auth("cmd"), h(async (req, res) => {
   aud("CMD", "Removed officer " + r[0].code);
   res.json({ ok: 1 });
 }));
+// every officer's sign-in at once (Command Center: all; Situation Room: the ward / LGA officers of its own LGAs)
+app.get("/api/officers/credentials", auth("cmd", "room"), h(async (req, res) => {
+  let l = await q("select * from officers order by level,state,lga,ward,name");
+  if (req.u.role == "room") {
+    const [r] = await q("select scope from rooms where id=$1", [req.u.id]),
+      sc = String(r?.scope || "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
+    l = l.filter((o) => o.level != "state" && o.level != "federal" && (!sc.length || sc.includes((o.lga || "").toLowerCase())));
+  }
+  res.json(l.map((o) => ({ ...pub(o), passcode: unseal(o.pass_enc) })));
+}));
 // show an officer's sign-in again (Command Center; a Situation Room for the officers of its own LGAs)
 app.get("/api/officers/:id/credential", auth("cmd", "room"), h(async (req, res) => {
   const [o] = await q("select * from officers where id=$1", [+req.params.id]);
