@@ -12,23 +12,23 @@
     "node": ">=18"
   },
   "dependencies": {
-    "@fontsource/inter": "^5.0.18",
-    "@fontsource/jetbrains-mono": "^5.0.20",
-    "@fortawesome/fontawesome-free": "^6.5.2",
+    "@fontsource/inter": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
+    "@fortawesome/fontawesome-free": "^6.7.2",
     "bcryptjs": "^2.4.3",
     "compression": "^1.7.4",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
     "jsqr": "^1.4.0",
     "leaflet": "^1.9.4",
-    "livekit-client": "^2.15.8",
+    "livekit-client": "^2.23.0",
     "livekit-server-sdk": "^2.19.2",
     "marked": "^18.2.0",
     "multer": "^2.0.2",
     "pg": "^8.11.5",
-    "qrcode-generator": "^1.4.4",
-    "read-excel-file": "^5.8.0",
+    "qrcode-generator": "^1.5.2",
+    "read-excel-file": "^5.8.8",
     "vosk-browser": "^0.0.8",
-    "ws": "^8.17.0"
+    "ws": "^8.22.2"
   }
 }
