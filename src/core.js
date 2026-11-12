@@ -174,7 +174,8 @@ create index if not exists pitch_leads_ts on pitch_leads(ts);
 create table if not exists shares(token text primary key,tenant text,room_id text,label text,pass_hash text,codes text[],talkback bool default false,active bool default true,created_by text,created_at timestamptz default now(),expires_at timestamptz);
 create index if not exists shares_tn on shares(tenant);
 alter table tenants add column if not exists pool bool default true;
-alter table rooms add column if not exists kind text;`;
+alter table rooms add column if not exists kind text;
+create table if not exists radio_ctl(room_id text primary key references rooms(id),power bool default false,freq float8,mode text default 'fm',squelch int default 40,presets jsonb default '[]',updated_at timestamptz default now(),updated_by text,gw_seen timestamptz,gw_status jsonb);`;
 // Row-level security: applied to the restricted role used inside authenticated requests.
 const RLS = `do $$ begin if not exists(select 1 from pg_roles where rolname='collation_app') then create role collation_app nologin; end if; end $$;
 do $$ begin execute format('grant collation_app to %I', current_user); exception when others then null; end $$;
@@ -191,7 +192,7 @@ ${[
   ["audit", "tenant=app_tn()"],
   ["shares", "tenant=app_tn() and (app_room() is null or room_id=app_room())"],
   ["contacts", "tenant=app_tn() and (app_room() is null or room_id is null or room_id=app_room())"],
-  ...["observers", "incidents", "units", "clips", "radio", "radio_keys", "pu_results", "ec8a"].map((t) => [
+  ...["observers", "incidents", "units", "clips", "radio", "radio_keys", "radio_ctl", "pu_results", "ec8a"].map((t) => [
     t,
     "room_id in (select id from rooms)",
   ]),

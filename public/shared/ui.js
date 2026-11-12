@@ -675,9 +675,9 @@ async function addUnit() {
 }
 // radio monitor used by the Command Center and read-only room drill (playback only, with room labels)
 const cardRadioView = () =>
-  `<div class="radio-module"><div style="display:flex;justify-content:space-between;align-items:center"><b><i class="fas fa-tower-broadcast"></i> Radio monitor</b><span class="tag" style="background:#1a202c;color:#a0aec0">${DATA.radio.length} transmissions</span></div><div class="radio-log" style="max-height:360px">${DATA.radio.map((x) => `<div><span class="time">${TM(x.ts)}</span>${x.room_name ? '<span style="color:#63b3ed">' + esc(x.room_name) + "</span> " : ""}<span class="${x.alert ? "alert" : ""}">${esc(x.text)}${x.freq ? " [" + esc(x.freq) + (x.talkgroup ? " TG " + esc(x.talkgroup) : "") + "]" : ""}</span>${x.has_audio ? ` <a href="#" style="color:#68d391" onclick="playRadio(${x.id});return false">▶ play</a>` : ""}</div>`).join("") || '<div class="muted" style="padding:10px">No radio yet. A listening post (SDR + antenna) near the area feeds this through the room\'s gateway key. See radio-gateway/README.md.</div>'}</div></div>`;
+  `<div class="radio-module"><div style="display:flex;justify-content:space-between;align-items:center"><b><i class="fas fa-tower-broadcast"></i> Radio monitor</b><span style="display:flex;gap:8px;align-items:center">${radioListenBtn()}<span class="tag" style="background:#1a202c;color:#a0aec0">${DATA.radio.length} transmissions</span></span></div><div class="radio-log" style="max-height:360px">${DATA.radio.map((x) => `<div><span class="time">${TM(x.ts)}</span>${x.room_name ? '<span style="color:#63b3ed">' + esc(x.room_name) + "</span> " : ""}<span class="${x.alert ? "alert" : ""}">${esc(x.text)}${x.freq ? " [" + esc(x.freq) + (x.talkgroup ? " TG " + esc(x.talkgroup) : "") + "]" : ""}</span>${x.has_audio ? ` <a href="#" style="color:#68d391" onclick="playRadio(${x.id});return false">▶ play</a>` : ""}</div>`).join("") || '<div class="muted" style="padding:10px">No radio yet. A listening post (SDR + antenna) near the area feeds this through the room\'s gateway key. See radio-gateway/README.md.</div>'}</div></div>`;
 const cardRadio = () =>
-  `<div class="radio-module"><div style="display:flex;justify-content:space-between;align-items:center"><b><i class="fas fa-tower-broadcast"></i> Radio (SDR gateway · P25/TETRA/DMR)</b><button class="btn btn-sm btn-primary" onclick="radioKey()"><i class="fas fa-key"></i> Gateway key</button></div><div class="radio-log">${DATA.radio.map((x) => `<div><span class="time">${TM(x.ts)}</span><span class="${x.alert ? "alert" : ""}">${esc(x.text)}${x.freq ? " [" + esc(x.freq) + (x.talkgroup ? " TG " + esc(x.talkgroup) : "") + "]" : ""}</span>${x.has_audio ? ` <a href="#" style="color:#68d391" onclick="playRadio(${x.id});return false">▶ play</a>` : ""}</div>`).join("")}</div><div class="search-bar" style="margin:10px 0 0;background:#0d1117;border:0"><input id="rx" placeholder="Log a note to the radio timeline" style="background:#1a202c;color:#fff;border-color:#2d3748"><button class="btn btn-primary btn-sm" onclick="A.post('radio',{text:$('#rx').value})">Log note</button></div></div>`;
+  cardRadioCtl() + `<div class="radio-module"><div style="display:flex;justify-content:space-between;align-items:center"><b><i class="fas fa-tower-broadcast"></i> Radio (SDR gateway · P25/TETRA/DMR)</b><span style="display:flex;gap:8px;align-items:center">${radioListenBtn()}<button class="btn btn-sm btn-primary" onclick="radioKey()"><i class="fas fa-key"></i> Gateway key</button></span></div><div class="radio-log">${DATA.radio.map((x) => `<div><span class="time">${TM(x.ts)}</span><span class="${x.alert ? "alert" : ""}">${esc(x.text)}${x.freq ? " [" + esc(x.freq) + (x.talkgroup ? " TG " + esc(x.talkgroup) : "") + "]" : ""}</span>${x.has_audio ? ` <a href="#" style="color:#68d391" onclick="playRadio(${x.id});return false">▶ play</a>` : ""}</div>`).join("")}</div><div class="search-bar" style="margin:10px 0 0;background:#0d1117;border:0"><input id="rx" placeholder="Log a note to the radio timeline" style="background:#1a202c;color:#fff;border-color:#2d3748"><button class="btn btn-primary btn-sm" onclick="A.post('radio',{text:$('#rx').value})">Log note</button></div></div>`;
 function roomDash(rid, ro) {
   CR = ro ? rid : null;
   const all = DATA.obs.filter((o) => o.room_id == rid),
@@ -788,6 +788,12 @@ async function loadAll() {
     ]);
   else [DATA.radio, DATA.clips] = await Promise.all([g("radio"), g("clips")]);
   if (A.role == "cmd") DATA.radio = await g("radio" + (DRILL ? "?room=" + DRILL : F.radioRoom ? "?room=" + F.radioRoom : ""));
+  // listening-post control (on/off, tuning): this room's own, or the room chosen on the Command Center's Radio tab
+  {
+    const rr = A.role == "room" ? "" : DRILL ? null : F.radioRoom || null;
+    DATA.rctl = A.role == "room" || rr ? await A.get("radio/control" + (rr ? "?room=" + encodeURIComponent(rr) : "")).catch(() => null) : null;
+  }
+  radioAuto();
   if (A.role == "cmd") DATA.totp = await A.get("totp").catch(() => ({}));
   // a Command Center locked to one state: its LGA list, for the room form and the search filters
   if (A.role == "cmd" && ME.tenantState && !DATA.lgas) DATA.lgas = (await g("locations?state=" + encodeURIComponent(ME.tenantState))).map((x) => x.lga);
@@ -811,6 +817,7 @@ function refresh() {
   render();
 }
 function render() {
+  if (document.activeElement && /^rc_/.test(document.activeElement.id)) return; // a frequency is being typed
   const tb = {
     ...TABS(),
     ...(A.role == "cmd" && DRILL
@@ -1096,4 +1103,92 @@ function tabHelp() {
   }
   const g = HELP[n];
   return `<div class="card"><div class="card-header"><h3><i class="fas fa-circle-question"></i> ${esc(g.title)}</h3><div style="display:flex;gap:8px;flex-wrap:wrap">${su ? `<button class="btn btn-sm ${n == "admin" ? "btn-primary" : "btn-outline"}" onclick="HELPSEL='admin';render()">Administrator manual</button><button class="btn btn-sm ${n == "operator" ? "btn-primary" : "btn-outline"}" onclick="HELPSEL='operator';render()">Operator manual</button>` : ""}${g.pdf ? `<button class="btn btn-sm btn-outline" onclick="A.dl('help/${n}/pdf','${n == "admin" ? "Administrator" : "Operator"}-Manual.pdf')"><i class="fas fa-file-pdf"></i> Download PDF</button>` : ""}</div></div><div class="manual">${g.html}</div></div>`;
+}
+
+
+// ================= Radio: switch the listening post on/off and tune it; listen live =================
+let RAUTO = localStorage.getItem("radioAuto") == "1",
+  RLAST = null,
+  RQ = [],
+  RPLAY = false;
+const radioListenBtn = () =>
+  `<button class="btn btn-sm ${RAUTO ? "btn-success" : "btn-outline"}" style="${RAUTO ? "" : "background:transparent;color:#a0aec0;border-color:#4a5568"}" onclick="radioAutoToggle()" title="Play new transmissions as they arrive"><i class="fas fa-volume-${RAUTO ? "high" : "xmark"}"></i> Listen live: ${RAUTO ? "ON" : "OFF"}</button>`;
+function radioAutoToggle() {
+  RAUTO = !RAUTO;
+  localStorage.setItem("radioAuto", RAUTO ? "1" : "0");
+  RLAST = Math.max(0, ...(DATA.radio || []).map((x) => x.id));
+  RQ = [];
+  if (RAUTO) toast("🔊 Listening live — each new transmission plays as it arrives");
+  render();
+}
+function radioAuto() {
+  const ids = (DATA.radio || []).map((x) => x.id),
+    top = Math.max(0, ...ids);
+  if (RLAST === null || !RAUTO) return void (RLAST = top);
+  const fresh = DATA.radio.filter((x) => x.has_audio && x.id > RLAST).sort((a, b) => a.id - b.id);
+  RLAST = Math.max(RLAST, top);
+  fresh.forEach((x) => RQ.push(x.id));
+  radioNext();
+}
+async function radioNext() {
+  if (RPLAY || !RQ.length) return;
+  RPLAY = true;
+  const done = () => ((RPLAY = false), radioNext());
+  try {
+    const a = new Audio(URL.createObjectURL(await A.get("radio/" + RQ.shift() + "/audio")));
+    a.onended = a.onerror = done;
+    await a.play();
+  } catch {
+    done();
+  }
+}
+async function radioSet(patch) {
+  try {
+    DATA.rctl = await A.post("radio/control", { ...patch, room: A.role == "cmd" ? F.radioRoom : undefined });
+    render();
+  } catch (e) {
+    toast("⚠️ " + e.message);
+  }
+}
+const radioFreq = () => parseFloat($("#rc_f")?.value) || DATA.rctl?.freq;
+function radioStep(d) {
+  const f = radioFreq();
+  if (!f) return toast("⚠️ Type a frequency first");
+  radioSet({ freq: Math.round((f + d) * 10000) / 10000 });
+}
+function radioTune() {
+  const f = parseFloat($("#rc_f").value);
+  if (!f) return toast("⚠️ Type a frequency in MHz, e.g. 154.3500");
+  radioSet({ freq: f, mode: $("#rc_m").value });
+}
+function radioSavePreset() {
+  const f = radioFreq();
+  if (!f) return toast("⚠️ Type a frequency first");
+  const n = prompt("Name this channel (e.g. Police Kano North):", "");
+  if (n) radioSet({ presets: [...(DATA.rctl.presets || []), { name: n, freq: f }] });
+}
+function cardRadioCtl() {
+  const c = DATA.rctl;
+  if (!c) return A.role == "cmd" && !DRILL ? '<div class="muted" style="margin-bottom:10px"><i class="fas fa-circle-info"></i> Choose a room above to switch its radio on or off and tune it.</div>' : "";
+  const g = c.gw || {},
+    tuned = c.online && g.running && g.freq && c.freq != null && Math.abs(parseFloat(g.freq) - c.freq) < 0.0001,
+    st = !c.online
+      ? '<span class="pill r">Listening post offline</span>'
+      : g.error
+        ? '<span class="pill r">' + esc(g.error) + "</span>"
+        : !c.power
+          ? '<span class="pill s">Online · radio off</span>'
+          : tuned
+            ? '<span class="pill g">● Receiving ' + c.freq.toFixed(4) + " MHz</span>"
+            : '<span class="pill a">Retuning…</span>';
+  return `<div class="card" style="margin-bottom:14px"><div class="card-header"><h3><i class="fas fa-radio"></i> Radio receiver</h3>${st}</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px"><button class="btn ${c.power ? "btn-success" : "btn-outline"}" style="min-width:96px" onclick="radioSet({power:${!c.power}})" title="Switch the listening post's radio on or off"><i class="fas fa-power-off"></i> ${c.power ? "ON" : "OFF"}</button>
+      <button class="btn btn-sm btn-outline" onclick="radioStep(-0.025)">◀ 25k</button><button class="btn btn-sm btn-outline" onclick="radioStep(-0.0125)">◀ 12.5k</button>
+      <input class="fi" id="rc_f" type="number" step="0.0125" min="25" max="1700" inputmode="decimal" placeholder="MHz" value="${c.freq != null ? c.freq.toFixed(4) : ""}" style="width:130px;flex:none;margin:0;font-weight:700;font-size:16px" onkeydown="event.key=='Enter'&&radioTune()">
+      <button class="btn btn-sm btn-outline" onclick="radioStep(0.0125)">12.5k ▶</button><button class="btn btn-sm btn-outline" onclick="radioStep(0.025)">25k ▶</button>
+      <select class="fi" id="rc_m" style="width:auto;flex:none;margin:0" onchange="radioSet({mode:this.value})"><option value="fm" ${c.mode == "fm" ? "selected" : ""}>Narrow FM (voice)</option><option value="am" ${c.mode == "am" ? "selected" : ""}>AM</option><option value="wbfm" ${c.mode == "wbfm" ? "selected" : ""}>Wide FM</option></select>
+      <button class="btn btn-primary" onclick="radioTune()"><i class="fas fa-sliders"></i> Tune</button></div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px"><span class="muted">Squelch <b id="rc_sv">${c.squelch}</b></span><input id="rc_s" type="range" min="0" max="150" step="5" value="${c.squelch}" style="flex:1;min-width:140px" oninput="$('#rc_sv').textContent=this.value" onchange="radioSet({squelch:+this.value})"><span class="muted" style="font-size:11px">higher = ignores weaker signals</span></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${(c.presets || []).map((p, i) => `<span class="tag" style="cursor:pointer" onclick="radioSet({freq:${p.freq}})" title="Tune to ${p.freq.toFixed(4)} MHz">${esc(p.name)} · ${p.freq.toFixed(4)} <b onclick="event.stopPropagation();radioSet({presets:DATA.rctl.presets.filter((_, j) => j != ${i})})" title="Remove" style="margin-left:4px">×</b></span>`).join("")}<button class="btn btn-sm btn-outline" onclick="radioSavePreset()">☆ Save this channel</button></div>
+    <div class="muted" style="margin-top:8px;font-size:12px">Nigerian bands: VHF 138–174 MHz, UHF 403–470 MHz. Changes reach the listening post (RTL-SDR + antenna running <code>tuner.js</code>) within about 5 seconds, and what it hears appears below. Only monitor channels you are authorised to monitor.</div></div>`;
 }
