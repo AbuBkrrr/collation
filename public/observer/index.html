@@ -19,8 +19,6 @@
   <body>
     <div class="toast" id="toast"></div>
     <div id="app"></div>
-    <script src="/vendor/livekit-client.umd.js"></script>
-    <script src="/vendor/vosk.js"></script>
     <script>window.NO_THEME = true; // the observer app is already dark</script>
     <script src="/shared/ui.js"></script>
     <script>
@@ -185,8 +183,22 @@
         }
       }
       // ---------- camera / WebRTC / clips ----------
-      async function startLK() {
+      // camera + microphone in ONE request, asked the moment the observer taps (not after the network set-up)
+      async function getAv() {
+        const video = { facingMode: { ideal: "environment" }, width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 15, max: 20 } };
         try {
+          return await navigator.mediaDevices.getUserMedia({ video, audio: true });
+        } catch (e) {
+          if (e.name == "NotAllowedError" || e.name == "SecurityError") throw e;
+          return await navigator.mediaDevices.getUserMedia({ video: true }); // no microphone / unusual camera
+        }
+      }
+      async function startLK() {
+        let media;
+        try {
+          media = getAv(); // the permission prompt appears now, while the video library and the server connection load
+          media.catch(() => {});
+          await loadScript("/vendor/livekit-client.umd.js");
           const { Room, RoomEvent, Track, VideoPresets } = LivekitClient,
             r = await A.post("livekit/token", {});
           lk = new Room({
@@ -197,10 +209,6 @@
               // 360p main layer + 180p fallback: watchable on 3G, ~0.5 Mbps at most (WhatsApp-call class)
               videoSimulcastLayers: [VideoPresets.h180],
               videoEncoding: { maxBitrate: 500000, maxFramerate: 15 },
-            },
-            videoCaptureDefaults: {
-              facingMode: "environment",
-              resolution: { width: 640, height: 360, frameRate: 15 },
             },
           });
           // talk-back: play whatever the Situation Room / Command Center / a shared viewer says
@@ -219,20 +227,26 @@
           });
           await lk.connect(r.url, r.token);
           lk.startAudio().catch(() => {});
-          const v = await lk.localParticipant.setCameraEnabled(true),
-            a = await lk.localParticipant.setMicrophoneEnabled(true).catch(() => null);
-          stream = new MediaStream([v?.track?.mediaStreamTrack, a?.track?.mediaStreamTrack].filter(Boolean));
+          const ms = await media,
+            vt = ms.getVideoTracks()[0],
+            at = ms.getAudioTracks()[0];
+          if (vt) await lk.localParticipant.publishTrack(vt, { source: Track.Source.Camera });
+          if (at) await lk.localParticipant.publishTrack(at, { source: Track.Source.Microphone });
+          stream = ms;
           pv.srcObject = stream;
           streaming = true;
           window.Capacitor?.Plugins?.KeepAwake?.keepAwake().catch(() => {});
           recSeg();
           hb();
+          permStatus();
           toast("🔴 Streaming with adaptive quality — Situation Room can watch live.");
           render();
         } catch (e) {
+          media?.then((m) => m.getTracks().forEach((t) => t.stop())).catch(() => {});
           lk?.disconnect();
           lk = null;
-          toast("📷 " + (e.message || "Camera blocked. Needs HTTPS + permission."));
+          toast(/NotAllowed|Permission/i.test(e.name + e.message) ? "📷 Camera / microphone blocked — allow them in the app settings, then try again." : "📷 " + (e.message || "Camera blocked. Needs HTTPS + permission."));
+          permStatus();
         }
       }
       async function startStream() {
@@ -591,11 +605,38 @@
         vctx = null,
         vproc = null,
         vstr = null;
+      // ---- voice typing: microphone permission FIRST, always-visible status, live words, speech engine loaded on demand ----
+      let VSTAT = "", vtimer = null, LASTHEARD = 0;
+      const vstat = (m) => {
+        VSTAT = m;
+        const e = $("#vstat");
+        if (e) e.textContent = m;
+      };
+      async function primeMic() {
+        vstat("🎤 Waiting for microphone permission…");
+        try {
+          (await navigator.mediaDevices.getUserMedia({ audio: true })).getTracks().forEach((t) => t.stop());
+          return true;
+        } catch (e) {
+          vstat("🎤 Microphone blocked — allow it in the app / browser settings, then tap Mic again.");
+          return false;
+        }
+      }
       async function voskStart() {
-        if (!window.Vosk) throw new Error("offline speech engine not loaded");
+        if (!window.Vosk) {
+          vstat("⬇ Loading the speech engine…");
+          await loadScript("/vendor/vosk.js");
+        }
         if (!vm) {
-          toast("Loading offline speech model (first time ~40 MB)…");
-          vm = await Vosk.createModel(BASE + "/models/vosk-model-small-en-us-0.15.tar.gz");
+          const t0 = Date.now();
+          clearInterval(vtimer);
+          vtimer = setInterval(() => vstat("⬇ Downloading the offline speech model (first time only, about 40 MB)… " + Math.round((Date.now() - t0) / 1000) + " s"), 1000);
+          vstat("⬇ Downloading the offline speech model (first time only, about 40 MB)…");
+          try {
+            vm = await Vosk.createModel(BASE + "/models/vosk-model-small-en-us-0.15.tar.gz");
+          } finally {
+            clearInterval(vtimer);
+          }
         }
         vstr = await navigator.mediaDevices.getUserMedia({
           audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 },
@@ -604,7 +645,17 @@
         const rec = new vm.KaldiRecognizer(vctx.sampleRate);
         rec.on("result", (m) => {
           const t = m.result && m.result.text;
-          if (t) parseVoice(t);
+          if (t) {
+            LASTHEARD = Date.now();
+            parseVoice(t);
+          }
+        });
+        rec.on("partialresult", (m) => {
+          const t = m.result && m.result.partial;
+          if (t) {
+            LASTHEARD = Date.now();
+            vstat("🎤 Hearing: " + t);
+          }
         });
         const src = vctx.createMediaStreamSource(vstr);
         vproc = vctx.createScriptProcessor(4096, 1, 1);
@@ -615,9 +666,10 @@
         };
         src.connect(vproc);
         vproc.connect(vctx.destination);
-        toast("🎤 Offline speech active.");
+        vstat("🎤 Listening (offline speech) — say e.g. “APC twenty”");
       }
       function voskStop() {
+        clearInterval(vtimer);
         try {
           vproc?.disconnect();
           vstr?.getTracks().forEach((t) => t.stop());
@@ -627,11 +679,11 @@
       }
       function startFallback() {
         voskStart().catch((e) => {
-          toast("Offline speech unavailable (" + e.message + ") — trying server.");
+          vstat("Offline speech unavailable (" + e.message + ") — trying the server.");
           fbLoop();
         });
       }
-      function toggleMic() {
+      async function toggleMic() {
         if (mic) {
           mic = false;
           voskStop();
@@ -641,18 +693,35 @@
           try {
             fbRec?.state == "recording" && fbRec.stop();
           } catch {}
+          vstat("");
           return render();
         }
         mic = true;
-        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        LASTHEARD = 0;
+        render();
+        if (!(await primeMic())) {
+          mic = false;
+          return render();
+        }
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition,
+          offline = (why) => {
+            fbMode = true;
+            vstat(why);
+            startFallback();
+          };
         if (SR && !fbMode && navigator.onLine) {
           rc = new SR();
           rc.continuous = true;
-          rc.interimResults = false;
+          rc.interimResults = true; // show the words as they are heard
           rc.lang = "en-NG";
+          rc.onstart = () => vstat("🎤 Listening — say e.g. “APC twenty”");
           rc.onresult = (e) => {
+            let interim = "";
+            LASTHEARD = Date.now();
             for (let i = e.resultIndex; i < e.results.length; i++)
               if (e.results[i].isFinal) parseVoice(e.results[i][0].transcript);
+              else interim += e.results[i][0].transcript;
+            if (interim) vstat("🎤 Hearing: " + interim);
           };
           rc.onend = () => {
             if (mic && !fbMode)
@@ -661,23 +730,20 @@
               } catch {}
           };
           rc.onerror = (e) => {
-            if (["network", "service-not-allowed", "language-not-supported"].includes(e.error)) {
-              fbMode = true;
-              toast("Switching to offline speech…");
-              startFallback();
-            } else if (e.error == "not-allowed") {
+            if (["network", "service-not-allowed", "language-not-supported"].includes(e.error)) offline("Switching to offline speech…");
+            else if (e.error == "not-allowed") {
               mic = false;
-              toast("Microphone permission denied.");
+              vstat("🎤 Microphone blocked — allow it in the app / browser settings, then tap Mic again.");
               render();
-            }
+            } else if (e.error == "audio-capture") vstat("🎤 No microphone found on this device.");
           };
           try {
             rc.start();
-          } catch {}
-        } else {
-          fbMode = true;
-          startFallback();
-        }
+          } catch {
+            offline("Switching to offline speech…");
+          }
+        } else offline(SR ? "🎤 Offline — using the offline speech engine…" : "🎤 Starting the offline speech engine…");
+        setTimeout(() => mic && !LASTHEARD && vstat("🎤 Nothing heard yet — hold the phone close and say “APC twenty”."), 12000);
         render();
       }
       async function fbLoop() {
@@ -820,7 +886,7 @@
 <div style="display:flex;justify-content:space-between;align-items:center;color:#a0aec0;font-size:11px"><span><i class="fas fa-building-columns" style="font-size:10px"></i> ${esc(OB.room_name || OB.room_id)}</span><span class="mono">${esc(OB.code)} · PU ${esc(OB.pu)}</span></div></div>
 <div class="app-content">${LIVEREQ && !streaming ? `<button class="btn-report" style="background:#e53e3e" onclick="startStream()"><i class="fas fa-video"></i> Situation Room requests LIVE VIDEO — tap to start</button>` : ""}<div style="font-size:12px;color:#a0aec0"><i class="fas fa-location-dot"></i> ${esc(OB.lga)} LGA · ${esc(OB.ward)} Ward</div>
 <div class="camera-view" id="camSlot"><div class="camera-overlay"><span style="color:${streaming ? "#fc8181" : "#fff"}">${streaming ? "● LIVE Streaming" : "Ready"}</span><span>${lat != null ? lat.toFixed(4) + ", " + lng.toFixed(4) : "GPS…"}</span></div><div class="stream-controls">${streaming ? '<button style="background:#e53e3e;color:#fff" onclick="stopStream()">⏹ Stop Stream</button>' : '<button style="background:#38a169;color:#fff" onclick="startStream()">▶ Start Stream</button>'}</div></div>
-<div class="tally-panel"><div class="tally-title"><span>TALLY · entries add up · tap a row to correct</span><span style="display:flex;gap:6px"><button class="btn btn-sm btn-outline" style="background:transparent;color:#a0aec0;border-color:#4a5568" title="Read figures back aloud" onclick="SPEAK=!SPEAK;localStorage.setItem('readback',SPEAK?1:0);if(!SPEAK)speechSynthesis?.cancel();render()"><i class="fas fa-volume-${SPEAK ? "high" : "xmark"}"></i></button><button class="btn btn-sm ${mic ? "btn-danger" : "btn-primary"}" onclick="toggleMic()"><i class="fas fa-microphone"></i> ${mic ? (fbMode ? "Listening (server)" : "Listening") : "Mic"}</button></span></div>${hasPend() ? `<div style="background:#2a4365;border:1px solid #4299e1;border-radius:12px;padding:10px;margin:8px 0"><div style="font-weight:700;font-size:13px;margin-bottom:6px">⏳ Confirm before it is sent to the Situation Room</div>${Object.keys(PEND).map((q) => `<div style="display:flex;align-items:center;gap:8px;margin:6px 0"><b style="width:46px">${q}</b><span style="flex:1;font-size:12px;color:#bee3f8">${PEND[q].parts.join(" + ")}${PEND[q].parts.length > 1 ? " =" : ""}</span><input id="pe_${q}" class="dk" type="number" inputmode="numeric" value="${pendTotal(q)}" style="width:86px;flex:none;padding:8px" onchange="editPend('${q}',this.value)"></div>`).join("")}<div class="correction-controls" style="margin-top:8px"><button style="background:#38a169;flex:3" onclick="confirmPend()">✓ Confirm &amp; send</button><button style="background:#718096" onclick="undoPend()">↶</button><button style="background:#e53e3e" onclick="clearPend()">✕</button></div><div style="color:#a0aec0;font-size:11px;margin-top:6px">Say “confirm” to send, “undo” to drop the last figure, “cancel” to clear — or type a corrected total above, then confirm.</div></div>` : ""}${rows}<div id="tr" style="margin-top:8px;color:#a0aec0;font-size:12px">${mic && ACTIVE && Date.now() - ACT_T < 25000 ? '🎤 Listening for <b style="color:#fff">' + ACTIVE + "</b> figures… " : ""}${LASTTR ? "“" + esc(LASTTR) + "”" : ""}</div>
+<div class="tally-panel"><div class="tally-title"><span>TALLY · entries add up · tap a row to correct</span><span style="display:flex;gap:6px"><button class="btn btn-sm btn-outline" style="background:transparent;color:#a0aec0;border-color:#4a5568" title="Read figures back aloud" onclick="SPEAK=!SPEAK;localStorage.setItem('readback',SPEAK?1:0);if(!SPEAK)speechSynthesis?.cancel();render()"><i class="fas fa-volume-${SPEAK ? "high" : "xmark"}"></i></button><button class="btn btn-sm ${mic ? "btn-danger" : "btn-primary"}" onclick="toggleMic()"><i class="fas fa-microphone"></i> ${mic ? (fbMode ? "Listening (server)" : "Listening") : "Mic"}</button></span></div>${hasPend() ? `<div style="background:#2a4365;border:1px solid #4299e1;border-radius:12px;padding:10px;margin:8px 0"><div style="font-weight:700;font-size:13px;margin-bottom:6px">⏳ Confirm before it is sent to the Situation Room</div>${Object.keys(PEND).map((q) => `<div style="display:flex;align-items:center;gap:8px;margin:6px 0"><b style="width:46px">${q}</b><span style="flex:1;font-size:12px;color:#bee3f8">${PEND[q].parts.join(" + ")}${PEND[q].parts.length > 1 ? " =" : ""}</span><input id="pe_${q}" class="dk" type="number" inputmode="numeric" value="${pendTotal(q)}" style="width:86px;flex:none;padding:8px" onchange="editPend('${q}',this.value)"></div>`).join("")}<div class="correction-controls" style="margin-top:8px"><button style="background:#38a169;flex:3" onclick="confirmPend()">✓ Confirm &amp; send</button><button style="background:#718096" onclick="undoPend()">↶</button><button style="background:#e53e3e" onclick="clearPend()">✕</button></div><div style="color:#a0aec0;font-size:11px;margin-top:6px">Say “confirm” to send, “undo” to drop the last figure, “cancel” to clear — or type a corrected total above, then confirm.</div></div>` : ""}${rows}<div id="vstat" style="margin-top:8px;color:#faf089;font-size:12px;min-height:16px">${esc(VSTAT)}</div><div id="tr" style="margin-top:8px;color:#a0aec0;font-size:12px">${mic && ACTIVE && Date.now() - ACT_T < 25000 ? '🎤 Listening for <b style="color:#fff">' + ACTIVE + "</b> figures… " : ""}${LASTTR ? "“" + esc(LASTTR) + "”" : ""}</div>
 ${CORR ? `<div class="correction-controls"><input id="mi" type="number" inputmode="numeric" value="${t[CORR].v}"><button style="background:#38a169" onclick="saveCorr()">✓</button><button style="background:#e53e3e" onclick="CORR=null;render()">✕</button></div>` : ""}
 <div class="correction-controls"><select class="dk" id="mp" onchange="LASTP=this.value">${CFG.parties
             .map((p) => `<option value="${p}" ${window.LASTP == p ? "selected" : ""}>${p}${t[p] ? " (" + t[p].v + ")" : ""}</option>`)
@@ -847,7 +913,6 @@ ${CORR ? `<div class="correction-controls"><input id="mi" type="number" inputmod
         setTimeout(() => {
           const c = navigator.connection;
           if (
-            window.Vosk &&
             navigator.onLine &&
             !c?.saveData &&
             (c?.type == "wifi" || (!c?.type && c?.effectiveType == "4g"))

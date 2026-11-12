@@ -64,6 +64,7 @@ const A = {
     if (m.type == "nostream") toast("Observer is not streaming right now.");
   },
   async lkWatch(code, el, talk) {
+    await loadScript("/vendor/livekit-client.umd.js");
     const { Room, RoomEvent, Track } = LivekitClient,
       r = await A.post("livekit/token", { code }),
       room = new Room({ adaptiveStream: true, dynacast: true });
@@ -729,6 +730,7 @@ async function bulkCon() {
     let rows;
     if (/\.xls$/i.test(f.name)) return toast("⚠️ Old .xls format: open it in Excel and Save As .xlsx or .csv.");
     if (/\.xlsx$/i.test(f.name)) {
+      if (!window.readXlsxFile) await loadScript("/vendor/read-excel-file.min.js").catch(() => {});
       if (!window.readXlsxFile) return toast("⚠️ Excel reader not loaded. Save as CSV instead.");
       const a = await readXlsxFile(f),
         h = (a.shift() || []).map((x) => String(x ?? "").trim().toLowerCase());
@@ -883,7 +885,7 @@ async function start(role, tabsFn) {
   }
   A.ws((m) => (m.type == "changed" ? debLoad() : A.sig(m)));
   await loadAll();
-  setInterval(() => A.tok && document.visibilityState == "visible" && loadAll(), 10000);
+  setInterval(() => A.tok && document.visibilityState == "visible" && loadAll(), 20000); // live changes arrive over the socket; this is only a safety net
 }
 
 // ================= QR credentials: show, print, scan, and sign in by QR =================

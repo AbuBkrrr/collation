@@ -75,8 +75,16 @@
     <div class="toast" id="toast"></div>
     <div id="app"></div>
     <script src="/vendor/leaflet/leaflet.js"></script>
-    <script src="/vendor/livekit-client.umd.js"></script>
     <script>
+      const loadScript = (src) =>
+        new Promise((ok, no) => {
+          if (window.LivekitClient) return ok();
+          const e = document.createElement("script");
+          e.src = src;
+          e.onload = ok;
+          e.onerror = () => no(new Error("Could not load " + src));
+          document.head.appendChild(e);
+        });
       const $ = (s) => document.querySelector(s),
         esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => "&#" + c.charCodeAt(0) + ";"),
         LINK = location.hash.slice(1),
@@ -251,6 +259,7 @@
         if (!SEL) return;
         stop();
         try {
+          await loadScript("/vendor/livekit-client.umd.js");
           const { Room, RoomEvent, Track } = LivekitClient,
             r = await api("watch", { code: SEL }),
             room = new Room({ adaptiveStream: true, dynacast: true }),
