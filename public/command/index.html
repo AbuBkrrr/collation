@@ -549,13 +549,7 @@
           credModal({ title: (nm || "Command Center") + " — sign-in", lines: [["Sign in at", ORIGIN.replace(/^https?:\/\//, "") + "/command/"], ["Operator", r.operator], ["Passcode", r.passcode]], link: loginLink("cmd", r.operator, r.passcode), note: "Shown from the issued passcode. Use Share to issue a new one." });
         } catch (e) { toast("⚠️ " + e.message); }
       }
-      async function offView(id) {
-        try {
-          const r = await A.get("officers/" + id + "/credential");
-          if (!r.passcode) return noPass();
-          offCred(r);
-        } catch (e) { toast("⚠️ " + e.message); }
-      }
+      const offView = (id) => officerCard(id);
       const obsQR = (code) => { const o = DATA.obs.find((x) => x.code == code) || {}; credModal({ title: "Observer sign-in" + (o.pu ? " — PU " + o.pu : ""), lines: [["Sign in at", ORIGIN.replace(/^https?:\/\//, "") + "/observer/ (or the Observer app)"], ["Code", code], ...(o.lga ? [["Polling unit", [o.lga, o.ward, "PU " + o.pu].join(" / ")]] : [])], link: loginLink("obs", code), note: "The observer scans this (or types the code), then chooses a PIN. The code locks to the first phone that uses it." }); };
       // the sign-in of whichever officer covers a thing: found by area, shown with the same card used at creation
       async function offFor(level, lga, ward, state) {

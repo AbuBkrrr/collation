@@ -106,7 +106,8 @@ app.get("/api/officers/:id/credential", auth("cmd", "room"), h(async (req, res) 
       sc = String(r?.scope || "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
     if (o.level == "state" || o.level == "federal" || (sc.length && !sc.includes((o.lga || "").toLowerCase()))) return res.sendStatus(403);
   }
-  res.json({ ...pub(o), passcode: unseal(o.pass_enc) });
+  const [n] = await q("select (select count(*)::int from officer_confirms where officer_id=$1) confirmed,(select count(*)::int from officer_manual where officer_id=$1) manual", [o.id]);
+  res.json({ ...pub(o), confirmed: n.confirmed, manual: n.manual, passcode: unseal(o.pass_enc) });
 }));
 // what the officers have confirmed / entered — the Command Center's view
 app.get("/api/officers/records", auth("cmd"), h(async (req, res) => {

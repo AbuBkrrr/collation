@@ -1006,6 +1006,68 @@ async function scanLogin(kind, fill) {
 }
 const credText = (c) => [c.title, ...c.lines.map(([k, v]) => k + ": " + v), c.link ? "Sign-in link: " + c.link : ""].filter(Boolean).join("\n");
 // one credential: text + QR, with copy / print. c = { title, lines:[[label,value]], link, note }
+// one officer: all their details, sign-in QR, and (Command Center) reset / archive / delete
+async function officerCard(id) {
+  let o;
+  try {
+    o = await A.get("officers/" + id + "/credential");
+  } catch (e) {
+    return toast("⚠️ " + e.message);
+  }
+  const mgr = A.role == "cmd",
+    area = [o.state, o.lga, o.ward].filter(Boolean).join(" › ") || "All states",
+    card = { title: o.title + " (" + o.tag + ") — " + o.name, lines: [["Name", o.name], ...(o.phone ? [["Phone", o.phone]] : []), ["Area", area], ["Sign in at", ORIGIN.replace(/^https?:\/\//, "") + "/officer/"], ["Officer code", o.code], ["Passcode", o.passcode || ""]], link: o.passcode ? loginLink("officer", o.code, o.passcode) : "" },
+    row = (k, v) => `<div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid #edf2f7"><span class="muted">${k}</span><b style="text-align:right;word-break:break-all">${v}</b></div>`;
+  document.getElementById("credm")?.remove();
+  const w = document.createElement("div");
+  w.id = "credm";
+  w.style.cssText = "position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:9000;display:flex;align-items:center;justify-content:center;padding:14px;overflow:auto";
+  w.innerHTML = `<div class="card" style="max-width:460px;width:100%;margin:auto;max-height:96vh;overflow:auto"><div class="card-header"><h3><span class="otag otag-${o.level}">${esc(o.tag)}</span> ${esc(o.title)}</h3></div>
+    ${row("Name", esc(o.name))}${row("Phone", o.phone ? `<a href="tel:${esc(o.phone)}">${esc(o.phone)}</a>` : '<span class="muted">—</span>')}${row("Area", esc(area))}${row("Status", o.active ? '<span style="color:#2f855a">Active</span>' : '<span style="color:#c53030">Archived (cannot sign in)</span>')}${row("Figures confirmed / corrected", o.confirmed)}${row("Physical results entered", o.manual)}${row("Officer code", `<span class="mono">${esc(o.code)}</span>`)}${row("Passcode", o.passcode ? `<span class="mono">${esc(o.passcode)}</span>` : '<span class="muted">changed by the officer</span>')}
+    ${o.passcode ? `<div style="text-align:center;margin:14px 0 6px">${qrSvg(card.link, 5)}</div><div class="muted" style="text-align:center;font-size:12px">Scan with the phone camera or the Collation Officer app's <b>Scan QR</b> button.</div>` : ""}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">${o.passcode ? '<button class="btn btn-primary" id="oc_c"><i class="fas fa-copy"></i> Copy</button><button class="btn btn-outline" id="oc_p"><i class="fas fa-print"></i> Print</button>' : ""}${mgr ? `<button class="btn btn-outline" id="oc_r">Reset passcode</button><button class="btn btn-outline" id="oc_a">${o.active ? "Archive" : "Restore"}</button><button class="btn btn-danger" id="oc_d">Delete</button>` : ""}<button class="btn btn-outline" id="oc_x">Done</button></div></div>`;
+  document.body.appendChild(w);
+  const q1 = (s) => w.querySelector(s);
+  q1("#oc_x").onclick = () => w.remove();
+  if (o.passcode) {
+    q1("#oc_c").onclick = () => (navigator.clipboard?.writeText(credText(card)), toast("📋 Copied — paste it to the officer"));
+    q1("#oc_p").onclick = () => printCreds(o.name + " sign-in", [card]);
+  }
+  if (mgr) {
+    q1("#oc_r").onclick = async () => {
+      if (!confirm("Issue a new passcode for " + o.name + "? The old one stops working.")) return;
+      try {
+        await A.post("officers/" + id + "/reset");
+        officerCard(id);
+      } catch (e) {
+        toast("⚠️ " + e.message);
+      }
+    };
+    q1("#oc_a").onclick = async () => {
+      if (o.active && !confirm("Archive " + o.name + "? They can no longer sign in, and their ward / LGA has no officer until another is named. Nothing is deleted — you can restore them.")) return;
+      try {
+        await A.post("officers/" + id + "/active", { active: !o.active });
+        toast(o.active ? "🗄️ Officer archived" : "♻️ Officer restored");
+        officerCard(id);
+        loadAll();
+      } catch (e) {
+        toast("⚠️ " + e.message);
+      }
+    };
+    q1("#oc_d").onclick = async () => {
+      const t = prompt("Delete " + o.name + " permanently, with every figure they confirmed or entered?\nType DELETE to confirm.");
+      if (t !== "DELETE") return;
+      try {
+        await A.del("officers/" + id);
+        w.remove();
+        toast("🗑️ Officer deleted");
+        loadAll();
+      } catch (e) {
+        toast("⚠️ " + e.message);
+      }
+    };
+  }
+}
 // show a second card only after the first one has been closed (so a new officer card never covers the room / centre card)
 function afterModal(fn) {
   const t = setInterval(() => {
@@ -1028,7 +1090,7 @@ async function officerSheet() {
   const w = document.createElement("div");
   w.id = "credm";
   w.style.cssText = "position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:9000;display:flex;align-items:center;justify-content:center;padding:14px;overflow:auto";
-  w.innerHTML = `<div class="card" style="max-width:760px;width:100%;margin:auto;max-height:96vh;overflow:auto"><div class="card-header"><h3><i class="fas fa-clipboard-check"></i> Collation Officer sign-ins (${l.length})</h3></div>${l.length ? `<div style="overflow:auto"><table><tr><th>Level</th><th>Officer</th><th>Area</th><th>Code</th><th>Passcode</th><th></th></tr>${l.map((o, i) => `<tr><td><span class="otag otag-${o.level}">${esc(o.tag)}</span></td><td><b>${esc(o.name)}</b><br><span class="muted">${esc(o.phone || "")}</span></td><td>${esc([o.lga, o.ward].filter(Boolean).join(" › ") || o.state || "All states")}</td><td class="mono">${esc(o.code)}</td><td class="mono">${o.passcode ? esc(o.passcode) : '<span class="muted">changed</span>'}</td><td><button class="btn btn-sm btn-outline" data-i="${i}">QR</button></td></tr>`).join("")}</table></div>` : '<div class="muted">No collation officers yet. Name them when you create a Command Center, a Situation Room or observer codes.</div>'}<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px"><button class="btn btn-primary" id="osp"${l.length ? "" : " disabled"}><i class="fas fa-print"></i> Print all QR cards</button><button class="btn btn-outline" id="osc"${l.length ? "" : " disabled"}><i class="fas fa-copy"></i> Copy all</button><button class="btn btn-outline" id="osd">Close</button></div></div>`;
+  w.innerHTML = `<div class="card" style="max-width:760px;width:100%;margin:auto;max-height:96vh;overflow:auto"><div class="card-header"><h3><i class="fas fa-clipboard-check"></i> Collation Officer sign-ins (${l.length})</h3></div>${l.length ? `<div style="overflow:auto"><table><tr><th>Level</th><th>Officer</th><th>Area</th><th>Code</th><th>Passcode</th><th></th></tr>${l.map((o, i) => `<tr><td><span class="otag otag-${o.level}">${esc(o.tag)}</span></td><td><b>${esc(o.name)}</b><br><span class="muted">${esc(o.phone || "")}</span></td><td>${esc([o.lga, o.ward].filter(Boolean).join(" › ") || o.state || "All states")}</td><td class="mono">${esc(o.code)}</td><td class="mono">${o.passcode ? esc(o.passcode) : '<span class="muted">changed</span>'}</td><td><button class="btn btn-sm btn-outline" data-i="${i}">Details</button></td></tr>`).join("")}</table></div>` : '<div class="muted">No collation officers yet. Name them when you create a Command Center, a Situation Room or observer codes.</div>'}<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px"><button class="btn btn-primary" id="osp"${l.length ? "" : " disabled"}><i class="fas fa-print"></i> Print all QR cards</button><button class="btn btn-outline" id="osc"${l.length ? "" : " disabled"}><i class="fas fa-copy"></i> Copy all</button><button class="btn btn-outline" id="osd">Close</button></div></div>`;
   document.body.appendChild(w);
   w.querySelector("#osd").onclick = () => w.remove();
   w.querySelector("#osp").onclick = () => printCreds("Collation officer sign-in sheets", l.map(card));
@@ -1036,7 +1098,7 @@ async function officerSheet() {
     navigator.clipboard?.writeText(l.map((o) => credText(card(o))).join("\n\n"));
     toast("📋 All officer sign-ins copied");
   };
-  w.querySelectorAll("button[data-i]").forEach((b) => (b.onclick = () => credModal(card(l[+b.dataset.i]))));
+  w.querySelectorAll("button[data-i]").forEach((b) => (b.onclick = () => officerCard(l[+b.dataset.i].id)));
 }
 function credModal(c) {
   document.getElementById("credm")?.remove();

@@ -233,13 +233,7 @@
           o = (OFFS || []).find((x) => x.level == "ward" && eq(x.lga, lga) && eq(x.ward, ward));
         o ? offView(o.id) : toast("ℹ️ No Ward Collation Officer has been assigned to this ward yet.");
       }
-      async function offView(id) {
-        try {
-          const r = await A.get("officers/" + id + "/credential");
-          if (!r.passcode) return toast("ℹ️ This passcode was changed or issued earlier — ask the Command Center to reset it.");
-          credModal({ title: r.title + " — sign-in", lines: [["Name", r.name], ["Level", (r.tag || "").toUpperCase()], ["Sign in at", ORIGIN.replace(/^https?:\/\//, "") + "/officer/"], ["Officer code", r.code], ["Passcode", r.passcode]], link: loginLink("officer", r.code, r.passcode) });
-        } catch (e) { toast("⚠️ " + e.message); }
-      }
+      const offView = (id) => officerCard(id);
       start("room", () => ({
         dash: ["Situation Room Dashboard", "building-columns", () => roomDash(ME.id, false)],
         res: ["Results & EC8A", "scale-balanced", () => cardSearch(0, DATA.obs) + '<div style="margin-top:20px">' + tabResults(false) + "</div>"],

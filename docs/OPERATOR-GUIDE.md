@@ -202,7 +202,7 @@ A third officer, **Collation Officer 3**, sits at **state** level and oversees a
 - **Generate observer codes** (Situation Room): open *Ward Collation Officer 1 — optional* and type a name and phone for each ward in the batch.
 - **One room per LGA**: the button asks for each LGA's officer (LGA, name, phone — one per line) in the same step.
 - To find every officer login again: the **Officer sign-ins** button (top of the Situation Rooms list in the Command Center, and of the Observers list in a Situation Room) lists all of them with codes and passcodes, and prints or copies every QR card at once.
-- Afterwards, the **Officer** button on a Command Center, Situation Room or observer row shows that officer's sign-in card and QR again.
+- Afterwards, the **Officer** button on a Command Center, Situation Room or observer row opens that officer's details: name, phone, area, status, how many figures they confirmed, and the sign-in card with QR. The Command Center can also **Reset passcode**, **Archive** (they can no longer sign in; nothing is deleted and they can be restored) or **Delete** (permanent, type DELETE to confirm) from there.
 
 Each officer gets a **code and passcode with a QR sign-in** (shown once; *QR / Reset* issues a new one). They sign in at `/officer/` or in the **Collation Officer** Android app.
 
