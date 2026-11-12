@@ -179,6 +179,8 @@ test("isolation enforced inside PostgreSQL (row-level security)", async () => {
   const t = (await c.query("select count(*)::int n from tallies")).rows[0].n;
   const r = (await c.query("select count(*)::int n from rooms")).rows[0].n;
   assert.equal(n, 1, "Kaduna sees only its own observer");
+  const own = (await c.query("select count(*)::int n from settings where k like '%:%' and split_part(k,':',2)<>$1",[tb])).rows[0].n;
+  assert.equal(own, 0, "another Command Center's settings (cloud token, hooks…) are invisible");
   assert.equal(t, 0);
   assert.equal(r, 1);
   await assert.rejects(c.query("insert into rooms(id,name,tenant) values('SR-X','x','CC-MAIN')"), /row-level security/);

@@ -1,4 +1,4 @@
-const {qsys,qx,RLS,hit,LK,als,express,jwt,bcrypt,http,https,fs,path,crypto,E,PORT,SECRET,DATA,PARTIES,STATES,pool,q,rnd,abbr,aud,h,SCHEMA,app,rate,auth,su,own,mine,tnOf,cfgTenant,roomScope,getS,setS,appName,clean,bus} = require("../core");
+const {qsys,hit,path,crypto,SECRET,h,app,auth,su} = require("../core");
 // ---- Public marketing pitch page + first-party open analytics (platform administrator only) ----
 // The page is served at /pitch and posts a view beacon to /api/pitch/view. No third-party tracker; the
 // data lives in your own database. Share links as https://<domain>/pitch?ref=<label> to attribute opens.

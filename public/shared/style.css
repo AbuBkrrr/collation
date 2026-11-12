@@ -90,7 +90,7 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:8px;borde
 
 /* dark mode: the page is colour-inverted, then pictures, video, maps and QR codes are inverted back so they look normal */
 #themeBtn{position:fixed;right:14px;bottom:14px;z-index:9400;width:44px;height:44px;border-radius:50%;border:1px solid #cbd5e0;background:#fff;color:#1a365d;font-size:18px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.25)}
-html[data-theme="dark"]{filter:invert(1) hue-rotate(180deg) brightness(.94) contrast(.96);background:#fff}
+html[data-theme="dark"]{filter:invert(1) hue-rotate(180deg);background:#fff}
 html[data-theme="dark"] video,html[data-theme="dark"] img,html[data-theme="dark"] canvas,html[data-theme="dark"] svg,html[data-theme="dark"] .leaflet-container{filter:invert(1) hue-rotate(180deg)}
 html[data-theme="dark"] .leaflet-container svg,html[data-theme="dark"] .leaflet-container img,html[data-theme="dark"] .leaflet-container canvas{filter:none}
 

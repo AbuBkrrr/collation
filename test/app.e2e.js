@@ -22,7 +22,7 @@ const api = async (p, tok, body) => { const r = await fetch(B + "/api/" + p, { m
   const u = new URL(DB), adm = new URL(DB); adm.pathname = "/postgres";
   const c = new Client({ connectionString: adm.href }); await c.connect();
   await c.query(`drop database if exists "${u.pathname.slice(1)}" with (force)`); await c.query(`create database "${u.pathname.slice(1)}"`); await c.end();
-  const srv = spawn(process.execPath, ["server.js"], { cwd: path.join(__dirname, ".."), env: { ...process.env, DATABASE_URL: DB, PORT: API, COMMAND_PASSCODE: "adminpass1", SEED_LOCATIONS: "0", BACKUP_MINS: "0", DATA_DIR: fs.mkdtempSync(path.join(os.tmpdir(), "a-")), CORS_ORIGINS: "http://127.0.0.1:" + APP }, stdio: "ignore" });
+  const srv = spawn(process.execPath, ["server.js"], { cwd: path.join(__dirname, ".."), env: { ...process.env, REQUIRE_OFFICERS: "0", DATABASE_URL: DB, PORT: API, COMMAND_PASSCODE: "adminpass1", SEED_LOCATIONS: "0", BACKUP_MINS: "0", DATA_DIR: fs.mkdtempSync(path.join(os.tmpdir(), "a-")), CORS_ORIGINS: "http://127.0.0.1:" + APP }, stdio: "ignore" });
   try {
     for (let i = 0; i < 200; i++) { try { if ((await fetch(B + "/api/health")).ok) break; } catch {} await new Promise((r) => setTimeout(r, 150)); }
     const A = (await api("login/command", 0, { user: "admin", pass: "adminpass1" })).token;
@@ -42,7 +42,7 @@ const api = async (p, tok, body) => { const r = await fetch(B + "/api/" + p, { m
     await pg.waitForFunction(() => window.MCC_BASE && window.CFG, { timeout: 15000 }).catch(() => {});
     await pg.waitForSelector("#lc", { timeout: 15000 });
     await pg.fill("#lc", code); await pg.fill("#lpin", "2468"); await pg.click("button:has-text('Login')");
-    await pg.waitForSelector("text=VOICE TALLY", { timeout: 15000 });
+    await pg.waitForSelector("text=EC8A RESULT SHEET", { timeout: 15000 });
     await pg.selectOption("#mp", "APC"); await pg.fill("#mv", "321"); await pg.click(".correction-controls button:has-text('+')");
     await pg.fill("#er", "500"); await pg.fill("#ea", "410"); await pg.click("button[title='Save EC8A voter figures']");
     await pg.waitForTimeout(1500);

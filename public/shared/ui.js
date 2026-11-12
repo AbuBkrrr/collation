@@ -1210,7 +1210,13 @@ function applyTheme(t) {
   const b = document.getElementById("themeBtn");
   if (b) b.innerHTML = t == "dark" ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
 }
-const toggleTheme = () => applyTheme(document.documentElement.getAttribute("data-theme") == "dark" ? "light" : "dark");
+// dark mode repaints the whole page through a colour filter: fine on most phones, slow on weak ones
+const weakDevice = () => (navigator.deviceMemory && navigator.deviceMemory <= 2) || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4);
+const toggleTheme = () => {
+  const to = document.documentElement.getAttribute("data-theme") == "dark" ? "light" : "dark";
+  applyTheme(to);
+  if (to == "dark" && weakDevice()) toast("🌙 Dark mode can slow down an older phone — switch back to light if the screen feels sluggish.");
+};
 (() => {
   if (window.NO_THEME) return;
   let t = "light";

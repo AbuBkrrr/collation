@@ -11,7 +11,7 @@ const get = async (p, t) => { const s = Date.now(), r = await fetch(B + "/api/" 
   const u = new URL(DB), adm = new URL(DB); adm.pathname = "/postgres";
   let c = new Client({ connectionString: adm.href }); await c.connect();
   await c.query(`drop database if exists "${u.pathname.slice(1)}" with (force)`); await c.query(`create database "${u.pathname.slice(1)}"`); await c.end();
-  const srv = spawn(process.execPath, ["server.js"], { cwd: path.join(__dirname, ".."), env: { ...process.env, DATABASE_URL: DB, PORT, JWT_SECRET: SECRET, COMMAND_PASSCODE: "adminpass1", SEED_LOCATIONS: "0", BACKUP_MINS: "0", DATA_DIR: fs.mkdtempSync(path.join(os.tmpdir(), "l-")) }, stdio: "ignore" });
+  const srv = spawn(process.execPath, ["server.js"], { cwd: path.join(__dirname, ".."), env: { ...process.env, REQUIRE_OFFICERS: "0", DATABASE_URL: DB, PORT, JWT_SECRET: SECRET, COMMAND_PASSCODE: "adminpass1", SEED_LOCATIONS: "0", BACKUP_MINS: "0", DATA_DIR: fs.mkdtempSync(path.join(os.tmpdir(), "l-")) }, stdio: "ignore" });
   try {
     for (let i = 0; i < 100; i++) { try { if ((await fetch(B + "/api/health")).ok) break; } catch {} await new Promise((r) => setTimeout(r, 150)); }
     c = new Client({ connectionString: DB }); await c.connect();

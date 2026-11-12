@@ -115,6 +115,7 @@
         if (!confirm("Create one Situation Room for every LGA in " + st + "?")) return;
         try {
           const r = await A.post("rooms/bulk", { state: st, activate: $("#ba").checked });
+          if (r.needOfficer?.length) toast("⚠️ " + r.needOfficer.length + " LGA" + (r.needOfficer.length == 1 ? "" : "s") + " have no LGA Collation Officer yet, so no room was made for " + (r.needOfficer.length == 1 ? "it" : "them") + ". Add the officers in the Collation Officers tab, then run this again.");
           if (r.created.length) {
             const csv = "room_id,name,lga,passcode\n" + r.created.map((x) => [x.id, x.name, x.lga, x.passcode].join(",")).join("\n");
             const a = document.createElement("a");

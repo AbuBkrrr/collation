@@ -165,7 +165,7 @@ Full steps, including a signed release APK, are in `mobile/README.md`. Observers
 ```bash
 npm install
 TEST_DATABASE_URL=postgres://postgres@localhost:5432/collation_test npm test   # API + isolation + RLS tests
-E2E_DATABASE_URL=postgres://postgres@localhost:5432/collation_e2e node test/e2e.js  # browser test (needs Playwright)
+SMOKE_DATABASE_URL=postgres://postgres@localhost:5432/collation_smoke node test/smoke.js  # browser smoke test of every page and tab (needs Playwright)
 LOAD_DATABASE_URL=postgres://postgres@localhost:5432/collation_load node test/load.js # Kano-scale load test
 ```
 

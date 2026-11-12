@@ -15,8 +15,7 @@ const express = require("express"),
   https = require("https"),
   fs = require("fs"),
   path = require("path"),
-  crypto = require("crypto"),
-  { WebSocketServer } = require("ws");
+  crypto = require("crypto");
 const E = process.env,
   PORT = +E.PORT || 3000,
   DATA = path.resolve(E.DATA_DIR || "./data");
@@ -192,6 +191,8 @@ create or replace function app_room() returns text language sql stable as $f$ se
 ${[
   ["rooms", "tenant=app_tn() and (app_room() is null or id=app_room())"],
   ["tenants", "id=app_tn()"],
+  // per-Command-Center settings are keyed "name:TENANT"; platform-wide ones have no colon
+  ["settings", "k !~ ':' or split_part(k,':',2)=coalesce(app_tn(),'')"],
   ["officers", "tenant=app_tn()"],
   ["officer_confirms", "tenant=app_tn()"],
   ["officer_manual", "tenant=app_tn()"],
@@ -325,7 +326,9 @@ const auth =
         u.su = c.su;
       }
       if (u.role == "room") {
-        const [r] = await q("update rooms set last_seen=now() where id=$1 returning status,tenant", [u.id]);
+        // "last seen" is a presence indicator: refresh it at most every 20 s instead of writing a row on every request
+        const [r] = await q("select status,tenant,(last_seen is null or last_seen < now() - interval '20 seconds') stale from rooms where id=$1", [u.id]);
+        if (r?.stale) q("update rooms set last_seen=now() where id=$1", [u.id]).catch(() => {});
         if (!r || r.status != "active") return res.status(401).json({ error: "Room not active" });
         u.tn = r.tenant;
         u.room = u.id;

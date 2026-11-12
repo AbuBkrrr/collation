@@ -1,4 +1,4 @@
-const {qsys,qx,RLS,hit,LK,als,express,jwt,bcrypt,http,https,fs,path,crypto,E,PORT,SECRET,DATA,PARTIES,STATES,pool,q,rnd,abbr,aud,h,SCHEMA,app,rate,auth,su,own,mine,tnOf,cfgTenant,roomScope,getS,setS,appName,clean,bus} = require("../core");
+const {qsys,express,bcrypt,fs,path,E,DATA,STATES,q,rnd,abbr,aud,h,app,auth,su,own} = require("../core");
 const { execFile } = require("child_process");
 const push = (pred, m) => require("../ws").push(pred, m);
 app.get("/api/health", h(async (req, res) => {
@@ -131,9 +131,17 @@ app.post(
     const lgas = (await q("select distinct lga from locations where state=$1 order by 1", [st])).map((x) => x.lga);
     if (!lgas.length) return res.status(400).json({ error: "No LGAs loaded for " + st + " (Locations tab)" });
     const have = new Set((await q("select lower(scope) s from rooms where tenant=$1 and state=$2", [req.u.tn, st])).map((x) => x.s));
-    const out = [];
+    const out = [],
+      needOfficer = [],
+      O = require("./officers"),
+      must = await O.required();
     for (const lga of lgas) {
       if (have.has(lga.toLowerCase())) continue;
+      // a room never exists without its LGA Collation Officer
+      if (must && !(await O.hasOfficer(req.u.tn, "lga", st, lga))) {
+        needOfficer.push(lga);
+        continue;
+      }
       const id = "SR-" + abbr(st) + "-" + rnd(3),
         pass = rnd(10),
         on = !!req.body.activate;
@@ -144,7 +152,7 @@ app.post(
       out.push({ id, name: lga + " LGA Situation Room", lga, passcode: pass });
     }
     aud("CMD", "Created " + out.length + " LGA Situation Rooms for " + st);
-    res.json({ created: out, skipped: lgas.length - out.length });
+    res.json({ created: out, skipped: lgas.length - out.length - needOfficer.length, needOfficer });
   }),
 );
 // ---- map imagery: Esri (free) always; Google Map Tiles API and Mapbox when a key/token is configured ----

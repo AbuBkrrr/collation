@@ -1,4 +1,4 @@
-const {qsys,qx,RLS,hit,LK,als,express,jwt,bcrypt,http,https,fs,path,crypto,E,PORT,SECRET,DATA,PARTIES,STATES,pool,q,rnd,abbr,aud,h,SCHEMA,app,rate,auth,su,own,mine,tnOf,cfgTenant,roomScope,getS,setS,appName,clean,bus} = require("./src/core");
+const {RLS,express,bcrypt,https,fs,path,E,PORT,DATA,pool,q,rnd,SCHEMA,app} = require("./src/core");
 const { loadLocations, SEED } = require("./src/locations");
 for (const r of ["auth", "tenants", "rooms", "observers", "ops", "messages", "contacts", "data", "settings", "media", "radio", "locations", "results", "admin", "pitch", "shares", "help", "archive", "officers"]) require("./src/routes/" + r);
 // front-end libraries are served from this PC (no CDN dependency on election day)
@@ -47,6 +47,14 @@ const { server } = require("./src/ws");
 (async () => {
   await pool.query(SCHEMA);
   await pool.query(RLS);
+  // indexes on the columns every row-level-security policy and list screen filters by (tenant / room)
+  await pool.query(`create index if not exists rooms_tn_i on rooms(tenant);
+    create index if not exists contacts_tn_i on contacts(tenant,room_id);
+    create index if not exists units_room_i on units(room_id);
+    create index if not exists cmd_users_tn_i on cmd_users(tenant);
+    create index if not exists officers_tn_i on officers(tenant,level);
+    create index if not exists inc_code_i on incidents(code);
+    create index if not exists obs_dev_i on observers(device_hash) where device_hash is not null`);
   await q("insert into tenants values('CC-MAIN','Main Command Center') on conflict do nothing");
   for (const t of ["rooms", "contacts", "messages", "audit", "cmd_users"])
     await q("update " + t + " set tenant='CC-MAIN' where tenant is null");
@@ -79,3 +87,12 @@ const { server } = require("./src/ws");
     console.log((server instanceof https.Server ? "https" : "http") + "://0.0.0.0:" + PORT),
   );
 })();
+// one bad request or timer must never take the whole election server down; log it and keep serving
+process.on("unhandledRejection", (e) => console.error("unhandled rejection:", e && e.stack ? e.stack : e));
+process.on("uncaughtException", (e) => console.error("uncaught exception:", e && e.stack ? e.stack : e));
+// finish in-flight requests and close the database cleanly when the service is stopped or restarted
+for (const sig of ["SIGTERM", "SIGINT"])
+  process.on(sig, () => {
+    server.close(() => pool.end().finally(() => process.exit(0)));
+    setTimeout(() => process.exit(0), 8000).unref();
+  });

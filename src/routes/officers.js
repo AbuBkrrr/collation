@@ -1,8 +1,8 @@
 const {q,qsys,bcrypt,jwt,SECRET,PARTIES,STATES,rnd,aud,h,app,rate,auth} = require("../core");
 const { puList } = require("./results");
 const { getS } = require("../core");
-// Platform rule (on unless the administrator sets require_officers=0): nothing is created without its supervisor.
-const required = async () => (await getS("require_officers")) !== "0";
+// Platform rule (on unless REQUIRE_OFFICERS=0 is in the environment or the require_officers setting is 0): nothing is created without its supervisor.
+const required = async () => process.env.REQUIRE_OFFICERS !== "0" && (await getS("require_officers")) !== "0";
 const hasOfficer = async (tn, level, state, lga, ward) =>
   (await qsys("select 1 from officers where tenant=$5 and level=$1 and active and ($2::text is null or lower(state)=lower($2)) and ($3::text is null or lower(lga)=lower($3)) and ($4::text is null or lower(ward)=lower($4)) limit 1", [level, state, lga || null, ward || null, tn])).length > 0;
 // ---- Collation Officers: ward (1), LGA (2) and state (3) supervisors who collect the tallies coming up from

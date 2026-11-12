@@ -1,4 +1,4 @@
-const {qsys,qx,RLS,hit,LK,als,express,jwt,bcrypt,http,https,fs,path,crypto,E,PORT,SECRET,DATA,PARTIES,STATES,pool,q,rnd,abbr,aud,h,SCHEMA,app,rate,auth,su,own,mine,tnOf,cfgTenant,roomScope,getS,setS,appName,clean,bus} = require("../core");
+const {qsys,qx,als,express,fs,path,crypto,DATA,PARTIES,q,rnd,aud,h,app,auth,mine,bus} = require("../core");
 // ---- Results: two observers per PU are reconciled; a room supervisor resolves disputes; EC8A photo proves it ----
 // PU status: pending (nothing yet) · single (1 observer) · partial (2+, no conflicting figure, still entering)
 //            matched (2+ identical) · disputed (2+ conflict: NOT counted until resolved) · resolved (supervisor)

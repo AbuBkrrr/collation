@@ -1,4 +1,4 @@
-const {qsys,qx,RLS,hit,LK,als,express,jwt,bcrypt,http,https,fs,path,crypto,E,PORT,SECRET,DATA,PARTIES,STATES,pool,q,rnd,abbr,aud,h,SCHEMA,app,rate,auth,su,own,mine,tnOf,cfgTenant,roomScope,getS,setS,appName,clean,bus} = require("../core");
+const {qsys,qx,hit,LK,als,jwt,bcrypt,crypto,E,SECRET,PARTIES,q,rnd,aud,h,app,auth,mine,appName,bus} = require("../core");
 const { puList } = require("./results");
 const push = (pred, m) => require("../ws").push(pred, m);
 // ---- Shared live dashboard: a view-only page (map, collation, video + optional talk-back) for a chosen
