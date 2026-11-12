@@ -527,7 +527,7 @@
         const l = $("#ol")?.value;
         if (!$("#olg")) return;
         $("#olg").style.display = l == "state" || l == "federal" ? "none" : "";
-        $("#owd").style.display = l == "ward" ? "" : "none";
+        $("#ow").style.display = l == "ward" ? "" : "none";
         $("#ost").style.display = ME.tenantState || l == "federal" ? "none" : "";
       }
       async function offDl(kind) {
