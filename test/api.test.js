@@ -607,3 +607,16 @@ test("platform administrator: archive / restore / delete Command Centers and roo
   assert.equal(ok(await api("tenants", { tok: S.A })).some((t) => t.id == b.id), false);
   assert.equal((await api("login/room", { body: { id: b.room, pass: "x" } })).s, 401);
 });
+
+test("a room and a state-locked Command Center only hold their own state (contacts)", async () => {
+  const inv = ok(await api("tenants", { tok: S.A, body: { name: "State Lock Contacts", state: "Gombe" } }));
+  const C = ok(await api("login/command", { body: { user: inv.operator, pass: inv.passcode } })).token;
+  const rm = ok(await api("rooms", { tok: C, body: { name: "r", kind: "lga", scope: "Akko" } }));
+  ok(await api("rooms/" + rm.id + "/status", { tok: C, body: { status: "active" } }));
+  const R = ok(await api("login/room", { body: { id: rm.id, pass: rm.passcode } })).token;
+  ok(await api("contacts", { tok: R, body: { name: "Room Contact", phone: "08011112222", role: "Emergency", level: "LGA", state: "Lagos" } }));
+  ok(await api("contacts", { tok: C, body: { name: "Command Contact", phone: "08033334444", role: "Emergency", level: "State", state: "Kano" } }));
+  const list = ok(await api("contacts", { tok: C }));
+  assert.ok(list.every((c) => c.state == "Gombe"), JSON.stringify(list.map((c) => c.state)));
+  assert.equal((await api("room/obs", { tok: R, body: { state: "Lagos", lga: "Akko", ward: "W", pu: "001", reg: 5, name: "x" } })).s, 403, "a room cannot issue codes outside its state");
+});
