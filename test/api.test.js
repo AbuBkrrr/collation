@@ -403,7 +403,7 @@ test("every page and every front-end library the pages load is actually served",
     assert.equal(r.status, 200, p);
     for (const m of (await r.text()).matchAll(/(?:src|href)="(\/(?:vendor|shared)\/[^"]+)"/g)) seen.add(m[1]);
   }
-  ["/vendor/jsqr.js", "/vendor/qrcode.js", "/vendor/leaflet/images/marker-icon.png"].forEach((x) => seen.add(x));
+  ["/vendor/livekit-client.umd.js", "/vendor/vosk.js", "/vendor/read-excel-file.min.js", "/vendor/jsqr.js", "/vendor/qrcode.js", "/vendor/leaflet/images/marker-icon.png"].forEach((x) => seen.add(x));
   assert.ok(seen.size >= 10);
   for (const u of seen) assert.equal(await get(u), 200, u);
   // the Android build copies these straight out of node_modules
