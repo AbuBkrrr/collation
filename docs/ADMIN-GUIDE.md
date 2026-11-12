@@ -145,7 +145,15 @@ The **Marketing** tab is yours alone — it drives client acquisition.
 
 - **Tracking links** — type a label (e.g. `inec-kano`, `whatsapp-batch-1`) and copy the generated
   `…/pitch?ref=<label>` link. Share a different label with each person/channel.
-- **Opens** — total opens, unique visitors, today, by label and by day.
+- **Opens** — total opens, **different devices**, **repeat opens (same device)**, unique visitors, today,
+  by label and by day.
+- **Same device or shared?** — for each tracking link: opens, how many **different devices** opened it, and
+  how many opens were the **same device coming back**. One device = it stayed with the person you sent it
+  to; **Shared · N devices** = the link was forwarded and opened by others. *Recent opens* marks every open
+  **New device** or **Same device · open #N**.
+  A device is recognised by a small random ID the page keeps in the browser (no personal data). Opening in
+  a private window, clearing browser data, or switching browser (for example WhatsApp's built-in browser
+  and Chrome) looks like a new device, so treat "shared" as a strong hint, not proof.
 - **Devices & browsers** — what people viewed on, and where they came from.
 - **Leads & contacts** — people who filled the **Request a demo** form on the pitch page (name,
   phone, organisation), each a click-to-WhatsApp link, with CSV export.

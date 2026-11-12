@@ -620,3 +620,23 @@ test("a room and a state-locked Command Center only hold their own state (contac
   assert.ok(list.every((c) => c.state == "Gombe"), JSON.stringify(list.map((c) => c.state)));
   assert.equal((await api("room/obs", { tok: R, body: { state: "Lagos", lga: "Akko", ward: "W", pu: "001", reg: 5, name: "x" } })).s, 403, "a room cannot issue codes outside its state");
 });
+
+test("marketing: same device coming back is told apart from a link shared with others", async () => {
+  const UA = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/124 Mobile Safari/537.36";
+  const open = (ref, vid) => fetch(BASE + "/api/pitch/view", { method: "POST", headers: { "Content-Type": "application/json", "User-Agent": UA }, body: JSON.stringify({ ref, vid, screen: "1080x2400", tz: "Africa/Lagos" }) });
+  const A = "aaaaaaaaaaaaaaaa-device-one", B = "bbbbbbbbbbbbbbbb-device-two";
+  for (const v of [A, A, A, B]) await open("judge-x", v);
+  await open("solo-x", A);
+  await open("anon-x", undefined); // no id: falls back to a coarse device signature
+  await open("anon-x", undefined);
+  const st = ok(await api("pitch/stats?days=1", { tok: S.A }));
+  const L = Object.fromEntries(st.links.map((l) => [l.k, l]));
+  assert.deepEqual([L["judge-x"].opens, L["judge-x"].devices, L["judge-x"].repeats], [4, 2, 2], "forwarded to a second device");
+  assert.deepEqual([L["solo-x"].opens, L["solo-x"].devices, L["solo-x"].repeats], [1, 1, 0]);
+  assert.deepEqual([L["anon-x"].opens, L["anon-x"].devices], [2, 1], "same signature, no id");
+  const rec = st.recent.filter((r) => r.ref == "judge-x").sort((a, b) => a.id - b.id);
+  assert.deepEqual(rec.map((r) => r.nth), [1, 2, 3, 1]);
+  assert.deepEqual(rec.map((r) => r.devno), [1, 1, 1, 2]);
+  assert.ok(st.total.devices >= 3 && st.total.repeats >= 3);
+  assert.equal((await api("pitch/view", { body: { ref: "x", vid: "short" } })).s, 200, "a malformed id is ignored, not rejected");
+});
