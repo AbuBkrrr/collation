@@ -5,6 +5,10 @@ const {qsys,qx,RLS,hit,LK,als,express,jwt,bcrypt,http,https,fs,path,crypto,E,POR
 // verified = (matched or resolved) and at least one EC8A photo uploaded.
 const LV = ["state", "lga", "ward", "pu"];
 const pkey = (o) => [o.state, o.lga, o.ward, o.pu].join("|");
+// Different elections (LGA, governorship, presidential, senate, reps...) are held at the same polling units, so a unit's
+// figures are kept apart per contest: observers of different contests are never reconciled against each other.
+const ct = (k) => k || "general";
+const ckey = (o) => pkey(o) + "|" + ct(o.kind);
 const cache = new Map();
 bus.dirty = () => cache.clear();
 async function puList(u, f) {
@@ -20,8 +24,9 @@ async function puList(u, f) {
   if (u.role == "room") add("o.room_id", u.id);
   else if (f.room) add("o.room_id", f.room);
   LV.forEach((k) => f[k] && add("o." + k, String(f[k])));
+  if (f.contest) add("coalesce((select kind from rooms r where r.id=o.room_id),'general')", String(f.contest));
   const obs = await q(
-    "select o.code,o.name,o.room_id,o.state,o.lga,o.ward,o.pu,o.pu_name,o.reg,o.ec_reg,o.ec_acc from observers o where " +
+    "select o.code,o.name,o.room_id,o.state,o.lga,o.ward,o.pu,o.pu_name,o.reg,o.ec_reg,o.ec_acc,(select kind from rooms r where r.id=o.room_id) kind from observers o where " +
       w.join(" and "),
     a,
   );
@@ -29,16 +34,16 @@ async function puList(u, f) {
     rooms = [...new Set(obs.map((o) => o.room_id))];
   const [tl, rs, ph] = await Promise.all([
     q("select code,party,v,edits from tallies where code=any($1)", [codes]),
-    q("select * from pu_results where room_id=any($1)", [rooms]),
-    q("select id,code,state,lga,ward,pu,ts,sha256 from ec8a where room_id=any($1) order by id", [rooms]),
+    q("select p.*,(select kind from rooms r where r.id=p.room_id) kind from pu_results p where p.room_id=any($1)", [rooms]),
+    q("select id,code,state,lga,ward,pu,ts,sha256,(select kind from rooms r where r.id=ec8a.room_id) kind from ec8a where room_id=any($1) order by id", [rooms]),
   ]);
   const T = {};
   tl.forEach((x) => ((T[x.code] = T[x.code] || {})[x.party] = x.v));
-  const R = Object.fromEntries(rs.map((r) => [pkey(r), r])),
+  const R = Object.fromEntries(rs.map((r) => [ckey(r), r])),
     P = {};
-  ph.forEach((x) => (P[pkey(x)] = P[pkey(x)] || []).push(x));
+  ph.forEach((x) => (P[ckey(x)] = P[ckey(x)] || []).push(x));
   const G = {};
-  obs.forEach((o) => (G[pkey(o)] = G[pkey(o)] || []).push(o));
+  obs.forEach((o) => (G[ckey(o)] = G[ckey(o)] || []).push(o));
   const out = Object.entries(G).map(([k, l]) => {
     const subs = l.filter((o) => T[o.code] && Object.keys(T[o.code]).length),
       res = R[k];
@@ -67,6 +72,7 @@ async function puList(u, f) {
       acc = eca.length ? Math.max(...eca) : null;
     return {
       key: k,
+      contest: ct(o0.kind),
       room_id: o0.room_id,
       state: o0.state,
       lga: o0.lga,
@@ -94,7 +100,7 @@ async function puList(u, f) {
 }
 const POOL_RANK = { pending: 0, disputed: 1, single: 2, partial: 3, matched: 4, resolved: 5 };
 const poolScore = (x) => (x.fig ? 10 : 0) + (x.verified ? 6 : POOL_RANK[x.status] || 0);
-const filt = (qq) => Object.fromEntries(["room", ...LV].filter((k) => qq[k]).map((k) => [k, String(qq[k])]));
+const filt = (qq) => Object.fromEntries(["room", ...LV, "contest"].filter((k) => qq[k]).map((k) => [k, String(qq[k])]));
 const blank = () => ({ pus: 0, pending: 0, single: 0, partial: 0, matched: 0, disputed: 0, resolved: 0, verified: 0, anomaly: 0, ec8a: 0 });
 function agg(l) {
   const t = Object.fromEntries(PARTIES.map((p) => [p, 0])),
@@ -125,7 +131,7 @@ app.get(
     // (scope) are built from the unfiltered data so choosing a state does not hide the other states.
     if (req.u.role == "cmd" && req.u.su && req.query.pool == "1" && !f.room) {
       const ts = await qsys("select id from tenants where active and not coalesce(archived,false)"),
-        match = (x) => LV.every((k) => !f[k] || String(x[k]) == f[k]),
+        match = (x) => LV.every((k) => !f[k] || String(x[k]) == f[k]) && (!f.contest || x.contest == f.contest),
         best = new Map(),
         keys = new Set();
       const take = (x, own) => {
@@ -156,14 +162,14 @@ app.get(
           others = await qsys("select id from tenants where state=$1 and pool and active and id<>$2", [me.state, req.u.tn]);
         // a Situation Room sees the whole of its own LGA(s): its sister rooms in this Command Center
         // and the rooms of the other pooled Command Centers that cover the same LGA
-        const [rm] = isRoom ? await qsys("select scope from rooms where id=$1", [req.u.id]) : [],
+        const [rm] = isRoom ? await qsys("select scope,kind from rooms where id=$1", [req.u.id]) : [],
           lgas = isRoom ? String(rm?.scope || "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean) : [],
           inScope = (x) => !lgas.length || lgas.includes(String(x.lga).toLowerCase());
         const RANK = { pending: 0, disputed: 1, single: 2, partial: 3, matched: 4, resolved: 5 };
         const score = (x) => (x.fig ? 10 : 0) + (x.verified ? 6 : RANK[x.status] || 0);
         const best = new Map(l.map((x) => [x.key, { x, own: true }]));
         for (const t of [...(isRoom ? [{ id: req.u.tn }] : []), ...others]) {
-          const tl = await als.run({ name: "pool", tn: t.id, room: "" }, () => puList({ role: "cmd", tn: t.id, id: "pool" }, { ...f, state: me.state }));
+          const tl = await als.run({ name: "pool", tn: t.id, room: "" }, () => puList({ role: "cmd", tn: t.id, id: "pool" }, { ...f, state: me.state, ...(isRoom ? { contest: ct(rm?.kind) } : {}) }));
           for (const x of tl) {
             if (!inScope(x)) continue;
             const cur = best.get(x.key);
@@ -188,6 +194,8 @@ app.get(
       pooled,
       scope,
       states,
+      // the contests that exist here, so the screen can warn when totals of different elections are being added together
+      contests: (await (scope ? qsys : q)("select distinct coalesce(kind,'general') k from rooms where not coalesce(archived,false)")).map((r) => r.k),
       sum: agg(l),
       rows: Object.entries(g)
         .sort((a, b) => String(a[0]).localeCompare(String(b[0])))
