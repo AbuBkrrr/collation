@@ -66,6 +66,10 @@ This is your main job. Go to the **Command Centres** tab.
 4. **Send that to the client** (WhatsApp, email), or print the card. They can type the operator name
    and passcode, or simply **scan the QR** to sign in. That's everything they need to start.
 
+### Viewing a client's login again
+
+On the client's row, **Sign-in** shows the operator name, passcode and QR you issued — no need to reset. If the client has since chosen their own passcode it cannot be viewed (Share issues a new one). Issued passcodes are kept encrypted (AES-256-GCM, key derived from `JWT_SECRET`); if you ever change `JWT_SECRET`, old passcodes can no longer be viewed and need a reset.
+
 ### Re-sending or resetting a client's login
 
 On the client's row in the **Command Centres** list, click **Share**. This **sets a fresh passcode**

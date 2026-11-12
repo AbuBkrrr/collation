@@ -151,7 +151,10 @@ alter table locations add column if not exists name text;alter table observers a
 create table if not exists officers(id serial primary key,tenant text,level text,name text,phone text,state text,lga text,ward text,code text unique,pass_hash text,active bool default true,seen timestamptz,ts timestamptz default now());
 create table if not exists officer_confirms(id serial primary key,tenant text,officer_id int references officers(id) on delete cascade,ckey text,act text,fig jsonb,orig jsonb,ts timestamptz default now(),unique(officer_id,ckey));
 create table if not exists officer_manual(id serial primary key,tenant text,officer_id int references officers(id) on delete cascade,area text,fig jsonb,boxes int,note text,revs int default 0,ts timestamptz default now(),unique(officer_id,area));
+alter table officers add column if not exists pass_enc text;
+alter table rooms add column if not exists pass_enc text;
 create table if not exists cmd_users(id serial primary key,name text unique,pass_hash text,active bool default true);
+alter table cmd_users add column if not exists pass_enc text;
 create table if not exists radio_keys(room_id text primary key,key_hash text);
 create table if not exists tenants(id text primary key,name text,active bool default true);
 alter table tenants add column if not exists state text;
@@ -416,4 +419,24 @@ const appName = async (tn) => {
   return (await getS("app_name")) || E.APP_NAME || "My Collation Center"; // platform name (login screens)
 };
 const clean = (v) => (v == null ? null : String(v).slice(0, 40));
-module.exports = {qsys,qx,RLS,hit,LK,als,express,jwt,bcrypt,http,https,fs,path,crypto,E,PORT,SECRET,DATA,PARTIES,STATES,pool,q,rnd,abbr,aud,h,SCHEMA,app,rate,auth,su,own,mine,tnOf,cfgTenant,roomScope,getS,setS,appName,clean,bus};
+// Credentials the platform hands out (Command Center / room / officer passcodes) are also kept ENCRYPTED so the person
+// who issued them can show the sign-in card or QR again. The sign-in check itself still uses only the bcrypt hash.
+const ckey_ = crypto.createHash("sha256").update("cred-v1:" + SECRET).digest();
+const seal = (p) => {
+  const iv = crypto.randomBytes(12),
+    c = crypto.createCipheriv("aes-256-gcm", ckey_, iv),
+    enc = Buffer.concat([c.update(String(p), "utf8"), c.final()]);
+  return Buffer.concat([iv, c.getAuthTag(), enc]).toString("base64");
+};
+const unseal = (x) => {
+  try {
+    if (!x) return null;
+    const b = Buffer.from(x, "base64"),
+      d = crypto.createDecipheriv("aes-256-gcm", ckey_, b.subarray(0, 12));
+    d.setAuthTag(b.subarray(12, 28));
+    return Buffer.concat([d.update(b.subarray(28)), d.final()]).toString("utf8");
+  } catch {
+    return null;
+  }
+};
+module.exports = {seal,unseal,qsys,qx,RLS,hit,LK,als,express,jwt,bcrypt,http,https,fs,path,crypto,E,PORT,SECRET,DATA,PARTIES,STATES,pool,q,rnd,abbr,aud,h,SCHEMA,app,rate,auth,su,own,mine,tnOf,cfgTenant,roomScope,getS,setS,appName,clean,bus};

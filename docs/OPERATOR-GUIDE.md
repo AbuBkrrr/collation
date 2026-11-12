@@ -192,6 +192,8 @@ Information flows up a clear chain of command:
 
 A third officer, **Collation Officer 3**, sits at **state** level and oversees all LGAs. A multi-state Command Center (no state chosen — for example a presidential contest) has a fourth, **Collation Officer 4 (Federal)**, who oversees all the states. Every officer carries a coloured tag — **WARD**, **LGA**, **STATE** or **FEDERAL** — in the lists, on the sign-in card and in the officer app.
 
+**Viewing a sign-in again.** Every Situation Room, Collation Officer and observer has a **Sign-in / QR** button that shows the card and QR code again (print or copy it). It shows the passcode that was issued; if the owner later chose their own passcode, or it was issued before this feature existed, use **Reset** to issue a new one.
+
 **Nothing is created without its supervisor.** A Command Center with a state needs its State Collation Officer; an LGA Situation Room needs its LGA officer; and observer codes can only be generated for a ward once that ward has its Ward Collation Officer (name one in the same step, or add it first). The platform administrator can switch this rule off with the `require_officers` setting (value `0`) if ever needed.
 
 **Adding officers — at the moment you create things:**

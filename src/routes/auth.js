@@ -1,4 +1,5 @@
 const {qsys,qx,LK,jwt,bcrypt,fs,path,crypto,E,SECRET,DATA,PARTIES,STATES,q,aud,h,app,rate,auth,cfgTenant,appName} = require("../core");
+const { seal, unseal } = require("../core");
 const TOTP = require("../totp");
 // an APK is available if it was dropped in DATA_DIR or committed to the repo's apks/ folder by CI
 const hasApk = (name) =>
@@ -81,10 +82,11 @@ app.post(
       return res.status(400).json({ error: "Name: 2-40 letters, digits . _ -" });
     if (p.length < 8) return res.status(400).json({ error: "Passcode must be at least 8 characters" });
     try {
-      await q("insert into cmd_users(name,pass_hash,tenant) values($1,$2,$3)", [
+      await q("insert into cmd_users(name,pass_hash,tenant,pass_enc) values($1,$2,$3,$4)", [
         n,
         await bcrypt.hash(p, 10),
         req.u.tn,
+        seal(p),
       ]);
     } catch {
       return res.status(409).json({ error: "That operator name exists" });
@@ -112,10 +114,11 @@ app.post(
   h(async (req, res) => {
     const p = String(req.body.pass || "");
     if (p.length < 8) return res.status(400).json({ error: "Passcode must be at least 8 characters" });
-    const r = await qx("update cmd_users set pass_hash=$2 where id=$1 and tenant=$3", [
+    const r = await qx("update cmd_users set pass_hash=$2,pass_enc=$4 where id=$1 and tenant=$3", [
       req.params.id,
       await bcrypt.hash(p, 10),
       req.u.tn,
+      seal(p),
     ]);
     if (!r.rowCount) return res.sendStatus(404);
     aud("CMD", "Reset operator passcode id " + req.params.id);

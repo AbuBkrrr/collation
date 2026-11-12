@@ -909,3 +909,21 @@ test("nothing is created without its supervisor: Command Center, room and observ
     await setReq("0");
   }
 });
+
+test("issued sign-ins can be viewed again by whoever issued them (and only them); a self-chosen passcode cannot", async () => {
+  const inv = ok(await api("tenants", { tok: S.A, body: { name: "View Cred CC", state: "Gombe" } }));
+  const v = ok(await api("tenants/" + inv.id + "/credential", { tok: S.A }));
+  assert.deepEqual([v.operator, v.passcode], [inv.operator, inv.passcode], "administrator can view the client's issued login");
+  const C = ok(await api("login/command", { body: { user: inv.operator, pass: inv.passcode } })).token;
+  assert.equal((await api("tenants/" + inv.id + "/credential", { tok: C })).s, 403, "a client cannot use the administrator view");
+  const rm = ok(await api("rooms", { tok: C, body: { name: "Akko", kind: "lga", scope: "Akko" } }));
+  assert.equal(ok(await api("rooms/" + rm.id + "/credential", { tok: C })).passcode, rm.passcode);
+  assert.equal((await api("rooms/" + rm.id + "/credential", { tok: S.A })).s, 404, "another Command Center cannot");
+  const o = ok(await api("officers", { tok: C, body: { level: "state", name: "Cred Officer" } }));
+  assert.equal(ok(await api("officers/" + o.id + "/credential", { tok: C })).passcode, o.passcode);
+  const nr = ok(await api("rooms/" + rm.id + "/reset", { tok: C, body: {} }));
+  assert.equal(ok(await api("rooms/" + rm.id + "/credential", { tok: C })).passcode, nr.passcode, "a reset passcode is the one shown");
+  // the operator chooses their own passcode: nobody can view that one any more
+  ok(await api("settings/passcode", { tok: C, body: { old: inv.passcode, pass: "my-own-new-pass-1" } }));
+  assert.equal(ok(await api("tenants/" + inv.id + "/credential", { tok: S.A })).passcode, null);
+});

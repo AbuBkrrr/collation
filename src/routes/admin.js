@@ -1,4 +1,5 @@
 const {qsys,express,bcrypt,fs,path,E,DATA,STATES,q,rnd,abbr,aud,h,app,auth,su,own} = require("../core");
+const { seal, unseal } = require("../core");
 const { execFile } = require("child_process");
 const push = (pred, m) => require("../ws").push(pred, m);
 app.get("/api/health", h(async (req, res) => {
@@ -146,8 +147,8 @@ app.post(
         pass = rnd(10),
         on = !!req.body.activate;
       await q(
-        "insert into rooms(id,name,state,scope,operator,pass_hash,tenant,status,activated_at) values($1,$2,$3,$4,'',$5,$6,$7,$8)",
-        [id, lga + " LGA Situation Room", st, lga, await bcrypt.hash(pass, 10), req.u.tn, on ? "active" : "inactive", on ? new Date() : null],
+        "insert into rooms(id,name,state,scope,operator,pass_hash,tenant,status,activated_at,pass_enc) values($1,$2,$3,$4,'',$5,$6,$7,$8,$9)",
+        [id, lga + " LGA Situation Room", st, lga, await bcrypt.hash(pass, 10), req.u.tn, on ? "active" : "inactive", on ? new Date() : null, seal(pass)],
       );
       out.push({ id, name: lga + " LGA Situation Room", lga, passcode: pass });
     }

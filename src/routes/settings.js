@@ -1,4 +1,5 @@
 const {bcrypt,E,q,aud,h,app,auth,getS,setS,appName} = require("../core");
+const { seal, unseal } = require("../core");
 app.get(
   "/api/settings",
   auth("cmd"),
@@ -49,7 +50,8 @@ app.post(
       return res.status(403).json({ error: "Current passcode is wrong" });
     if (String(pass || "").length < 8)
       return res.status(400).json({ error: "New passcode must be at least 8 characters" });
-    await q("update cmd_users set pass_hash=$2 where lower(name)=lower($1)", [
+    // the operator chose this one themselves, so the issuer can no longer view it
+    await q("update cmd_users set pass_hash=$2,pass_enc=null where lower(name)=lower($1)", [
       req.u.name || "admin",
       await bcrypt.hash(String(pass), 10),
     ]);

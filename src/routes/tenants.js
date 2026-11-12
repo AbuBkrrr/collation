@@ -1,4 +1,5 @@
 const {qsys,bcrypt,STATES,rnd,aud,h,app,auth,su} = require("../core");
+const { seal, unseal } = require("../core");
 // ---- Command Centers (tenants): platform administrator only ----
 app.get(
   "/api/tenants",
@@ -49,10 +50,11 @@ app.post(
     const id = "CC-" + rnd(4);
     try {
       await qsys("insert into tenants(id,name,state) values($1,$2,$3)", [id, String(name).trim().slice(0, 80), state]);
-      await qsys("insert into cmd_users(name,pass_hash,tenant) values($1,$2,$3)", [
+      await qsys("insert into cmd_users(name,pass_hash,tenant,pass_enc) values($1,$2,$3,$4)", [
         operator,
         await bcrypt.hash(String(pass), 10),
         id,
+        seal(String(pass)),
       ]);
     } catch {
       await qsys("delete from tenants where id=$1", [id]);
@@ -82,7 +84,7 @@ app.post(
     const [op] = await qsys("select * from cmd_users where tenant=$1 order by id asc limit 1", [t.id]);
     if (!op) return res.status(400).json({ error: "This Command Center has no operator yet" });
     const pass = rnd(10);
-    await qsys("update cmd_users set pass_hash=$2,active=true where id=$1", [op.id, await bcrypt.hash(pass, 10)]);
+    await qsys("update cmd_users set pass_hash=$2,pass_enc=$3,active=true where id=$1", [op.id, await bcrypt.hash(pass, 10), seal(pass)]);
     aud("CMD", "Re-issued invite for Command Center " + t.id + " (operator " + op.name + ")");
     res.json({ id: t.id, name: t.name, operator: op.name, passcode: pass, loginUrl: "/command/" });
   }),
@@ -129,3 +131,11 @@ app.post(
     res.json({ ok: 1 });
   }),
 );
+// show a client's operator sign-in again (platform administrator; only while the passcode is the one issued here)
+app.get("/api/tenants/:id/credential", auth("cmd"), su, h(async (req, res) => {
+  const [t] = await qsys("select * from tenants where id=$1", [req.params.id]);
+  if (!t) return res.sendStatus(404);
+  const [op] = await qsys("select name,pass_enc from cmd_users where tenant=$1 order by id asc limit 1", [t.id]);
+  if (!op) return res.status(404).json({ error: "No operator" });
+  res.json({ id: t.id, name: t.name, operator: op.name, passcode: unseal(op.pass_enc) });
+}));

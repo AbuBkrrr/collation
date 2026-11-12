@@ -246,6 +246,13 @@
           offLoad();
         } catch (e) { toast("⚠️ " + e.message); }
       }
+      async function offView(id) {
+        try {
+          const r = await A.get("officers/" + id + "/credential");
+          if (!r.passcode) return toast("ℹ️ This passcode was changed or issued earlier — ask the Command Center to reset it.");
+          credModal({ title: r.title + " — sign-in", lines: [["Name", r.name], ["Level", (r.tag || "").toUpperCase()], ["Sign in at", ORIGIN.replace(/^https?:\/\//, "") + "/officer/"], ["Officer code", r.code], ["Passcode", r.passcode]], link: loginLink("officer", r.code, r.passcode) });
+        } catch (e) { toast("⚠️ " + e.message); }
+      }
       const rOff = () => {
         if (!OFFS) { offLoad(); return '<div class="card muted">Loading…</div>'; }
         setTimeout(offLga, 60);
@@ -256,7 +263,7 @@
 <input class="fi" id="on" placeholder="Full name"><input class="fi" id="op" type="tel" placeholder="Phone number">
 <input class="fi" id="olg" list="dl-ol" placeholder="LGA" onchange="offWards()"><datalist id="dl-ol"></datalist><input class="fi" id="ow" list="dl-ow" placeholder="Ward (for a ward officer)" onfocus="offWards()"><datalist id="dl-ow"></datalist>
 <button class="btn btn-primary" onclick="offAdd()"><i class="fas fa-user-plus"></i> Add officer &amp; get sign-in QR</button></div>
-<div class="card"><div class="card-header"><h3><i class="fas fa-clipboard-check"></i> Collation Officers (${list.length})</h3></div>${list.length ? `<table><tr><th>Officer</th><th>Area</th><th>Confirmed</th></tr>${list.map((o) => `<tr><td><span class="otag otag-${o.level}">${esc(o.level.toUpperCase())}</span> <b>${esc(o.name)}</b><br><span class="muted">${esc(OFFT[o.level])}${o.phone ? " · " + esc(o.phone) : ""}</span></td><td>${esc([o.lga, o.ward].filter(Boolean).join(" › "))}</td><td>${o.confirmed}</td></tr>`).join("")}</table>` : '<div class="muted">None yet.</div>'}</div></div>`;
+<div class="card"><div class="card-header"><h3><i class="fas fa-clipboard-check"></i> Collation Officers (${list.length})</h3></div>${list.length ? `<table><tr><th>Officer</th><th>Area</th><th>Confirmed</th><th></th></tr>${list.map((o) => `<tr><td><span class="otag otag-${o.level}">${esc(o.level.toUpperCase())}</span> <b>${esc(o.name)}</b><br><span class="muted">${esc(OFFT[o.level])}${o.phone ? " · " + esc(o.phone) : ""}</span></td><td>${esc([o.lga, o.ward].filter(Boolean).join(" › "))}</td><td>${o.confirmed}</td><td><button class="btn btn-sm btn-outline" onclick="offView(${o.id})"><i class="fas fa-qrcode"></i> Sign-in</button></td></tr>`).join("")}</table>` : '<div class="muted">None yet.</div>'}</div></div>`;
       };
       start("room", () => ({
         dash: ["Situation Room Dashboard", "building-columns", () => roomDash(ME.id, false)],

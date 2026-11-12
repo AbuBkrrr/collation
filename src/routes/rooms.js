@@ -1,4 +1,5 @@
 const {bcrypt,STATES,q,rnd,abbr,aud,h,app,auth,mine} = require("../core");
+const { seal, unseal } = require("../core");
 // ---- rooms (Command) ----
 app.get(
   "/api/rooms",
@@ -50,7 +51,7 @@ app.post(
     }
     const id = "SR-" + abbr(b.state) + "-" + rnd(3),
       pass = rnd(10);
-    await q("insert into rooms(id,name,state,scope,operator,pass_hash,tenant,kind) values($1,$2,$3,$4,$5,$6,$7,$8)", [
+    await q("insert into rooms(id,name,state,scope,operator,pass_hash,tenant,kind,pass_enc) values($1,$2,$3,$4,$5,$6,$7,$8,$9)", [
       id,
       String(b.name).slice(0, 80),
       b.state,
@@ -59,6 +60,7 @@ app.post(
       await bcrypt.hash(pass, 10),
       req.u.tn,
       kind,
+      seal(pass),
     ]);
     aud("CMD", "Created room " + id);
     // optional: name the LGA Collation Officer (2) for a single-LGA room while creating it
@@ -111,7 +113,7 @@ app.post(
     const out = [];
     for (const r of rooms) {
       const p = rnd(10);
-      await q("update rooms set pass_hash=$2 where id=$1", [r.id, await bcrypt.hash(p, 10)]);
+      await q("update rooms set pass_hash=$2,pass_enc=$3 where id=$1", [r.id, await bcrypt.hash(p, 10), seal(p)]);
       out.push({ id: r.id, name: r.name, lga: r.scope, passcode: p });
     }
     aud("CMD", "Reset and exported passcodes for " + out.length + " rooms");
@@ -124,8 +126,14 @@ app.post(
   h(async (req, res) => {
     if (!(await mine(req.u, req.params.id))) return res.sendStatus(404);
     const p = rnd(10);
-    await q("update rooms set pass_hash=$2 where id=$1", [req.params.id, await bcrypt.hash(p, 10)]);
+    await q("update rooms set pass_hash=$2,pass_enc=$3 where id=$1", [req.params.id, await bcrypt.hash(p, 10), seal(p)]);
     aud("CMD", "Reset passcode " + req.params.id);
     res.json({ passcode: p });
   }),
 );
+// show a room's sign-in again (only while the passcode is still the one the Command Center issued)
+app.get("/api/rooms/:id/credential", auth("cmd"), h(async (req, res) => {
+  if (!(await mine(req.u, req.params.id))) return res.sendStatus(404);
+  const [r] = await q("select id,name,pass_enc from rooms where id=$1", [req.params.id]);
+  res.json({ id: r.id, name: r.name, passcode: unseal(r.pass_enc) });
+}));

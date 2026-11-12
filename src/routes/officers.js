@@ -1,4 +1,5 @@
 const {q,qsys,bcrypt,jwt,SECRET,PARTIES,STATES,rnd,aud,h,app,rate,auth} = require("../core");
+const { seal, unseal } = require("../core");
 const { puList } = require("./results");
 const { getS } = require("../core");
 // Platform rule (on unless REQUIRE_OFFICERS=0 is in the environment or the require_officers setting is 0): nothing is created without its supervisor.
@@ -30,8 +31,8 @@ async function mk(tn, o) {
   const code = "CO" + LEVELS[level] + "-" + rnd(6),
     pass = rnd(8);
   const [r] = await qsys(
-    "insert into officers(tenant,level,name,phone,state,lga,ward,code,pass_hash) values($1,$2,$3,$4,$5,$6,$7,$8,$9) returning id",
-    [tn, level, name, clean(o.phone, 40), state, lga, ward, code, await bcrypt.hash(pass, 10)],
+    "insert into officers(tenant,level,name,phone,state,lga,ward,code,pass_hash,pass_enc) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning id",
+    [tn, level, name, clean(o.phone, 40), state, lga, ward, code, await bcrypt.hash(pass, 10), seal(pass)],
   );
   return { id: r.id, code, passcode: pass, level, tag: TAG[level], title: cname(level), name, state, lga, ward };
 }
@@ -69,7 +70,7 @@ app.post("/api/officers", auth("cmd", "room"), h(async (req, res) => {
 }));
 app.post("/api/officers/:id/reset", auth("cmd"), h(async (req, res) => {
   const p = rnd(8),
-    r = await q("update officers set pass_hash=$2 where id=$1 returning code,name", [+req.params.id, await bcrypt.hash(p, 10)]);
+    r = await q("update officers set pass_hash=$2,pass_enc=$3 where id=$1 returning code,name", [+req.params.id, await bcrypt.hash(p, 10), seal(p)]);
   if (!r.length) return res.status(404).json({ error: "Not found" });
   aud("CMD", "Reset passcode for officer " + r[0].code);
   res.json({ code: r[0].code, passcode: p });
@@ -85,6 +86,17 @@ app.delete("/api/officers/:id", auth("cmd"), h(async (req, res) => {
   if (!r.length) return res.status(404).json({ error: "Not found" });
   aud("CMD", "Removed officer " + r[0].code);
   res.json({ ok: 1 });
+}));
+// show an officer's sign-in again (Command Center; a Situation Room for the officers of its own LGAs)
+app.get("/api/officers/:id/credential", auth("cmd", "room"), h(async (req, res) => {
+  const [o] = await q("select * from officers where id=$1", [+req.params.id]);
+  if (!o) return res.sendStatus(404);
+  if (req.u.role == "room") {
+    const [r] = await q("select scope from rooms where id=$1", [req.u.id]),
+      sc = String(r?.scope || "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
+    if (o.level == "state" || o.level == "federal" || (sc.length && !sc.includes((o.lga || "").toLowerCase()))) return res.sendStatus(403);
+  }
+  res.json({ ...pub(o), passcode: unseal(o.pass_enc) });
 }));
 // what the officers have confirmed / entered — the Command Center's view
 app.get("/api/officers/records", auth("cmd"), h(async (req, res) => {
