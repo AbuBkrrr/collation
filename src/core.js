@@ -221,7 +221,8 @@ app.use(
       !req.url.startsWith("/api/locations/import") && /json/.test(req.headers["content-type"] || ""),
   }),
 );
-app.use(express.text({ type: "text/csv", limit: "100mb" }));
+// only the location import takes a big CSV; no other (or unauthenticated) route may make the server buffer 100 MB
+app.use("/api/locations/import", express.text({ type: "text/csv", limit: "100mb" }));
 // CORS for the Android app (Capacitor serves the bundled observer app from https://localhost) and any extra
 // origins in CORS_ORIGINS. Auth is a bearer token (no cookies), so this exposes nothing without a login.
 const ORIGINS = new Set(["https://localhost", "capacitor://localhost", "http://localhost", ...String(E.CORS_ORIGINS || "").split(",").map((x) => x.trim()).filter(Boolean)]);

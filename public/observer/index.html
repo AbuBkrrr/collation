@@ -238,7 +238,6 @@
           window.Capacitor?.Plugins?.KeepAwake?.keepAwake().catch(() => {});
           recSeg();
           hb();
-          permStatus();
           toast("🔴 Streaming with adaptive quality — Situation Room can watch live.");
           render();
         } catch (e) {
@@ -246,7 +245,6 @@
           lk?.disconnect();
           lk = null;
           toast(/NotAllowed|Permission/i.test(e.name + e.message) ? "📷 Camera / microphone blocked — allow them in the app settings, then try again." : "📷 " + (e.message || "Camera blocked. Needs HTTPS + permission."));
-          permStatus();
         }
       }
       async function startStream() {
