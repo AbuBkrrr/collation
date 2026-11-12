@@ -119,10 +119,17 @@ Observer codes are created **in the room**, by its supervisor, so each code is t
    when asked (once) and type the **code**. Then they choose a **PIN**.
 3. The code **locks to that phone**. If they switch phones, the code won't work until you reset it.
 
+### Who a Situation Room is for
+
+When you create a room, choose its type: **LGA Chairman** (exactly one LGA), **Senator** (a senatorial
+district), **House of Reps** (a federal constituency) or a **custom zone** — for the last three, tick
+only the LGAs that zone covers. The room can issue observer codes and see results **only** in those
+LGAs, and its **Whole zone** collation view adds up every room covering them.
+
 ### What the observer does on election day (tell them this)
 - **Tallies add up.** Each figure they say ("APC 251") or type is **added to that party's running
   total** — so they can enter results in parts. To fix a mistake they tap the party's row and set the
-  correct total **once**; after that the row is locked.
+  correct total; entry never locks, so they can keep adding figures all day.
 - **Messages** from the room appear on their screen. They are **not read aloud**.
 - **Talk-back:** while they are streaming, they hear the room (or a shared viewer) speaking to them
   through the phone, and the room hears them.

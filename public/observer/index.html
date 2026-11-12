@@ -358,7 +358,7 @@
             toast("⚠️ Total (" + r.total + ") exceeds registered voters (" + r.reg + ") — flagged to room.");
           else if (!r.queued) toast((src == "voice" ? "🎤 " : "✅ ") + p + " +" + v + (r.v != null && r.v != v ? " = " + r.v : ""));
           if (r.queued) {
-            TL[p] = { v: (TL[p]?.v || 0) + v, edits: 0 }; // offline: add locally; the server adds it up when it syncs
+            TL[p] = { v: (TL[p]?.v || 0) + v, edits: TL[p]?.edits || 0 }; // offline: add locally; the server adds it up when it syncs
           } else load();
         } catch (e) {
           toast("⚠️ " + e.message);
@@ -375,8 +375,7 @@
           const re = new RegExp("\\b(?:" + alt.join("|") + ")\\b\\D{0,8}?(\\d[\\d, ]*)", "gi");
           let m;
           while ((m = re.exec(s)))
-            if (TL[p]?.edits) toast(p + " was corrected and is locked.");
-            else setTally(p, parseInt(m[1].replace(/\D/g, ""), 10), "voice"); // adds to that party's running total
+            setTally(p, parseInt(m[1].replace(/\D/g, ""), 10), "voice"); // adds to that party's running total
         });
       }
       const NW = {
@@ -579,12 +578,11 @@
         const p = $("#mp").value,
           v = parseInt($("#mv").value, 10);
         if (isNaN(v) || v < 0) return toast("⚠️ Enter a valid number.");
-        if (TL[p]?.edits) return toast(p + " was corrected and is locked.");
+        window.LASTP = p; // keep the same party selected, ready for the next figure
         setTally(p, v, "manual"); // adds to that party's running total
         $("#mv").value = "";
       }
       function openCorr(p) {
-        if (TL[p].edits) return toast("⚠️ " + p + " already corrected once. Locked.");
         CORR = p;
         render();
         $("#mi")?.focus();
@@ -594,7 +592,7 @@
         if (isNaN(v) || v < 0) return toast("⚠️ Enter a valid number.");
         try {
           await send("observer/tally/edit", { party: CORR, v });
-          toast("✅ " + CORR + " updated to " + v + ". Now locked.");
+          toast("✅ " + CORR + " set to " + v + ".");
           CORR = null;
           load();
         } catch (e) {
@@ -673,7 +671,7 @@
             .filter((p) => t[p])
             .map(
               (p) =>
-                `<div class="tally-row" style="${t[p].edits ? "opacity:.6;cursor:not-allowed" : ""}" onclick="openCorr('${p}')"><span>${p}</span><span>${t[p].v}${t[p].edits ? ' <i class="fas fa-lock" style="font-size:11px"></i>' : ""}</span></div>`,
+                `<div class="tally-row" onclick="openCorr('${p}')"><span>${p}</span><span>${t[p].v}${t[p].edits ? ' <i class="fas fa-pen" style="font-size:10px;opacity:.6" title="corrected"></i>' : ""}</span></div>`,
             )
             .join("") ||
           '<div style="color:#a0aec0;font-size:13px">No tallies yet. Tap Mic and say e.g. “APC 251”, or type below. Each entry adds to that party’s total.</div>';
@@ -683,11 +681,10 @@
 <div style="display:flex;justify-content:space-between;align-items:center;color:#a0aec0;font-size:11px"><span><i class="fas fa-building-columns" style="font-size:10px"></i> ${esc(OB.room_name || OB.room_id)}</span><span class="mono">${esc(OB.code)} · PU ${esc(OB.pu)}</span></div></div>
 <div class="app-content">${LIVEREQ && !streaming ? `<button class="btn-report" style="background:#e53e3e" onclick="startStream()"><i class="fas fa-video"></i> Situation Room requests LIVE VIDEO — tap to start</button>` : ""}<div style="font-size:12px;color:#a0aec0"><i class="fas fa-location-dot"></i> ${esc(OB.lga)} LGA · ${esc(OB.ward)} Ward</div>
 <div class="camera-view" id="camSlot"><div class="camera-overlay"><span style="color:${streaming ? "#fc8181" : "#fff"}">${streaming ? "● LIVE Streaming" : "Ready"}</span><span>${lat != null ? lat.toFixed(4) + ", " + lng.toFixed(4) : "GPS…"}</span></div><div class="stream-controls">${streaming ? '<button style="background:#e53e3e;color:#fff" onclick="stopStream()">⏹ Stop Stream</button>' : '<button style="background:#38a169;color:#fff" onclick="startStream()">▶ Start Stream</button>'}</div></div>
-<div class="tally-panel"><div class="tally-title"><span>TALLY · entries add up · tap a row to correct once</span><button class="btn btn-sm ${mic ? "btn-danger" : "btn-primary"}" onclick="toggleMic()"><i class="fas fa-microphone"></i> ${mic ? (fbMode ? "Listening (server)" : "Listening") : "Mic"}</button></div>${rows}<div id="tr" style="margin-top:8px;color:#a0aec0;font-size:12px"></div>
+<div class="tally-panel"><div class="tally-title"><span>TALLY · entries add up · tap a row to correct</span><button class="btn btn-sm ${mic ? "btn-danger" : "btn-primary"}" onclick="toggleMic()"><i class="fas fa-microphone"></i> ${mic ? (fbMode ? "Listening (server)" : "Listening") : "Mic"}</button></div>${rows}<div id="tr" style="margin-top:8px;color:#a0aec0;font-size:12px"></div>
 ${CORR ? `<div class="correction-controls"><input id="mi" type="number" inputmode="numeric" value="${t[CORR].v}"><button style="background:#38a169" onclick="saveCorr()">✓</button><button style="background:#e53e3e" onclick="CORR=null;render()">✕</button></div>` : ""}
-<div class="correction-controls"><select class="dk" id="mp">${CFG.parties
-            .filter((p) => !t[p])
-            .map((p) => `<option>${p}</option>`)
+<div class="correction-controls"><select class="dk" id="mp" onchange="LASTP=this.value">${CFG.parties
+            .map((p) => `<option value="${p}" ${window.LASTP == p ? "selected" : ""}>${p}${t[p] ? " (" + t[p].v + ")" : ""}</option>`)
             .join(
               "",
             )}</select><input id="mv" class="dk" type="number" inputmode="numeric" placeholder="votes"><button style="background:#2b6cb0" onclick="manualAdd()">+</button></div></div>
