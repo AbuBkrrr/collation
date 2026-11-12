@@ -23,6 +23,9 @@ app.post(
   h(async (req, res) => {
     const b = req.body;
     if (!b.name || !b.phone) return res.status(400).json({ error: "Name and phone required" });
+    // a room, or a Command Center locked to a state, only holds contacts of its own state
+    const fixed = req.u.role == "room" ? (await q("select state from rooms where id=$1", [req.u.id]))[0]?.state : (await q("select state from tenants where id=$1", [req.u.tn]))[0]?.state;
+    if (fixed) b.state = fixed;
     await q(
       "insert into contacts(room_id,name,phone,role,level,state,loc,tenant) values($1,$2,$3,$4,$5,$6,$7,$8)",
       [

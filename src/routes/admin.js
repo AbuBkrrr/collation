@@ -47,10 +47,11 @@ app.post(
       errors = [];
     let rstate = null;
     if (req.u.role == "room") rstate = (await q("select state from rooms where id=$1", [req.u.id]))[0]?.state;
+    else rstate = (await q("select state from tenants where id=$1", [req.u.tn]))[0]?.state || null;
     rows.forEach((r, i) => {
       const name = String(r.name || "").trim().slice(0, 80),
         phone = String(r.phone || "").replace(/[^\d+]/g, "").slice(0, 20),
-        state = fix(r.state, STATES) || rstate;
+        state = rstate || fix(r.state, STATES); // a room / state-locked Command Center only holds contacts of its own state
       if (!name || phone.length < 7 || !state) return errors.push({ row: i + 2, error: !name ? "name missing" : phone.length < 7 ? "bad phone" : "unknown state" });
       const loc = String(r.loc || [r.lga, r.ward, r.pu && "PU " + r.pu].filter(Boolean).join(" · ")).slice(0, 160);
       ok.push([req.u.role == "room" ? req.u.id : null, name, phone, fix(r.role, ROLES) || "Emergency", fix(r.level, LEVELS) || (r.pu ? "PU" : r.ward ? "Ward" : r.lga ? "LGA" : "State"), state, loc, req.u.tn]);
