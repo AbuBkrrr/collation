@@ -517,3 +517,32 @@ test("zone rooms: a senator's or rep's room covers only its chosen LGAs; an LGA 
   assert.equal(zone.sum.totals.LP, 142);
   assert.deepEqual(zone.rows.map((r) => r.key).sort(), ["Dass", "Toro"]);
 });
+
+test("radio receiver control: on/off and tuning from the dashboard, applied by the listening post", async () => {
+  const inv = ok(await api("tenants", { tok: S.A, body: { name: "Radio Ctl Test", state: "Kano" } }));
+  const C = ok(await api("login/command", { body: { user: inv.operator, pass: inv.passcode } })).token;
+  const rm = ok(await api("rooms", { tok: C, body: { name: "r", kind: "lga", scope: "Dala" } }));
+  ok(await api("rooms/" + rm.id + "/status", { tok: C, body: { status: "active" } }));
+  const R = ok(await api("login/room", { body: { id: rm.id, pass: rm.passcode } })).token;
+  const key = ok(await api("radio/key", { tok: R, body: {} })).key;
+  let c = ok(await api("radio/control", { tok: R }));
+  assert.deepEqual([c.power, c.freq, c.online], [false, null, false]);
+  assert.equal((await api("radio/control", { tok: R, body: { power: true } })).s, 400, "no frequency yet");
+  assert.equal((await api("radio/control", { tok: R, body: { freq: 5 } })).s, 400, "out of range");
+  assert.equal((await api("radio/control", { tok: R, body: { freq: 154.35, mode: "ssb" } })).s, 400, "unknown mode");
+  c = ok(await api("radio/control", { tok: R, body: { freq: 154.35, mode: "fm", squelch: 45, power: true } }));
+  assert.deepEqual([c.power, c.freq, c.mode, c.squelch], [true, 154.35, "fm", 45]);
+  // the Command Center controls its own room, not other people's
+  assert.equal(ok(await api("radio/control?room=" + rm.id, { tok: C })).freq, 154.35);
+  assert.ok([403, 404].includes((await api("radio/control", { tok: S.A, body: { room: rm.id, power: false } })).s));
+  assert.equal((await api("radio/control?room=" + rm.id, { tok: S.A })).s, 403);
+  // the listening post: wrong key refused; right key gets the wanted state and reports its own
+  assert.equal((await api("radio/gateway/control", { headers: { "X-Gateway-Key": "GW." + rm.id + ".WRONG" } })).s, 401);
+  const w = ok(await api("radio/gateway/control?freq=154.35&running=1", { headers: { "X-Gateway-Key": key } }));
+  assert.deepEqual([w.power, w.freq, w.squelch], [true, 154.35, 45]);
+  c = ok(await api("radio/control", { tok: R }));
+  assert.deepEqual([c.online, c.gw.running, c.gw.freq], [true, true, "154.35"]);
+  c = ok(await api("radio/control", { tok: R, body: { power: false } }));
+  assert.equal(c.power, false);
+  assert.equal(ok(await api("radio/control", { tok: R, body: { presets: [{ name: "Police", freq: 154.2 }, { name: "x", freq: 1 }] } })).presets.length, 1);
+});

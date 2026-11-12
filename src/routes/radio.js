@@ -36,6 +36,91 @@ const gw = async (req, res, next) => {
     res.status(500).json({ error: e.message });
   }
 };
+// ---- remote control of the listening post: on/off and tuning, set from the dashboard, applied by the gateway ----
+// The dashboard stores the wanted state (power, frequency, mode, squelch); the listening post's tuner.js asks for it
+// every few seconds with its gateway key and retunes its SDR. The post also reports what it is actually doing.
+const MODES = ["fm", "am", "wbfm"];
+const ctlRoom = async (req, res) => {
+  const room = req.u.role == "room" ? req.u.id : String((req.method == "GET" ? req.query.room : req.body?.room) || "");
+  if (!room) return res.status(400).json({ error: "Choose a room" }), null;
+  if (req.u.role == "cmd" && !(await mine(req.u, room))) return res.sendStatus(403), null;
+  return room;
+};
+const ctlShape = (c) => ({
+  power: !!c?.power,
+  freq: c?.freq ?? null,
+  mode: c?.mode || "fm",
+  squelch: c?.squelch ?? 40,
+  presets: c?.presets || [],
+  online: !!c?.gw_seen && Date.now() - new Date(c.gw_seen) < 30000,
+  seen: c?.gw_seen || null,
+  gw: c?.gw_status || null,
+  rev: c?.updated_at ? new Date(c.updated_at).getTime() : 0,
+});
+app.get(
+  "/api/radio/control",
+  auth("cmd", "room"),
+  h(async (req, res) => {
+    const room = await ctlRoom(req, res);
+    if (room) res.json(ctlShape((await q("select * from radio_ctl where room_id=$1", [room]))[0]));
+  }),
+);
+app.post(
+  "/api/radio/control",
+  auth("cmd", "room"),
+  h(async (req, res) => {
+    const room = await ctlRoom(req, res);
+    if (!room) return;
+    const b = req.body,
+      c = (await q("select * from radio_ctl where room_id=$1", [room]))[0] || {},
+      m = { power: !!c.power, freq: c.freq ?? null, mode: c.mode || "fm", squelch: c.squelch ?? 40, presets: c.presets || [] };
+    if (b.freq !== undefined && b.freq !== null && b.freq !== "") {
+      const f = Math.round(parseFloat(b.freq) * 10000) / 10000;
+      // an RTL-SDR tunes about 24-1766 MHz; Nigerian VHF is 138-174 and UHF 403-470
+      if (!(f >= 25 && f <= 1700)) return res.status(400).json({ error: "Frequency must be between 25 and 1700 MHz (VHF 138-174, UHF 403-470)" });
+      m.freq = f;
+    }
+    if (b.mode !== undefined) {
+      if (!MODES.includes(b.mode)) return res.status(400).json({ error: "Mode must be fm, am or wbfm" });
+      m.mode = b.mode;
+    }
+    if (b.squelch !== undefined) {
+      const q_ = parseInt(b.squelch, 10);
+      if (!(q_ >= 0 && q_ <= 300)) return res.status(400).json({ error: "Squelch must be 0-300" });
+      m.squelch = q_;
+    }
+    if (Array.isArray(b.presets))
+      m.presets = b.presets
+        .slice(0, 20)
+        .map((p) => ({ name: clean(String(p.name || "").slice(0, 30)) || "Channel", freq: Math.round(parseFloat(p.freq) * 10000) / 10000 }))
+        .filter((p) => p.freq >= 25 && p.freq <= 1700);
+    if (b.power !== undefined) m.power = !!b.power;
+    if (m.power && m.freq == null) return res.status(400).json({ error: "Set a frequency first, then switch the radio on" });
+    await q(
+      `insert into radio_ctl(room_id,power,freq,mode,squelch,presets,updated_by,updated_at) values($1,$2,$3,$4,$5,$6,$7,now())
+       on conflict(room_id) do update set power=$2,freq=$3,mode=$4,squelch=$5,presets=$6,updated_by=$7,updated_at=now()`,
+      [room, m.power, m.freq, m.mode, m.squelch, JSON.stringify(m.presets), req.u.role == "cmd" ? "CMD:" + req.u.name : req.u.id],
+    );
+    if (b.presets === undefined)
+      aud(req.u.role == "cmd" ? "CMD" : req.u.id, "Radio " + room + ": " + (m.power ? "ON" : "OFF") + (m.freq ? " " + m.freq.toFixed(4) + " MHz " + m.mode.toUpperCase() + " sq " + m.squelch : ""));
+    res.json(ctlShape((await q("select * from radio_ctl where room_id=$1", [room]))[0]));
+  }),
+);
+// the listening post asks what it should be doing (GET so a poll does not wake every dashboard) and reports its state
+app.get(
+  "/api/radio/gateway/control",
+  rate,
+  gw,
+  h(async (req, res) => {
+    const st = { freq: clean(req.query.freq), running: req.query.running == "1", level: clean(req.query.level), error: clean(req.query.error), at: Date.now() };
+    await qsys(
+      `insert into radio_ctl(room_id,gw_seen,gw_status) values($1,now(),$2)
+       on conflict(room_id) do update set gw_seen=now(),gw_status=$2`,
+      [req.room, JSON.stringify(st)],
+    );
+    res.json(ctlShape((await qsys("select * from radio_ctl where room_id=$1", [req.room]))[0]));
+  }),
+);
 app.post(
   "/api/radio/ingest",
   rate,

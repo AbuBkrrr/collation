@@ -257,6 +257,21 @@ as tamper evidence. Filter to **Verified** to show your rock-solid units.
 **Radio** tab. Plays back radio transmissions captured per area, labelled by room, with a per-room
 filter at the Command Centre.
 
+The **Radio receiver** panel (a room's Radio tab, or the Command Center's Radio tab once you choose a room)
+controls that room's listening post:
+
+- **ON / OFF** — switches the radio receiver on or off.
+- **Frequency** — type it in MHz (e.g. `154.3500`) and press **Tune**, or nudge it with the **◀ 25k / ◀ 12.5k /
+  12.5k ▶ / 25k ▶** buttons. Choose **Narrow FM** (voice), **AM** or **Wide FM**.
+- **Squelch** — higher ignores weaker signals; lower hears more noise.
+- **☆ Save this channel** — keeps a named channel you can tune to in one tap.
+- The status badge shows **Receiving 154.3500 MHz**, **Retuning…**, **Online · radio off** or **Listening post
+  offline**. Changes reach the post within about 5 seconds.
+- **Listen live: ON** plays each new transmission automatically as it arrives (tap it once so the browser
+  allows sound).
+
+The receiver only works once a listening post is running `tuner.js` (see `radio-gateway/README.md`).
+
 > Radio comes from a **listening post** (an SDR receiver + antenna) placed near each area — **not**
 > from observers' phones, which cannot receive VHF/UHF. To set one up for an area: in the Situation
 > Room app → **Radio → Gateway key**, then follow `radio-gateway/README.md`. Until a listening post

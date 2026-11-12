@@ -343,12 +343,13 @@
         toast("✅ Leads downloaded.");
       }
       function cRadio() {
-        return `<div class="card"><div class="card-header"><h3><i class="fas fa-tower-broadcast"></i> Radio monitor</h3><div style="display:flex;gap:8px;align-items:center"><select class="fi" style="width:auto;margin:0" id="radioRoom" onchange="radioFilter(this.value)"><option value="">All rooms</option>${DATA.rooms.map((r) => `<option value="${r.id}" ${F.radioRoom == r.id ? "selected" : ""}>${esc(r.name)}</option>`).join("")}</select><button class="btn btn-sm btn-outline" onclick="loadAll()"><i class="fas fa-rotate"></i></button></div></div>${cardRadioView()}<div class="muted" style="margin-top:10px">Radio is fed by a listening post (SDR receiver + antenna) near each area, not by the observers' phones — phones cannot receive VHF/UHF. Set up: Situation Room app → Radio → Gateway key, then radio-gateway/README.md.</div></div>`;
+        return `<div class="card"><div class="card-header"><h3><i class="fas fa-tower-broadcast"></i> Radio monitor</h3><div style="display:flex;gap:8px;align-items:center"><select class="fi" style="width:auto;margin:0" id="radioRoom" onchange="radioFilter(this.value)"><option value="">All rooms</option>${DATA.rooms.map((r) => `<option value="${r.id}" ${F.radioRoom == r.id ? "selected" : ""}>${esc(r.name)}</option>`).join("")}</select><button class="btn btn-sm btn-outline" onclick="loadAll()"><i class="fas fa-rotate"></i></button></div></div>${cardRadioCtl()}${cardRadioView()}<div class="muted" style="margin-top:10px">Radio is fed by a listening post (SDR receiver + antenna) near each area, not by the observers' phones — phones cannot receive VHF/UHF. Set up: Situation Room app → Radio → Gateway key, then radio-gateway/README.md.</div></div>`;
       }
       function radioFilter(id) {
         F.radioRoom = id || "";
         DATA.radio = [];
-        A.get("radio" + (id ? "?room=" + id : "")).then((r) => { DATA.radio = r; render(); }).catch(() => {});
+        DATA.rctl = null;
+        loadAll();
       }
       async function dlPasscodes() {
         if (!confirm("This generates a FRESH passcode for every Situation Room (any previously shared passcode stops working) and downloads them as a CSV to share with operators. Continue?")) return;

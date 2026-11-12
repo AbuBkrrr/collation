@@ -12,7 +12,20 @@ Encrypted channels (TETRA and others) can be detected but **not** decoded. Check
 
 In the Situation Room app: **Radio → Gateway key**. It is shown once; copy it to the listening-post PC. Each room has its own key.
 
-## Option A — trunk-recorder posting straight to the server (recommended)
+## Option 0 — one program with on/off and tuning from the dashboard (simplest, one RTL-SDR)
+
+Run `tuner.js` on the listening-post PC. The **Radio receiver** panel in the Situation Room (and the Command Center's Radio tab) then switches the radio **on or off** and **tunes** it — frequency, mode (narrow FM / AM / wide FM) and squelch — by remote control. The post asks the server every few seconds what it should do, runs `rtl_fm` + `sox` on that channel, saves each transmission and uploads it (it starts `forward.js` for you).
+
+```bash
+SERVER=https://YOUR-DOMAIN \
+GATEWAY_KEY=GW.SR-KN-XXX.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \
+DIR=./recordings DEV=0 \
+node tuner.js
+```
+
+Needs Node 18+, `rtl-sdr` (`rtl_fm`) and `sox`. One dongle listens to one channel at a time; changing the frequency in the dashboard retunes it within about 5 seconds. Leave it running; with the radio switched off in the dashboard it simply waits. For many channels at once use Option A.
+
+## Option A — trunk-recorder posting straight to the server (recommended for many channels)
 
 [trunk-recorder](https://github.com/robotastic/trunk-recorder) is the open-source recorder behind OpenMHz and Broadcastify Calls — a proven, widely used setup. It records conventional (analog) channels and digital trunked systems (P25, DMR) and has a built-in uploader that this server accepts directly, with no extra script.
 
