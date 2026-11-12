@@ -597,16 +597,34 @@ test("platform administrator: archive / restore / delete Command Centers and roo
   ok(await api("admin/rooms/" + a.room + "/wipe", { tok: S.A, body: { confirm: a.room } }));
   assert.equal(ok(await api("admin/rooms?tenant=" + a.id, { tok: S.A }))[0].obs, 0);
   // Command Center: must be archived first, typed confirmation, then everything is gone
-  assert.equal((await api("tenants/" + b.id + "/delete", { tok: S.A, body: { confirm: b.id } })).s, 400, "archive first");
   assert.equal((await api("tenants/CC-MAIN/archive", { tok: S.A, body: { on: true } })).s, 400, "not your own");
   ok(await api("tenants/" + b.id + "/archive", { tok: S.A, body: { on: true } }));
   assert.equal(ok(await api("tenants", { tok: S.A })).find((t) => t.id == b.id).archived, true);
   assert.equal((await api("login/command", { body: { user: "arch-b", pass: "x" } })).s, 401);
   assert.equal(ok(await api("collation?pool=1&state=Osun", { tok: S.A })).sum.total, 0, "an archived center no longer counts");
   assert.equal((await api("tenants/" + b.id + "/delete", { tok: S.A, body: { confirm: "wrong" } })).s, 400);
-  ok(await api("tenants/" + b.id + "/delete", { tok: S.A, body: { confirm: b.id } }));
+  const del = ok(await api("tenants/" + b.id + "/delete", { tok: S.A, body: { confirm: b.id } }));
   assert.equal(ok(await api("tenants", { tok: S.A })).some((t) => t.id == b.id), false);
   assert.equal((await api("login/room", { body: { id: b.room, pass: "x" } })).s, 401);
+  assert.deepEqual(ok(await api("admin/rooms?tenant=" + b.id, { tok: S.A })), [], "deleting a Command Center deletes all its Situation Rooms");
+  assert.equal((await api("login/observer", { body: { code: b.code, pin: "1234", device: "dev-" + b.code + "-0123456789abcdef" } })).s, 401, "...and every observer under them");
+  // nothing is lost: a full copy is kept in the vault, and only the platform administrator can read it
+  const vault = ok(await api("admin/vault", { tok: S.A }));
+  assert.ok(vault.some((v) => v.name == del.kept));
+  const copy = ok(await api("admin/vault/" + del.kept, { tok: S.A }));
+  assert.deepEqual([copy.observers.length, copy.tallies[0].v, copy.rooms.length, copy.tenant.id], [1, 22, 1, b.id], "the copy holds the observers, their figures and the rooms");
+  assert.equal((await api("admin/vault", { tok: a.C })).s, 403);
+  assert.equal((await api("admin/vault/..%2Fserver.js", { tok: S.A })).s, 404);
+  // deleting a Situation Room directly (no archive step) deletes its observers and keeps a copy too
+  const x = await mk("Del Room C", "Kogi", "Lokoja", "003", 7), x2 = await mk("Del Room D", "Kogi", "Lokoja", "004", 9);
+  const r1 = ok(await api("admin/rooms/" + x.room + "/delete", { tok: S.A, body: { confirm: x.room } }));
+  assert.ok(r1.kept);
+  assert.equal(ok(await api("admin/rooms?tenant=" + x.id, { tok: S.A })).length, 0);
+  assert.equal(ok(await api("admin/rooms?tenant=" + x2.id, { tok: S.A })).length, 1, "other rooms are untouched");
+  // delete ALL rooms of a Command Center, keeping the center
+  ok(await api("tenants/" + x2.id + "/delete-rooms", { tok: S.A, body: { confirm: x2.id } }));
+  assert.equal(ok(await api("admin/rooms?tenant=" + x2.id, { tok: S.A })).length, 0);
+  assert.equal(ok(await api("tenants", { tok: S.A })).some((t) => t.id == x2.id), true, "the center itself stays");
 });
 
 test("a room and a state-locked Command Center only hold their own state (contacts)", async () => {
