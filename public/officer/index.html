@@ -17,7 +17,7 @@
     <script>
       let OFFI = null, D = null, OTAB = "a", OFILT = "", PARTIES_ = [];
       const OLVL = { ward: "Ward", lga: "LGA", state: "State" },
-        OUNIT = { ward: "polling units", lga: "wards", state: "LGAs" };
+        OUNIT = { ward: "polling units", lga: "wards", state: "LGAs", federal: "states" };
       function login() {
         const LC = takeCreds("officer");
         if (LC && LC.p) setTimeout(go, 50);
@@ -55,12 +55,12 @@
           nConf = D.units.filter((u) => u.mine).length,
           nMan = D.units.filter((u) => u.manual).length,
           nDiff = D.units.filter((u) => u.diff && u.diff.length).length;
-        $("#app").innerHTML = `<div class="mockup-container"><div class="topbar"><div class="brand"><i class="fas fa-clipboard-check"></i><h1>${esc(OFFI.title)} <span>· ${esc(OFFI.name)}</span></h1></div><button class="btn btn-sm btn-outline" onclick="out()">Sign out</button></div>
-        <div class="card"><div class="muted">${esc(OFFI.state)}${OFFI.lga ? " › " + esc(OFFI.lga) : ""}${OFFI.ward ? " › " + esc(OFFI.ward) : ""} — you collate the ${OUNIT[OFFI.level]} under your area. Confirm each figure as received, or correct it — <b>once only</b>.</div>
+        $("#app").innerHTML = `<div class="mockup-container"><div class="topbar"><div class="brand"><i class="fas fa-clipboard-check"></i><h1><span class="otag otag-${OFFI.level}" style="margin-right:6px">${esc(OFFI.tag)}</span>${esc(OFFI.title)} <span>· ${esc(OFFI.name)}</span></h1></div><button class="btn btn-sm btn-outline" onclick="out()">Sign out</button></div>
+        <div class="card"><div class="muted">${OFFI.state ? esc(OFFI.state) : "All states"}${OFFI.lga ? " › " + esc(OFFI.lga) : ""}${OFFI.ward ? " › " + esc(OFFI.ward) : ""} — you collate the ${OUNIT[OFFI.level]} under your area. Confirm each figure as received, or correct it — <b>once only</b>.</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0"><span class="badge">${D.units.length} ${OUNIT[OFFI.level]}</span><span class="badge">${nConf} confirmed / corrected</span><span class="badge">${nMan} physical results entered</span>${nDiff ? `<span class="badge" style="background:#fed7d7;color:#9b2c2c">${nDiff} differ from what was reported</span>` : ""}</div>
         <div style="display:flex;gap:8px;margin-bottom:10px"><button class="btn ${OTAB == "a" ? "btn-primary" : "btn-outline"}" onclick="OTAB='a';draw()">Report A · Reported tallies</button><button class="btn ${OTAB == "b" ? "btn-primary" : "btn-outline"}" onclick="OTAB='b';draw()">Report B · Physical results</button><button class="btn btn-outline" onclick="reload()" title="Refresh"><i class="fas fa-rotate"></i></button></div>
         <input class="fi" placeholder="Search ${OUNIT[OFFI.level]}…" value="${esc(OFILT)}" oninput="OFILT=this.value;clearTimeout(window._ft);window._ft=setTimeout(()=>{draw();const e=$('#sf');e&&(e.focus(),e.setSelectionRange(99,99))},250)" id="sf"></div>
-        ${list.length ? list.map((u, i) => (OTAB == "a" ? cardA(u) : cardB(u))).join("") : '<div class="card muted">${D.units.length ? "No match for your search." : "No " + OUNIT[OFFI.level] + " are listed for your area yet. The state's polling-unit list must be loaded (platform administrator → Locations tab), then tap refresh."}</div>'}</div>`;
+        ${list.length ? list.map((u, i) => (OTAB == "a" ? cardA(u) : cardB(u))).join("") : `<div class="card muted">${D.units.length ? "No match for your search." : "No " + OUNIT[OFFI.level] + " are listed for your area yet. The state's polling-unit list must be loaded (platform administrator → Locations tab), then tap refresh."}</div>`}</div>`;
       }
       const kid = (k) => esc(k).replace(/'/g, "&#39;");
       function cardA(u) {

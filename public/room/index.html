@@ -241,7 +241,7 @@
         const lv = $("#ol").value;
         try {
           const r = await A.post("officers", { level: lv, name: $("#on").value, phone: $("#op").value, lga: $("#olg").value, ward: $("#ow").value });
-          credModal({ title: r.title + " — sign-in", lines: [["Name", r.name], ["Sign in at", ORIGIN.replace(/^https?:\/\//, "") + "/officer/"], ["Officer code", r.code], ["Passcode", r.passcode]], link: loginLink("officer", r.code, r.passcode), note: "Shown once. Ask the Command Center to reset it if lost." });
+          credModal({ title: r.title + " — sign-in", lines: [["Name", r.name], ["Level", (r.tag || "").toUpperCase()], ["Sign in at", ORIGIN.replace(/^https?:\/\//, "") + "/officer/"], ["Officer code", r.code], ["Passcode", r.passcode]], link: loginLink("officer", r.code, r.passcode), note: "Shown once. Ask the Command Center to reset it if lost." });
           ["on", "op", "ow"].forEach((i) => ($("#" + i).value = ""));
           offLoad();
         } catch (e) { toast("⚠️ " + e.message); }
@@ -256,7 +256,7 @@
 <input class="fi" id="on" placeholder="Full name"><input class="fi" id="op" type="tel" placeholder="Phone number">
 <input class="fi" id="olg" list="dl-ol" placeholder="LGA" onchange="offWards()"><datalist id="dl-ol"></datalist><input class="fi" id="ow" list="dl-ow" placeholder="Ward (for a ward officer)" onfocus="offWards()"><datalist id="dl-ow"></datalist>
 <button class="btn btn-primary" onclick="offAdd()"><i class="fas fa-user-plus"></i> Add officer &amp; get sign-in QR</button></div>
-<div class="card"><div class="card-header"><h3><i class="fas fa-clipboard-check"></i> Collation Officers (${list.length})</h3></div>${list.length ? `<table><tr><th>Officer</th><th>Area</th><th>Confirmed</th></tr>${list.map((o) => `<tr><td><b>${esc(o.name)}</b><br><span class="muted">${esc(OFFT[o.level])}${o.phone ? " · " + esc(o.phone) : ""}</span></td><td>${esc([o.lga, o.ward].filter(Boolean).join(" › "))}</td><td>${o.confirmed}</td></tr>`).join("")}</table>` : '<div class="muted">None yet.</div>'}</div></div>`;
+<div class="card"><div class="card-header"><h3><i class="fas fa-clipboard-check"></i> Collation Officers (${list.length})</h3></div>${list.length ? `<table><tr><th>Officer</th><th>Area</th><th>Confirmed</th></tr>${list.map((o) => `<tr><td><span class="otag otag-${o.level}">${esc(o.level.toUpperCase())}</span> <b>${esc(o.name)}</b><br><span class="muted">${esc(OFFT[o.level])}${o.phone ? " · " + esc(o.phone) : ""}</span></td><td>${esc([o.lga, o.ward].filter(Boolean).join(" › "))}</td><td>${o.confirmed}</td></tr>`).join("")}</table>` : '<div class="muted">None yet.</div>'}</div></div>`;
       };
       start("room", () => ({
         dash: ["Situation Room Dashboard", "building-columns", () => roomDash(ME.id, false)],

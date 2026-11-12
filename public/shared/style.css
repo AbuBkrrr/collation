@@ -113,3 +113,5 @@ td:last-child{white-space:normal}td:last-child .btn{margin:2px 2px 2px 0}
   .view table.stack td:empty{display:none}
   .view table.stack td:last-child::before{display:none}
 }
+
+.otag{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.06em;padding:2px 8px;border-radius:10px;color:#fff;vertical-align:middle}.otag-ward{background:#2b6cb0}.otag-lga{background:#2f855a}.otag-state{background:#b7791f}.otag-federal{background:#805ad5}

@@ -43,8 +43,8 @@ app.post(
       if (n > 50) return res.status(409).json({ error: "Could not find a free operator name" });
     }
     const oc0 = req.body.officer;
-    if (state && !(oc0 && String(oc0.name || "").trim()) && (await require("./officers").required()))
-      return res.status(400).json({ error: "Name the State Collation Officer (Officer 3) who supervises this Command Center" });
+    if (!(oc0 && String(oc0.name || "").trim()) && (await require("./officers").required()))
+      return res.status(400).json({ error: state ? "Name the State Collation Officer (Officer 3) who supervises this Command Center" : "Name the Federal Collation Officer (Officer 4) who supervises this multi-state Command Center" });
     const pass = providedPass || rnd(10);
     const id = "CC-" + rnd(4);
     try {
@@ -62,9 +62,9 @@ app.post(
     // optional: the state-level Collation Officer (3) can be named right here
     let officer = null;
     const oc = req.body.officer;
-    if (oc && oc.name && state) {
+    if (oc && oc.name) {
       try {
-        officer = await require("./officers").mk(id, { level: "state", name: oc.name, phone: oc.phone });
+        officer = await require("./officers").mk(id, { level: state ? "state" : "federal", name: oc.name, phone: oc.phone });
       } catch {}
     }
     res.json({ id, operator, passcode: pass, loginUrl: "/command/", officer });

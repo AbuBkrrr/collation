@@ -890,6 +890,17 @@ test("nothing is created without its supervisor: Command Center, room and observ
     const okr = ok(await api("room/obs/bulk", { tok: R, body: { per: 1, units: pick, officers: [{ lga: "Gusau", ward: "Ward Z", name: "Z officer" }, { lga: "Gusau", ward: "Ward Y", name: "Y officer" }] } }));
     assert.equal(okr.created.length, 2);
     assert.equal(okr.officers.length, 2);
+    // a multi-state Command Center has no state: it needs a FEDERAL officer (Officer 4), who oversees every state
+    assert.equal((await api("tenants", { tok: S.A, body: { name: "No Fed CC" } })).s, 400);
+    const fi = ok(await api("tenants", { tok: S.A, body: { name: "Multi State CC", officer: { name: "Fed Officer" } } }));
+    assert.ok(fi.officer && /^CO4-/.test(fi.officer.code) && fi.officer.tag == "FEDERAL");
+    const FC = ok(await api("login/command", { body: { user: fi.operator, pass: fi.passcode } })).token;
+    assert.equal((await api("officers", { tok: C, body: { level: "federal", name: "Not allowed here" } })).s, 400, "a state-locked centre has no federal officer");
+    const FT = ok(await api("login/officer", { body: { code: fi.officer.code, pass: fi.officer.passcode } })).token;
+    const fu = ok(await api("officer/units", { tok: FT }));
+    assert.equal(fu.officer.tag, "FEDERAL");
+    assert.ok(fu.units.some((u) => u.label == "Zamfara" && u.pus == 2), "states are listed from the location list");
+    assert.ok(ok(await api("officers", { tok: FC })).every((o) => o.tag));
     // the ward now has its officer, so a further observer there is fine
     ok(await api("room/obs", { tok: R, body: { state: "Zamfara", lga: "Gusau", ward: "Ward Z", pu: "001" } }));
   } finally {

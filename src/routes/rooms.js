@@ -44,8 +44,8 @@ app.post(
         if (lgas.length == 1) {
           if (!String(b.officer?.name || "").trim() && !(await O.hasOfficer(req.u.tn, "lga", b.state, lgas[0])))
             return res.status(400).json({ error: "Name the LGA Collation Officer (Officer 2) for " + lgas[0] + " — a Situation Room needs its supervisor" });
-        } else if (!(await O.hasOfficer(req.u.tn, "state", b.state)))
-          return res.status(400).json({ error: "Add the State Collation Officer (Officer 3) first — open the Collation Officers tab" });
+        } else if (!(await O.hasOfficer(req.u.tn, "state", b.state)) && !(await O.hasOfficer(req.u.tn, "federal", null)))
+          return res.status(400).json({ error: "Add the State (Officer 3) or Federal (Officer 4) Collation Officer first — open the Collation Officers tab" });
       }
     }
     const id = "SR-" + abbr(b.state) + "-" + rnd(3),

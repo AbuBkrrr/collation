@@ -4,24 +4,26 @@ const { getS } = require("../core");
 // Platform rule (on unless the administrator sets require_officers=0): nothing is created without its supervisor.
 const required = async () => (await getS("require_officers")) !== "0";
 const hasOfficer = async (tn, level, state, lga, ward) =>
-  (await qsys("select 1 from officers where tenant=$5 and level=$1 and active and lower(state)=lower($2) and ($3::text is null or lower(lga)=lower($3)) and ($4::text is null or lower(ward)=lower($4)) limit 1", [level, state, lga || null, ward || null, tn])).length > 0;
+  (await qsys("select 1 from officers where tenant=$5 and level=$1 and active and ($2::text is null or lower(state)=lower($2)) and ($3::text is null or lower(lga)=lower($3)) and ($4::text is null or lower(ward)=lower($4)) limit 1", [level, state, lga || null, ward || null, tn])).length > 0;
 // ---- Collation Officers: ward (1), LGA (2) and state (3) supervisors who collect the tallies coming up from
 // the polling units, confirm or correct each figure ONCE, and separately record the result sheets / boxes that
 // physically arrive at their collation centre (Report B). Everything is scoped to one Command Center.
-const LEVELS = { ward: 1, lga: 2, state: 3 };
+const LEVELS = { ward: 1, lga: 2, state: 3, federal: 4 };
+const TAG = { ward: "WARD", lga: "LGA", state: "STATE", federal: "FEDERAL" };
 const cname = (l) => "Collation Officer " + LEVELS[l];
 const clean = (v, n) => String(v == null ? "" : v).trim().slice(0, n);
 const num = (v) => (Number.isFinite(+v) && +v >= 0 && +v <= 10000000 ? Math.round(+v) : null);
 // officer sign-in code: CO1-XXXXXX (ward) / CO2- (LGA) / CO3- (state)
 async function mk(tn, o) {
   const level = o.level;
-  if (!LEVELS[level]) throw Object.assign(new Error("Level must be ward, lga or state"), { status: 400 });
+  if (!LEVELS[level]) throw Object.assign(new Error("Level must be ward, lga, state or federal"), { status: 400 });
   const [t] = await qsys("select state from tenants where id=$1", [tn]);
-  const state = t?.state || clean(o.state, 40);
-  if (!STATES.includes(state)) throw Object.assign(new Error("Choose the state this officer covers"), { status: 400 });
-  const lga = level == "state" ? "" : clean(o.lga, 80),
+  if (level == "federal" && t?.state) throw Object.assign(new Error("A Federal officer is for a multi-state Command Center; this one is locked to " + t.state), { status: 400 });
+  const state = level == "federal" ? "" : t?.state || clean(o.state, 40);
+  if (level != "federal" && !STATES.includes(state)) throw Object.assign(new Error("Choose the state this officer covers"), { status: 400 });
+  const lga = level == "state" || level == "federal" ? "" : clean(o.lga, 80),
     ward = level == "ward" ? clean(o.ward, 80) : "";
-  if (level != "state" && !lga) throw Object.assign(new Error("Choose the LGA"), { status: 400 });
+  if (level != "state" && level != "federal" && !lga) throw Object.assign(new Error("Choose the LGA"), { status: 400 });
   if (level == "ward" && !ward) throw Object.assign(new Error("Choose the ward"), { status: 400 });
   const name = clean(o.name, 80);
   if (!name) throw Object.assign(new Error("Name is required"), { status: 400 });
@@ -31,9 +33,9 @@ async function mk(tn, o) {
     "insert into officers(tenant,level,name,phone,state,lga,ward,code,pass_hash) values($1,$2,$3,$4,$5,$6,$7,$8,$9) returning id",
     [tn, level, name, clean(o.phone, 40), state, lga, ward, code, await bcrypt.hash(pass, 10)],
   );
-  return { id: r.id, code, passcode: pass, level, title: cname(level), name, state, lga, ward };
+  return { id: r.id, code, passcode: pass, level, tag: TAG[level], title: cname(level), name, state, lga, ward };
 }
-const pub = (o) => ({ id: o.id, level: o.level, title: cname(o.level), name: o.name, phone: o.phone, state: o.state, lga: o.lga, ward: o.ward, code: o.code, active: o.active, seen: o.seen });
+const pub = (o) => ({ id: o.id, level: o.level, tag: TAG[o.level], title: cname(o.level), name: o.name, phone: o.phone, state: o.state, lga: o.lga, ward: o.ward, code: o.code, active: o.active, seen: o.seen });
 app.post("/api/login/officer", rate, h(async (req, res) => {
   const [o] = await q("select o.*,t.active ta from officers o join tenants t on t.id=o.tenant where upper(o.code)=upper($1)", [clean(req.body.code, 30)]);
   if (!o || !(await bcrypt.compare(String(req.body.pass || ""), o.pass_hash))) return res.status(401).json({ error: "Invalid officer code or passcode" });
@@ -53,7 +55,7 @@ app.post("/api/officers", auth("cmd", "room"), h(async (req, res) => {
       // a Situation Room adds Ward / LGA officers inside its own LGAs only
       const [r] = await q("select state,scope from rooms where id=$1", [req.u.id]),
         mineL = String(r?.scope || "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
-      if (b.level == "state") return res.status(403).json({ error: "The state officer is added by the Command Center" });
+      if (b.level == "state" || b.level == "federal") return res.status(403).json({ error: "The state officer is added by the Command Center" });
       if (mineL.length && !mineL.includes(String(b.lga || "").trim().toLowerCase())) return res.status(403).json({ error: "That LGA is not in this room" });
       b.state = r.state;
     }
@@ -101,7 +103,7 @@ const sum = (l) => {
 // A polling-unit figure a ward officer has already confirmed/corrected is the one the levels above collect.
 async function fetchUnits(req) {
   const o = req.u.off,
-    f = { state: o.state };
+    f = o.level == "federal" ? {} : { state: o.state };
   if (o.lga) f.lga = o.lga;
   if (o.ward) f.ward = o.ward;
   const pus = await puList({ role: "cmd", tn: req.u.tn, id: "officer" }, f),
@@ -128,17 +130,20 @@ async function fetchUnits(req) {
       const u = add("pu:" + x.key, (x.pu_name || x.pu) + " · " + x.pu, x);
       u.pu = { code: x.pu, status: x.status, obs: x.obs.length, anomaly: x.anomaly, ec8a: x.ec8a, wardConf: PC[x.key] ? { by: PC[x.key].name, act: PC[x.key].act } : null, raw: x.fig };
     } else if (o.level == "lga") add("ward:" + [x.state, x.lga, x.ward, ck].join("|"), x.ward, x);
+    else if (o.level == "federal") add("state:" + [x.state, ck].join("|"), x.state, x);
     else add("lga:" + [x.state, x.lga, ck].join("|"), x.lga, x);
   }
   // The officer's whole area from the state's location list, even where no observer has reported yet
-  const lw = ["state=$1"], la = [o.state];
+  const fed = o.level == "federal",
+    lw = fed ? ["true"] : ["state=$1"],
+    la = fed ? [] : [o.state];
   if (o.lga) (la.push(o.lga), lw.push("lga=$" + la.length));
   if (o.ward) (la.push(o.ward), lw.push("ward=$" + la.length));
-  const locs = await q("select lga,ward,pu,name from locations where " + lw.join(" and ") + " order by lga,ward,pu", la),
+  const locs = fed ? (await q("select state,count(*)::int n from locations group by state order by state")).map((r) => ({ state: r.state, n: r.n })) : await q("select lga,ward,pu,name from locations where " + lw.join(" and ") + " order by lga,ward,pu", la),
     nz = (v) => String(v == null ? "" : v).replace(/^0+(?=.)/, ""),
     covered = new Set(pus.map((x) => [x.lga, x.ward, nz(x.pu)].join("|"))),
     count = {};
-  for (const r of locs) {
+  for (const r of fed ? [] : locs) {
     const area = o.level == "ward" ? null : o.level == "lga" ? "ward:" + [o.state, r.lga, r.ward].join("|") : "lga:" + [o.state, r.lga].join("|");
     if (area) count[area] = (count[area] || 0) + 1;
     if (covered.has([r.lga, r.ward, nz(r.pu)].join("|"))) continue;
@@ -149,6 +154,11 @@ async function fetchUnits(req) {
     } else if (o.level == "lga") add("ward:" + [o.state, r.lga, r.ward, ""].join("|"), r.ward, x);
     else add("lga:" + [o.state, r.lga, ""].join("|"), r.lga, x);
   }
+  if (fed)
+    for (const r of locs) {
+      count["state:" + r.state] = r.n;
+      if (!pus.some((x) => x.state == r.state)) add("state:" + [r.state, ""].join("|"), r.state, { key: r.state, contest: "", state: r.state, status: "pending", fig: null, verified: false });
+    }
   // an area with no report at all shows once; one with contests shows per contest and is not duplicated by an empty line
   const reported = new Set(Object.values(units).filter((u) => u.contest).map((u) => u.key.replace(/\|[^|]*$/, "")));
   for (const k of Object.keys(units)) if (!units[k].contest && reported.has(k.replace(/\|[^|]*$/, ""))) delete units[k];
