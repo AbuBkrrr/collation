@@ -10,7 +10,7 @@ app.get(
           ? ["room_id=$1", u.id]
           : u.role == "obs"
             ? ["code=$1", u.id]
-            : ["room_id in (select id from rooms where tenant=$1)", u.tn];
+            : ["room_id in (select id from rooms where tenant=$1 and not coalesce(archived,false))", u.tn];
     const o = await q(
       "select code,room_id,name,state,lga,ward,pu,pu_name,reg,ec_reg,ec_acc,active,lat,lng,acc,seen,streaming,pend,live_req,(device_hash is not null) bound from observers where " +
         w[0] +

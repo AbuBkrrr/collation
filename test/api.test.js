@@ -546,3 +546,64 @@ test("radio receiver control: on/off and tuning from the dashboard, applied by t
   assert.equal(c.power, false);
   assert.equal(ok(await api("radio/control", { tok: R, body: { presets: [{ name: "Police", freq: 154.2 }, { name: "x", freq: 1 }] } })).presets.length, 1);
 });
+
+test("platform administrator: archive / restore / delete Command Centers and rooms; clients cannot; platform-wide collation; broadcast by area", async () => {
+  const mk = async (name, state, lga, pu, votes) => {
+    const inv = ok(await api("tenants", { tok: S.A, body: { name, state } }));
+    const C = ok(await api("login/command", { body: { user: inv.operator, pass: inv.passcode } })).token;
+    const rm = ok(await api("rooms", { tok: C, body: { name: lga + " room", kind: "lga", scope: lga } }));
+    ok(await api("rooms/" + rm.id + "/status", { tok: C, body: { status: "active" } }));
+    const R = ok(await api("login/room", { body: { id: rm.id, pass: rm.passcode } })).token;
+    const code = ok(await api("room/obs", { tok: R, body: { state, lga, ward: "W" + pu, pu, reg: 5000, name: "o" } })).code;
+    const t = ok(await api("login/observer", { body: { code, pin: "1234", device: "dev-" + code + "-0123456789abcdef" } })).token;
+    ok(await api("observer/tally", { tok: t, body: { party: "ADC", v: votes } }));
+    return { id: inv.id, C, R, room: rm.id, code, t };
+  };
+  const a = await mk("Arch A", "Ekiti", "Ado Ekiti", "001", 11), b = await mk("Arch B", "Osun", "Osogbo", "002", 22);
+  // platform-wide collation: every state, vote counts only
+  const all = ok(await api("collation?pool=1&level=state", { tok: S.A }));
+  assert.ok(all.pooled.all && all.states.includes("Ekiti") && all.states.includes("Osun"));
+  assert.deepEqual(["Ekiti", "Osun"].map((s) => all.rows.find((r) => r.key == s)?.totals.ADC), [11, 22]);
+  assert.ok(all.scope.some((k) => k.startsWith("Osun|Osogbo|")), "the search lists every state's areas");
+  assert.equal(ok(await api("collation?pool=1&state=Osun", { tok: S.A })).sum.totals.ADC, 22);
+  const own = ok(await api("collation?pool=1", { tok: a.C }));
+  assert.deepEqual([own.pooled.state, own.pooled.all, own.sum.totals.ADC], ["Ekiti", undefined, 11], "a client with a state of its own sees only its own state");
+  assert.equal(own.scope, null);
+  // broadcast by area: state / LGA / ward, to rooms or to observers
+  const bc = (body) => api("broadcast", { tok: a.C, body: { text: "hello", ...body } });
+  assert.equal(ok(await bc({ target: "AREA", audience: "rooms", state: "Ekiti" })).ok, 1);
+  assert.equal((await bc({ target: "AREA", audience: "rooms", state: "Osun" })).s, 403, "only its own state");
+  assert.equal((await bc({ target: "AREA", audience: "rooms", state: "Ekiti", lga: "Nowhere" })).s, 400);
+  ok(await bc({ target: "AREA", audience: "obs", state: "Ekiti", lga: "Ado Ekiti", ward: "W001" }));
+  assert.equal((await bc({ target: "AREA", audience: "obs", state: "Ekiti", lga: "Ado Ekiti", ward: "W999" })).s, 400, "no observers in that ward");
+  const seen = ok(await api("messages", { tok: a.t })).filter((m) => m.text == "hello");
+  assert.equal(seen.length, 1, "the observer in the ward gets the area message");
+  assert.equal(ok(await api("messages", { tok: b.t })).filter((m) => m.text == "hello").length, 0, "other areas do not");
+  assert.equal(ok(await api("broadcasts", { tok: a.C })).find((m) => m.to_scope.startsWith("area:")).targets, 1);
+  // clients cannot archive or delete; only the platform administrator
+  for (const [p, body] of [["tenants/" + a.id + "/archive", { on: true }], ["tenants/" + a.id + "/delete", { confirm: a.id }], ["admin/rooms/" + a.room + "/archive", { on: true }], ["admin/rooms/" + a.room + "/delete", { confirm: a.room }]]) assert.equal((await api(p, { tok: a.C, body })).s, 403, p);
+  assert.equal((await api("admin/rooms?tenant=" + a.id, { tok: a.C })).s, 403);
+  // archive a room: hidden from the client and from collation, restorable
+  const rooms = ok(await api("admin/rooms?tenant=" + a.id, { tok: S.A }));
+  assert.deepEqual([rooms.length, rooms[0].obs], [1, 1]);
+  ok(await api("admin/rooms/" + a.room + "/archive", { tok: S.A, body: { on: true } }));
+  assert.equal(ok(await api("rooms", { tok: a.C })).length, 0);
+  assert.equal(ok(await api("collation", { tok: a.C })).sum.total, 0, "an archived room's observers no longer count");
+  assert.equal((await api("admin/rooms/" + a.room + "/delete", { tok: S.A, body: { confirm: "nope" } })).s, 400, "typed confirmation required");
+  ok(await api("admin/rooms/" + a.room + "/archive", { tok: S.A, body: { on: false } }));
+  assert.equal(ok(await api("rooms", { tok: a.C })).length, 1);
+  // clear election data keeps the room
+  ok(await api("admin/rooms/" + a.room + "/wipe", { tok: S.A, body: { confirm: a.room } }));
+  assert.equal(ok(await api("admin/rooms?tenant=" + a.id, { tok: S.A }))[0].obs, 0);
+  // Command Center: must be archived first, typed confirmation, then everything is gone
+  assert.equal((await api("tenants/" + b.id + "/delete", { tok: S.A, body: { confirm: b.id } })).s, 400, "archive first");
+  assert.equal((await api("tenants/CC-MAIN/archive", { tok: S.A, body: { on: true } })).s, 400, "not your own");
+  ok(await api("tenants/" + b.id + "/archive", { tok: S.A, body: { on: true } }));
+  assert.equal(ok(await api("tenants", { tok: S.A })).find((t) => t.id == b.id).archived, true);
+  assert.equal((await api("login/command", { body: { user: "arch-b", pass: "x" } })).s, 401);
+  assert.equal(ok(await api("collation?pool=1&state=Osun", { tok: S.A })).sum.total, 0, "an archived center no longer counts");
+  assert.equal((await api("tenants/" + b.id + "/delete", { tok: S.A, body: { confirm: "wrong" } })).s, 400);
+  ok(await api("tenants/" + b.id + "/delete", { tok: S.A, body: { confirm: b.id } }));
+  assert.equal(ok(await api("tenants", { tok: S.A })).some((t) => t.id == b.id), false);
+  assert.equal((await api("login/room", { body: { id: b.room, pass: "x" } })).s, 401);
+});

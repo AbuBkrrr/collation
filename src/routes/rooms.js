@@ -6,7 +6,7 @@ app.get(
   h(async (req, res) =>
     res.json(
       await q(
-        `select r.id,r.name,r.state,r.scope,r.kind,r.operator,r.status,r.activated_at,(r.last_seen>now()-interval '40 seconds') online,(select count(*)::int from observers where room_id=r.id) obs,(select coalesce(sum(pend),0)::int from observers where room_id=r.id) pend from rooms r where r.tenant=$1 order by r.id`,
+        `select r.id,r.name,r.state,r.scope,r.kind,r.operator,r.status,r.activated_at,(r.last_seen>now()-interval '40 seconds') online,(select count(*)::int from observers where room_id=r.id) obs,(select coalesce(sum(pend),0)::int from observers where room_id=r.id) pend from rooms r where r.tenant=$1 and not coalesce(r.archived,false) order by r.id`,
         [req.u.tn],
       ),
     ),

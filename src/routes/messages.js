@@ -5,13 +5,20 @@ app.get(
   auth(),
   h(async (req, res) => {
     const u = req.u;
-    const codes = await roomCodes(u);
+    const codes = await roomCodes(u),
+      loc = await obsLoc(u);
     const all = await q("select * from messages where tenant=$1 order by id desc limit 300", [u.tn]);
-    res.json(all.filter((m) => canSee(u, m, codes)));
+    res.json(all.filter((m) => canSee(u, m, codes, loc)));
   }),
 );
 // who may see a message (also used to authorise acknowledgements)
-const canSee = (u, m, codes) =>
+// "State|LGA|Ward" (blank = any) - a broadcast to everyone in an area
+const areaMatch = (spec, l) => {
+  const [s, g, w] = String(spec).split("|");
+  return !!l && (!s || s == l.state) && (!g || g == l.lga) && (!w || w == l.ward);
+};
+const obsLoc = async (u) => (u.role == "obs" ? (await q("select state,lga,ward from observers where code=$1", [u.id]))[0] : null);
+const canSee = (u, m, codes, loc) =>
       u.role == "cmd"
         ? m.from_id == "CMD" || m.to_scope == "CMD"
         : u.role == "room"
@@ -23,6 +30,7 @@ const canSee = (u, m, codes) =>
             codes.some((c) => m.to_scope == "obs:" + c) ||
             m.to_scope == "robs:" + u.id
           : m.to_scope == "ALL_OBS" ||
+            (m.to_scope.startsWith("area:") && areaMatch(m.to_scope.slice(5), loc)) ||
             m.to_scope == "obs:" + u.id ||
             m.to_scope == "robs:" + u.room ||
             m.from_id == u.id;
@@ -80,7 +88,7 @@ app.post(
   auth(),
   h(async (req, res) => {
     const [m] = await q("select * from messages where id=$1 and tenant=$2", [+req.params.id || 0, req.u.tn]);
-    if (!m || !canSee(req.u, m, await roomCodes(req.u))) return res.sendStatus(404);
+    if (!m || !canSee(req.u, m, await roomCodes(req.u), await obsLoc(req.u))) return res.sendStatus(404);
     await q("update messages set ack=ack||to_jsonb($2::text) where id=$1 and not ack @> to_jsonb($2::text)", [
       req.params.id,
       req.u.id,
@@ -103,7 +111,28 @@ app.post(
       if (!ids.length) return res.status(400).json({ error: "Select at least one of your rooms" });
       to = "rooms:" + ids.join(",");
     }
-    if (!["ALL_ROOMS", "ALL_OBS"].includes(to) && !String(to).startsWith("rooms:"))
+    if (to == "AREA") {
+      // by area: Situation Rooms that cover it, or every observer in it (state, LGA or ward)
+      const st = String(b.state || ""),
+        lga = String(b.lga || "").trim(),
+        ward = String(b.ward || "").trim(),
+        [t] = await q("select state from tenants where id=$1", [req.u.tn]);
+      if (!STATES.includes(st)) return res.status(400).json({ error: "Choose a state" });
+      if (t?.state && t.state != st) return res.status(403).json({ error: "This Command Center covers " + t.state + " only" });
+      if (ward && !lga) return res.status(400).json({ error: "Choose the LGA of that ward" });
+      if (b.audience == "obs") {
+        const [n] = await q(AREA_OBS, [req.u.tn, st, lga, ward]);
+        if (!n.n) return res.status(400).json({ error: "No observers in that area" });
+        to = "area:" + [st, lga, ward].join("|");
+      } else {
+        const ids = (await q("select id,scope from rooms where tenant=$1 and state=$2 and status<>'inactive' and not coalesce(archived,false)", [req.u.tn, st]))
+          .filter((r) => !lga || !String(r.scope || "").trim() || String(r.scope).toLowerCase().split(",").map((x) => x.trim()).includes(lga.toLowerCase()))
+          .map((r) => r.id);
+        if (!ids.length) return res.status(400).json({ error: "No active Situation Room covers that area" });
+        to = "rooms:" + ids.join(",");
+      }
+    }
+    if (!["ALL_ROOMS", "ALL_OBS"].includes(to) && !String(to).startsWith("rooms:") && !String(to).startsWith("area:"))
       return res.status(400).json({ error: "Invalid target" });
     await q("insert into messages(from_id,to_scope,text,tenant) values($1,$2,$3,$4)", [
       "CMD",
@@ -115,6 +144,7 @@ app.post(
     res.json({ ok: 1 });
   }),
 );
+const AREA_OBS = "select count(*)::int n from observers where active and room_id in (select id from rooms where tenant=$1 and not coalesce(archived,false)) and ($2='' or state=$2) and ($3='' or lga=$3) and ($4='' or ward=$4)";
 app.get(
   "/api/broadcasts",
   auth("cmd"),
@@ -126,19 +156,16 @@ app.get(
         [tn],
       );
     const m = await q(
-      "select * from messages where tenant=$1 and from_id='CMD' and (to_scope in ('ALL_ROOMS','ALL_OBS') or to_scope like 'rooms:%') order by id desc limit 50",
+      "select * from messages where tenant=$1 and from_id='CMD' and (to_scope in ('ALL_ROOMS','ALL_OBS') or to_scope like 'rooms:%' or to_scope like 'area:%') order by id desc limit 50",
       [tn],
     );
     res.json(
-      m.map((x) => ({
-        ...x,
-        targets:
-          x.to_scope == "ALL_ROOMS"
-            ? r.n
-            : x.to_scope == "ALL_OBS"
-              ? o.n
-              : x.to_scope.slice(6).split(",").length,
-      })),
+      await Promise.all(
+        m.map(async (x) => ({
+          ...x,
+          targets: x.to_scope == "ALL_ROOMS" ? r.n : x.to_scope == "ALL_OBS" ? o.n : x.to_scope.startsWith("area:") ? (await q(AREA_OBS, [tn, ...x.to_scope.slice(5).split("|")]))[0].n : x.to_scope.slice(6).split(",").length,
+        })),
+      ),
     );
   }),
 );

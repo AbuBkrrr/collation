@@ -281,8 +281,11 @@ The receiver only works once a listening post is running `tuner.js` (see `radio-
 
 ## 9. Broadcast messages
 
-**Broadcast** tab. Send a message to all your Situation Rooms at once (instructions, alerts). Rooms
-acknowledge receipt. Past broadcasts are listed.
+**Broadcast** tab. Send a message to all your Situation Rooms, to chosen rooms, to **everyone in an area**, or
+an emergency alert to **every observer**. Choose **By state / LGA / ward…**, then who should get it —
+**Situation Rooms that cover the area** or **every observer in the area** — then the state (fixed to yours),
+the LGA and, if you like, a ward. Leave LGA or ward on "All" to widen it. Recipients acknowledge receipt, and
+the list shows how many have.
 
 ---
 
@@ -315,6 +318,13 @@ Export at the end of the day (or periodically) so you always hold your own copy 
 
 **Audit Log** tab — a time-stamped record of actions in *your* Command Centre (logins, room and
 observer changes, resolutions). Your accountability trail.
+
+---
+
+## 13b. Dark / light mode
+
+The round button at the bottom-right of every dashboard switches between light and dark mode. Your choice is
+remembered on that device.
 
 ---
 
