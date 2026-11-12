@@ -360,23 +360,160 @@
           if (r.queued) {
             TL[p] = { v: (TL[p]?.v || 0) + v, edits: TL[p]?.edits || 0 }; // offline: add locally; the server adds it up when it syncs
           } else load();
+          return true;
         } catch (e) {
           toast("⚠️ " + e.message);
+          return false;
         }
       }
-      // spoken names for codes that are too short / ambiguous to say as letters
+      // ---------- voice: stage figures, read back, confirm, then push ----------
+      // Say a party code (the party is "brought forward") and then its figures. Figures for the same party
+      // add up in a staging box; the app reads the total back ("Confirm APC total 100 votes"). Nothing reaches the
+      // Situation Room until the observer confirms (say "confirm" or tap the button) - or types a corrected total first.
       const ALIAS = { A: ["ACCORD"], BP: ["BOOT PARTY", "BOOT"], YP: ["YOUTH PARTY"], LP: ["LABOUR", "LABOR"], ZLP: ["ZENITH"], AA: ["ACTION ALLIANCE"] };
+      // how speech engines write out spoken letters ("pee dee pee" -> P D P)
+      const LN = { ay: "a", bee: "b", see: "c", sea: "c", cee: "c", dee: "d", eff: "f", gee: "g", aitch: "h", jay: "j", kay: "k", el: "l", em: "m", en: "n", pee: "p", pea: "p", cue: "q", queue: "q", are: "r", ess: "s", tee: "t", tea: "t", vee: "v", ex: "x", why: "y", zed: "z", zee: "z" };
+      let PEND = {},
+        ORD = [],
+        ACTIVE = null,
+        ACT_T = 0,
+        MUTE_UNTIL = 0,
+        LASTTR = "",
+        SPEAK = localStorage.getItem("readback") != "0",
+        PMK = null,
+        PML = [];
+      try {
+        const sv = JSON.parse(localStorage.getItem("pend") || "null");
+        if (sv && sv.PEND) (PEND = sv.PEND), (ORD = sv.ORD || []);
+      } catch {}
+      const savePend = () => {
+        try {
+          localStorage.setItem("pend", JSON.stringify({ PEND, ORD }));
+        } catch {}
+      };
+      const hasPend = () => Object.keys(PEND).length > 0;
+      const pendTotal = (p) => PEND[p].parts.reduce((a, b) => a + b, 0);
+      // lower-case words that mean each party, longest phrase first
+      function PM() {
+        const k = CFG.parties.join();
+        if (PMK != k) {
+          PMK = k;
+          PML = CFG.parties
+            .flatMap((p) => [...(p.length > 1 ? [p] : []), ...(ALIAS[p] || [])].map((a) => ({ p, w: a.toLowerCase().split(/\s+/) })))
+            .sort((a, b) => b.w.length - a.w.length);
+        }
+        return PML;
+      }
+      // transcript -> words, with spoken numbers as digits and spelled-out letters joined ("a p c" / "ay pee see" -> "apc")
+      function norm(s) {
+        s = String(s).toLowerCase().replace(/(\d),(?=\d{3}\b)/g, "$1").replace(/[.,;:!?'"\-]/g, " ").replace(/([a-z])(\d)/g, "$1 $2").replace(/(\d)([a-z])/g, "$1 $2");
+        const out = [];
+        let run = [];
+        const flush = () => {
+          if (run.length > 1) out.push(run.join(""));
+          else out.push(...run);
+          run = [];
+        };
+        for (const w of w2n(s).split(/\s+/).filter(Boolean).map((x) => LN[x] || x)) {
+          if (/^[a-z]$/.test(w)) run.push(w);
+          else {
+            flush();
+            out.push(w);
+          }
+        }
+        flush();
+        return out;
+      }
+      // [{party, v}] in the order spoken; a figure belongs to the party named just before it (or still "brought forward")
+      function voiceEntries(text) {
+        const tk = norm(text),
+          res = [];
+        let cur = Date.now() - ACT_T < 25000 ? ACTIVE : null;
+        for (let i = 0; i < tk.length; ) {
+          const hit = PM().find((m) => m.w.every((x, j) => tk[i + j] === x));
+          if (hit) {
+            cur = hit.p;
+            i += hit.w.length;
+            continue;
+          }
+          if (/^\d+$/.test(tk[i]) && cur && +tk[i] <= 100000) res.push({ party: cur, v: +tk[i] });
+          i++;
+        }
+        if (cur) (ACTIVE = cur), (ACT_T = Date.now());
+        return res;
+      }
+      function say(t) {
+        if (!SPEAK || !window.speechSynthesis) return;
+        try {
+          speechSynthesis.cancel();
+          const u = new SpeechSynthesisUtterance(t);
+          // the microphone must not hear our own read-back and take it for figures
+          MUTE_UNTIL = Date.now() + 1500 + t.length * 90;
+          u.onend = u.onerror = () => (MUTE_UNTIL = Date.now() + 1200);
+          speechSynthesis.speak(u);
+        } catch {}
+      }
+      function stage(p, v) {
+        (PEND[p] = PEND[p] || { parts: [] }).parts.push(v);
+        ORD.push(p);
+      }
       function parseVoice(s) {
-        s = w2n(s).toUpperCase();
-        $("#tr") && ($("#tr").textContent = "“" + s + "”");
-        CFG.parties.forEach((p) => {
-          const alt = [...(p.length > 1 ? [p.split("").join("\\s?")] : []), ...(ALIAS[p] || [])];
-          if (!alt.length) return;
-          const re = new RegExp("\\b(?:" + alt.join("|") + ")\\b\\D{0,8}?(\\d[\\d, ]*)", "gi");
-          let m;
-          while ((m = re.exec(s)))
-            setTally(p, parseInt(m[1].replace(/\D/g, ""), 10), "voice"); // adds to that party's running total
-        });
+        if (Date.now() < MUTE_UNTIL) return;
+        LASTTR = String(s);
+        const w = norm(s).join(" ");
+        if (hasPend()) {
+          if (/^(please )?(confirm(ed)?|yes|yeah|correct|send( it)?|submit|ok(ay)?)( please)?$/.test(w)) return confirmPend();
+          if (/^(cancel|clear( all)?|discard|start over|wrong)$/.test(w)) return clearPend();
+          if (/^(undo|remove( last)?|delete( last)?)$/.test(w)) return undoPend();
+        }
+        const es = voiceEntries(s);
+        if (!es.length) return render();
+        es.forEach((e) => stage(e.party, e.v));
+        savePend();
+        render();
+        const p = es[es.length - 1].party;
+        say("Confirm " + p + " total " + pendTotal(p) + " votes");
+      }
+      function editPend(p, v) {
+        const n = parseInt(v, 10);
+        if (PEND[p] && !isNaN(n) && n >= 0 && n <= 100000) PEND[p].parts = [n]; // a typed total replaces what was spoken
+        savePend();
+        document.activeElement?.blur();
+        render();
+      }
+      function undoPend() {
+        const p = ORD.pop();
+        if (p && PEND[p]) {
+          PEND[p].parts.pop();
+          if (!PEND[p].parts.length) delete PEND[p];
+        }
+        savePend();
+        render();
+        toast("↶ Last figure removed");
+      }
+      function clearPend() {
+        PEND = {};
+        ORD = [];
+        ACTIVE = null;
+        savePend();
+        render();
+        toast("Cleared — nothing was sent.");
+      }
+      async function confirmPend() {
+        const items = Object.keys(PEND).map((p) => [p, pendTotal(p)]);
+        if (!items.length) return;
+        const keep = {};
+        PEND = {};
+        ORD = [];
+        ACTIVE = null;
+        render();
+        for (const [p, v] of items) if (!(await setTally(p, v, "voice"))) keep[p] = { parts: [v] };
+        PEND = keep; // anything that could not be sent stays here to try again
+        ORD = Object.keys(keep);
+        savePend();
+        render();
+        const sent = items.filter(([p]) => !keep[p]);
+        if (sent.length) say("Sent. " + sent.map(([p, v]) => p + " " + v).join(", "));
       }
       const NW = {
         zero: 0,
@@ -657,6 +794,7 @@
       // ---------- UI ----------
       function render() {
         if (!OB) return;
+        if (document.activeElement && /^pe_/.test(document.activeElement.id)) return; // a total is being typed
         const on = navigator.onLine,
           pend = Q().length,
           t = TL,
@@ -681,7 +819,7 @@
 <div style="display:flex;justify-content:space-between;align-items:center;color:#a0aec0;font-size:11px"><span><i class="fas fa-building-columns" style="font-size:10px"></i> ${esc(OB.room_name || OB.room_id)}</span><span class="mono">${esc(OB.code)} · PU ${esc(OB.pu)}</span></div></div>
 <div class="app-content">${LIVEREQ && !streaming ? `<button class="btn-report" style="background:#e53e3e" onclick="startStream()"><i class="fas fa-video"></i> Situation Room requests LIVE VIDEO — tap to start</button>` : ""}<div style="font-size:12px;color:#a0aec0"><i class="fas fa-location-dot"></i> ${esc(OB.lga)} LGA · ${esc(OB.ward)} Ward</div>
 <div class="camera-view" id="camSlot"><div class="camera-overlay"><span style="color:${streaming ? "#fc8181" : "#fff"}">${streaming ? "● LIVE Streaming" : "Ready"}</span><span>${lat != null ? lat.toFixed(4) + ", " + lng.toFixed(4) : "GPS…"}</span></div><div class="stream-controls">${streaming ? '<button style="background:#e53e3e;color:#fff" onclick="stopStream()">⏹ Stop Stream</button>' : '<button style="background:#38a169;color:#fff" onclick="startStream()">▶ Start Stream</button>'}</div></div>
-<div class="tally-panel"><div class="tally-title"><span>TALLY · entries add up · tap a row to correct</span><button class="btn btn-sm ${mic ? "btn-danger" : "btn-primary"}" onclick="toggleMic()"><i class="fas fa-microphone"></i> ${mic ? (fbMode ? "Listening (server)" : "Listening") : "Mic"}</button></div>${rows}<div id="tr" style="margin-top:8px;color:#a0aec0;font-size:12px"></div>
+<div class="tally-panel"><div class="tally-title"><span>TALLY · entries add up · tap a row to correct</span><span style="display:flex;gap:6px"><button class="btn btn-sm btn-outline" style="background:transparent;color:#a0aec0;border-color:#4a5568" title="Read figures back aloud" onclick="SPEAK=!SPEAK;localStorage.setItem('readback',SPEAK?1:0);if(!SPEAK)speechSynthesis?.cancel();render()"><i class="fas fa-volume-${SPEAK ? "high" : "xmark"}"></i></button><button class="btn btn-sm ${mic ? "btn-danger" : "btn-primary"}" onclick="toggleMic()"><i class="fas fa-microphone"></i> ${mic ? (fbMode ? "Listening (server)" : "Listening") : "Mic"}</button></span></div>${hasPend() ? `<div style="background:#2a4365;border:1px solid #4299e1;border-radius:12px;padding:10px;margin:8px 0"><div style="font-weight:700;font-size:13px;margin-bottom:6px">⏳ Confirm before it is sent to the Situation Room</div>${Object.keys(PEND).map((q) => `<div style="display:flex;align-items:center;gap:8px;margin:6px 0"><b style="width:46px">${q}</b><span style="flex:1;font-size:12px;color:#bee3f8">${PEND[q].parts.join(" + ")}${PEND[q].parts.length > 1 ? " =" : ""}</span><input id="pe_${q}" class="dk" type="number" inputmode="numeric" value="${pendTotal(q)}" style="width:86px;flex:none;padding:8px" onchange="editPend('${q}',this.value)"></div>`).join("")}<div class="correction-controls" style="margin-top:8px"><button style="background:#38a169;flex:3" onclick="confirmPend()">✓ Confirm &amp; send</button><button style="background:#718096" onclick="undoPend()">↶</button><button style="background:#e53e3e" onclick="clearPend()">✕</button></div><div style="color:#a0aec0;font-size:11px;margin-top:6px">Say “confirm” to send, “undo” to drop the last figure, “cancel” to clear — or type a corrected total above, then confirm.</div></div>` : ""}${rows}<div id="tr" style="margin-top:8px;color:#a0aec0;font-size:12px">${mic && ACTIVE && Date.now() - ACT_T < 25000 ? '🎤 Listening for <b style="color:#fff">' + ACTIVE + "</b> figures… " : ""}${LASTTR ? "“" + esc(LASTTR) + "”" : ""}</div>
 ${CORR ? `<div class="correction-controls"><input id="mi" type="number" inputmode="numeric" value="${t[CORR].v}"><button style="background:#38a169" onclick="saveCorr()">✓</button><button style="background:#e53e3e" onclick="CORR=null;render()">✕</button></div>` : ""}
 <div class="correction-controls"><select class="dk" id="mp" onchange="LASTP=this.value">${CFG.parties
             .map((p) => `<option value="${p}" ${window.LASTP == p ? "selected" : ""}>${p}${t[p] ? " (" + t[p].v + ")" : ""}</option>`)
@@ -699,7 +837,7 @@ ${CORR ? `<div class="correction-controls"><input id="mi" type="number" inputmod
               .join("") || '<div style="color:#a0aec0;font-size:13px">None</div>'
           }<div class="correction-controls"><input id="om" class="dk" placeholder="Message room"><button style="background:#2b6cb0" onclick="msgTo('x',$('#om').value)"><i class="fas fa-paper-plane"></i></button></div></div></div>
 <div class="app-footer"><input id="note" class="dk" style="flex:none;padding:10px" placeholder="Incident note (optional)"><button class="btn-report" onclick="reportInc(false)"><i class="fas fa-triangle-exclamation"></i> REPORT INCIDENT</button><div style="display:flex;gap:8px"><button class="btn btn-outline" style="flex:1" onclick="stealth=true;render()"><i class="fas fa-clock"></i> Stealth</button><button class="btn btn-outline" style="flex:1" onclick="logout()"><i class="fas fa-right-from-bracket"></i> Logout</button></div></div></div></div>
-<div class="instructions-panel"><div class="instruction-card"><h4>🎤 Voice typing</h4><p>Say a party code and number: “APC 251”, “NDC 255”. Parties: ${CFG.parties.join(", ")}.</p></div><div class="instruction-card"><h4>🔒 One correction only</h4><p>Tap a row to correct once. It then locks (enforced by the server).</p></div><div class="instruction-card"><h4>🕵️ Stealth SOS</h4><p>Stealth shows a clock. Triple-tap it to silently send an incident.</p></div></div></div>`;
+<div class="instructions-panel"><div class="instruction-card"><h4>🎤 Voice typing</h4><p>Say a party, then its figures: “APC 20”, “PDP 20”, “APC 30”. Figures for the same party add up and the app reads the total back (“Confirm APC total 50 votes”). Say <b>confirm</b> to send, or type a corrected total and tap Confirm. Parties: ${CFG.parties.join(", ")}.</p></div><div class="instruction-card"><h4>🔒 One correction only</h4><p>Tap a row to correct once. It then locks (enforced by the server).</p></div><div class="instruction-card"><h4>🕵️ Stealth SOS</h4><p>Stealth shows a clock. Triple-tap it to silently send an incident.</p></div></div></div>`;
         const s = $("#camSlot");
         if (s) s.prepend(pv);
       }

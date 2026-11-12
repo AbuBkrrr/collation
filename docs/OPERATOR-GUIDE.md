@@ -130,6 +130,13 @@ LGAs, and its **Whole zone** collation view adds up every room covering them.
 - **Tallies add up.** Each figure they say ("APC 251") or type is **added to that party's running
   total** — so they can enter results in parts. To fix a mistake they tap the party's row and set the
   correct total; entry never locks, so they can keep adding figures all day.
+- **Voice typing: say, confirm, send.** With the mic on, the observer says a party and its figures —
+  "APC 20", "PDP 20", "APC 30", "APC 50". The party named is brought forward, and figures for it add
+  up (20 + 30 + 50 = 100). The app shows the staged totals and reads them back: *"Confirm APC total 100
+  votes"*. **Nothing is sent to the Situation Room until the observer says "confirm"** (or taps
+  **Confirm & send**). They can type a corrected total in the box first, say "undo" to drop the last
+  figure, or "cancel" to clear. The speaker button switches the read-back off. Typed entries (the
+  party list and + button) are added straight away.
 - **Messages** from the room appear on their screen. They are **not read aloud**.
 - **Talk-back:** while they are streaming, they hear the room (or a shared viewer) speaking to them
   through the phone, and the room hears them.
