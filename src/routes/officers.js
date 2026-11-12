@@ -1,5 +1,10 @@
 const {q,qsys,bcrypt,jwt,SECRET,PARTIES,STATES,rnd,aud,h,app,rate,auth} = require("../core");
 const { puList } = require("./results");
+const { getS } = require("../core");
+// Platform rule (on unless the administrator sets require_officers=0): nothing is created without its supervisor.
+const required = async () => (await getS("require_officers")) !== "0";
+const hasOfficer = async (tn, level, state, lga, ward) =>
+  (await qsys("select 1 from officers where tenant=$5 and level=$1 and active and lower(state)=lower($2) and ($3::text is null or lower(lga)=lower($3)) and ($4::text is null or lower(ward)=lower($4)) limit 1", [level, state, lga || null, ward || null, tn])).length > 0;
 // ---- Collation Officers: ward (1), LGA (2) and state (3) supervisors who collect the tallies coming up from
 // the polling units, confirm or correct each figure ONCE, and separately record the result sheets / boxes that
 // physically arrive at their collation centre (Report B). Everything is scoped to one Command Center.
@@ -217,4 +222,4 @@ app.post("/api/officer/manual", auth("officer"), h(async (req, res) => {
   aud("CMD", cname(o.level) + " " + o.name + " recorded the physical result for " + key, req.u.tn);
   res.json({ ok: 1 });
 }));
-module.exports = { mk, LEVELS };
+module.exports = { mk, LEVELS, required, hasOfficer };

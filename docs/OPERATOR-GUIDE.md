@@ -192,6 +192,8 @@ Information flows up a clear chain of command:
 
 A third officer, **Collation Officer 3**, sits at **state** level and oversees all LGAs.
 
+**Nothing is created without its supervisor.** A Command Center with a state needs its State Collation Officer; an LGA Situation Room needs its LGA officer; and observer codes can only be generated for a ward once that ward has its Ward Collation Officer (name one in the same step, or add it first). The platform administrator can switch this rule off with the `require_officers` setting (value `0`) if ever needed.
+
 **Adding officers — at the moment you create things:**
 - **New Command Center** (platform administrator): fill *State Collation Officer — name / phone*.
 - **Create Situation Room** for an LGA chairman: fill *LGA Collation Officer — name / phone*.

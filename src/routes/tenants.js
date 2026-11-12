@@ -42,6 +42,9 @@ app.post(
       operator = base + "-" + n;
       if (n > 50) return res.status(409).json({ error: "Could not find a free operator name" });
     }
+    const oc0 = req.body.officer;
+    if (state && !(oc0 && String(oc0.name || "").trim()) && (await require("./officers").required()))
+      return res.status(400).json({ error: "Name the State Collation Officer (Officer 3) who supervises this Command Center" });
     const pass = providedPass || rnd(10);
     const id = "CC-" + rnd(4);
     try {

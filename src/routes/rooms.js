@@ -38,6 +38,16 @@ app.post(
       const bad = known.length ? lgas.filter((l) => !known.includes(l.toLowerCase())) : [];
       if (bad.length) return res.status(400).json({ error: bad.join(", ") + " is not an LGA of " + b.state });
     }
+    {
+      const O = require("./officers");
+      if (await O.required()) {
+        if (lgas.length == 1) {
+          if (!String(b.officer?.name || "").trim() && !(await O.hasOfficer(req.u.tn, "lga", b.state, lgas[0])))
+            return res.status(400).json({ error: "Name the LGA Collation Officer (Officer 2) for " + lgas[0] + " — a Situation Room needs its supervisor" });
+        } else if (!(await O.hasOfficer(req.u.tn, "state", b.state)))
+          return res.status(400).json({ error: "Add the State Collation Officer (Officer 3) first — open the Collation Officers tab" });
+      }
+    }
     const id = "SR-" + abbr(b.state) + "-" + rnd(3),
       pass = rnd(10);
     await q("insert into rooms(id,name,state,scope,operator,pass_hash,tenant,kind) values($1,$2,$3,$4,$5,$6,$7,$8)", [
@@ -54,7 +64,7 @@ app.post(
     // optional: name the LGA Collation Officer (2) for a single-LGA room while creating it
     let officer = null;
     const oc = b.officer;
-    if (oc && oc.name && lgas.length == 1) {
+    if (oc && oc.name && lgas.length == 1 && !(await require("./officers").hasOfficer(req.u.tn, "lga", b.state, lgas[0]))) {
       try {
         officer = await require("./officers").mk(req.u.tn, { level: "lga", name: oc.name, phone: oc.phone, lga: lgas[0], state: b.state });
       } catch {}

@@ -50,6 +50,11 @@ app.post(
     if (rm?.state && rm.state != b.state) return res.status(403).json({ error: "This room covers " + rm.state + " only" });
     if (sc.length && !sc.includes(String(b.lga).trim().toLowerCase()))
       return res.status(403).json({ error: "This room covers " + rm.scope + " LGA only" });
+    {
+      const O = require("./officers");
+      if ((await O.required()) && !(await O.hasOfficer(req.u.tn, "ward", b.state, b.lga, b.ward)))
+        return res.status(400).json({ error: "Ward " + b.ward + " has no Ward Collation Officer (Officer 1) yet — add one in the Collation Officers tab first" });
+    }
     let code;
     do code = "OBS-" + (1000 + crypto.randomInt(9000)) + "-PU" + pu + "-" + abbr(b.state);
     while ((await q("select 1 from observers where code=$1", [code])).length);
@@ -81,6 +86,16 @@ app.post(
     const known = new Map((await q("select lga,ward,pu,reg,name from locations where state=$1 and lga=any($2)", [st, lgas])).map((r) => [[r.lga, r.ward, r.pu].join("|"), r]));
     const bad = units.find((u) => !known.has([u.lga, u.ward, u.pu].join("|")));
     if (bad) return res.status(400).json({ error: "Not a polling unit of " + st + ": " + [bad.lga, bad.ward, bad.pu].join(" / ") });
+    {
+      const O = require("./officers");
+      if (await O.required()) {
+        const named = new Set((Array.isArray(b.officers) ? b.officers : []).filter((o) => o && String(o.name || "").trim()).map((o) => o.lga + "|" + o.ward)),
+          miss = [];
+        for (const k of new Set(units.map((u) => u.lga + "|" + u.ward)))
+          if (!named.has(k) && !(await O.hasOfficer(req.u.tn, "ward", st, k.split("|")[0], k.split("|")[1]))) miss.push(k.split("|")[1] + " (" + k.split("|")[0] + ")");
+        if (miss.length) return res.status(400).json({ error: "Every ward needs its Ward Collation Officer (Officer 1) before observers are created. Name one for: " + miss.slice(0, 6).join(", ") + (miss.length > 6 ? " and " + (miss.length - 6) + " more" : ""), missing: miss });
+      }
+    }
     // Ward Collation Officers named in the same step (one per ward; a ward that already has one is left alone)
     const offs = [];
     if (Array.isArray(b.officers)) {

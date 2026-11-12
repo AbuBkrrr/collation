@@ -24,6 +24,13 @@ async function api(p, { tok, body, method, headers = {}, raw } = {}) {
 }
 const ok = (r) => (assert.ok(r.s < 300, JSON.stringify(r)), r.j);
 
+// the "no creation without a supervisor" rule is on by default; most tests switch it off and one test proves it
+const setReq = async (v) => {
+  const c = new Client({ connectionString: DB });
+  await c.connect();
+  await c.query("insert into settings values('require_officers',$1) on conflict(k) do update set v=$1", [v]);
+  await c.end();
+};
 before(async () => {
   const u = new URL(DB), name = u.pathname.slice(1), adm = new URL(DB);
   adm.pathname = "/postgres";
@@ -42,7 +49,7 @@ before(async () => {
   srv.stdout.on("data", (d) => (log += d));
   srv.stderr.on("data", (d) => (log += d));
   for (let i = 0; i < 100; i++) {
-    try { if ((await fetch(BASE + "/api/health")).ok) return; } catch {}
+    try { if ((await fetch(BASE + "/api/health")).ok) { await setReq("0"); return; } } catch {}
     await new Promise((r) => setTimeout(r, 150));
   }
   throw new Error("server did not start:\n" + log);
@@ -856,4 +863,36 @@ test("collation officers: ward / LGA / state, confirm or correct once, manual (R
   const nw = ok(await api("officers/" + wo.id + "/reset", { tok: C, body: {} }));
   assert.equal((await api("login/officer", { body: { code: wo.code, pass: wo.passcode } })).s, 401);
   assert.ok(ok(await api("login/officer", { body: { code: wo.code, pass: nw.passcode } })).token);
+});
+
+test("nothing is created without its supervisor: Command Center, room and observers", async () => {
+  await setReq("1");
+  try {
+    const c = new Client({ connectionString: DB });
+    await c.connect();
+    await c.query("insert into locations(state,lga,ward,pu,reg,name) values('Zamfara','Gusau','Ward Z','001',500,'Z1'),('Zamfara','Gusau','Ward Y','001',500,'Z2')");
+    await c.end();
+    assert.equal((await api("tenants", { tok: S.A, body: { name: "No Officer CC", state: "Zamfara" } })).s, 400, "a state-locked Command Center needs its state officer");
+    const inv = ok(await api("tenants", { tok: S.A, body: { name: "Officer Rule CC", state: "Zamfara", officer: { name: "Zam State Officer" } } }));
+    assert.ok(inv.officer && /^CO3-/.test(inv.officer.code));
+    const C = ok(await api("login/command", { body: { user: inv.operator, pass: inv.passcode } })).token;
+    assert.equal((await api("rooms", { tok: C, body: { name: "Gusau", kind: "lga", scope: "Gusau" } })).s, 400, "an LGA room needs its LGA officer");
+    const rm = ok(await api("rooms", { tok: C, body: { name: "Gusau", kind: "lga", scope: "Gusau", officer: { name: "Gusau LGA Officer" } } }));
+    assert.ok(rm.officer && /^CO2-/.test(rm.officer.code));
+    ok(await api("rooms/" + rm.id + "/status", { tok: C, body: { status: "active" } }));
+    const R = ok(await api("login/room", { body: { id: rm.id, pass: rm.passcode } })).token;
+    const pick = [{ lga: "Gusau", ward: "Ward Z", pu: "001" }, { lga: "Gusau", ward: "Ward Y", pu: "001" }];
+    const bad = await api("room/obs/bulk", { tok: R, body: { per: 1, units: pick } });
+    assert.equal(bad.s, 400);
+    assert.equal(bad.j.missing.length, 2, "both wards are named as missing");
+    assert.equal((await api("obs", { tok: R })).j.length, 0, "nothing was created");
+    assert.equal((await api("room/obs", { tok: R, body: { state: "Zamfara", lga: "Gusau", ward: "Ward Z", pu: "001" } })).s, 400);
+    const okr = ok(await api("room/obs/bulk", { tok: R, body: { per: 1, units: pick, officers: [{ lga: "Gusau", ward: "Ward Z", name: "Z officer" }, { lga: "Gusau", ward: "Ward Y", name: "Y officer" }] } }));
+    assert.equal(okr.created.length, 2);
+    assert.equal(okr.officers.length, 2);
+    // the ward now has its officer, so a further observer there is fine
+    ok(await api("room/obs", { tok: R, body: { state: "Zamfara", lga: "Gusau", ward: "Ward Z", pu: "001" } }));
+  } finally {
+    await setReq("0");
+  }
 });

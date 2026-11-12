@@ -131,10 +131,14 @@
         [...new Set(blkChosen().map(wk))]
           .map((k) => ({ k, lga: k.split("|")[0], ward: k.split("|")[1], ...(BLK.off[k] || {}) }))
           .filter((o) => (o.name || "").trim());
+      // wards that already have an active Ward Collation Officer
+      const wardHas = (k) => (OFFS || []).find((o) => o.level == "ward" && o.active && (o.lga || "").toLowerCase() == k.split("|")[0].toLowerCase() && (o.ward || "").toLowerCase() == k.split("|")[1].toLowerCase());
+      const blkMissing = () => [...new Set(blkChosen().map(wk))].filter((k) => !wardHas(k) && !(BLK.off[k]?.name || "").trim());
       function blkOffForm() {
+        if (!OFFS) offLoad();
         const ws = [...new Set(blkChosen().map(wk))];
         if (!ws.length || ws.length > 40) return ws.length ? '<div class="muted" style="margin:8px 0">Add ward officers from the <b>Collation Officers</b> tab for a batch this large.</div>' : "";
-        return `<details style="margin:8px 0"><summary style="cursor:pointer;font-weight:600"><i class="fas fa-clipboard-check"></i> Ward Collation Officer 1 — optional (${blkOffs().length} named)</summary><div class="muted" style="margin:6px 0">Name the supervisor for each ward now; they get a sign-in QR. Leave a ward blank to skip it.</div>${ws.map((k) => { const [l, w] = k.split("|"), o = BLK.off[k] || {}; return `<div style="display:flex;gap:6px;align-items:center;margin:4px 0;flex-wrap:wrap"><span style="min-width:110px;font-size:13px"><b>${esc(w)}</b>${BLK.all.length > 1 ? ` <span class="muted">${esc(l)}</span>` : ""}</span><input class="fi" style="flex:1;min-width:120px;margin:0" placeholder="Officer name" value="${esc(o.name || "")}" oninput="blkOff('${esc(k)}','name',this.value)"><input class="fi" style="flex:1;min-width:110px;margin:0" type="tel" placeholder="Phone" value="${esc(o.phone || "")}" oninput="blkOff('${esc(k)}','phone',this.value)"></div>`; }).join("")}</details>`;
+        return `<details open style="margin:8px 0"><summary style="cursor:pointer;font-weight:600"><i class="fas fa-clipboard-check"></i> Ward Collation Officer 1 — required for every ward ${blkMissing().length ? `<span style="color:#c53030">(${blkMissing().length} still to name)</span>` : '<span style="color:#2f855a">✓ all wards covered</span>'}</summary><div class="muted" style="margin:6px 0">Observers cannot be created for a ward until its supervisor is named. They get a sign-in QR.</div>${ws.map((k) => { const [l, w] = k.split("|"), o = BLK.off[k] || {}, h = wardHas(k); if (h) return `<div style="margin:4px 0;font-size:13px">✓ <b>${esc(w)}</b> — ${esc(h.name)} <span class="muted">${esc(h.phone || "")}</span></div>`; return `<div style="display:flex;gap:6px;align-items:center;margin:4px 0;flex-wrap:wrap"><span style="min-width:110px;font-size:13px"><b>${esc(w)}</b>${BLK.all.length > 1 ? ` <span class="muted">${esc(l)}</span>` : ""}</span><input class="fi" style="flex:1;min-width:120px;margin:0" placeholder="Officer name" value="${esc(o.name || "")}" oninput="blkOff('${esc(k)}','name',this.value)"><input class="fi" style="flex:1;min-width:110px;margin:0" type="tel" placeholder="Phone" value="${esc(o.phone || "")}" oninput="blkOff('${esc(k)}','phone',this.value)"></div>`; }).join("")}</details>`;
       }
       const blkOff = (k, f, v) => ((BLK.off[k] = BLK.off[k] || {})[f] = v);
       function blkPicker() {
@@ -152,7 +156,7 @@
           <div style="display:flex;gap:10px;align-items:center;margin:10px 0 6px;flex-wrap:wrap"><span>Observers per polling unit</span><select class="fi" style="width:auto;margin:0;flex:none" onchange="BLK.per=+this.value;render()">${[1, 2, 3, 4, 5].map((n) => `<option value="${n}" ${BLK.per == n ? "selected" : ""}>${n}${n == 2 ? " (recommended)" : ""}</option>`).join("")}</select></div>
           <div class="muted" style="margin-bottom:8px"><b>${plan.units}</b> polling unit${plan.units == 1 ? "" : "s"} → <b>${plan.codes}</b> new code${plan.codes == 1 ? "" : "s"}${plan.topped ? ` · ${plan.topped} unit${plan.topped == 1 ? " already has" : "s already have"} observers and only get what is missing` : ""}</div>
           ${blkOffForm()}
-          <button class="btn btn-primary" ${(plan.codes || blkOffs().length) && !BLK.busy ? "" : "disabled"} onclick="blkGo()"><i class="fas fa-key"></i> Generate ${plan.codes} code${plan.codes == 1 ? "" : "s"}</button>`;
+          <button class="btn btn-primary" ${(plan.codes || blkOffs().length) && !blkMissing().length && !BLK.busy ? "" : "disabled"} onclick="blkGo()"><i class="fas fa-key"></i> Generate ${plan.codes} code${plan.codes == 1 ? "" : "s"}</button>`;
       }
       async function blkGo() {
         BLK.busy = true;
