@@ -501,15 +501,16 @@ test("zone rooms: a senator's or rep's room covers only its chosen LGAs; an LGA 
     ok(await api("observer/tally", { tok: t, body: { party: "LP", v } }));
   }
   // an LGA chairman's room inside the zone, and one outside it
-  const lgaRoom = async (lga, v) => {
-    const rm = ok(await api("rooms", { tok: C, body: { kind: "lga", name: lga + " LGA Situation Room", scope: lga } }));
+  const lgaRoom = async (lga, v, kind = "lga") => {
+    const rm = ok(await api("rooms", { tok: C, body: { kind, name: lga + " room", scope: lga } }));
     ok(await api("rooms/" + rm.id + "/status", { tok: C, body: { status: "active" } }));
     const T = ok(await api("login/room", { body: { id: rm.id, pass: rm.passcode } })).token;
     const code = ok(await api("room/obs", { tok: T, body: { state: "Bauchi", lga, ward: "W2", pu: "009", reg: 5000, name: "o" } })).code;
     const t = ok(await api("login/observer", { body: { code, pin: "1234", device: "dev-" + code + "-0123456789abcdef" } })).token;
     ok(await api("observer/tally", { tok: t, body: { party: "LP", v } }));
   };
-  await lgaRoom("Dass", 100);
+  await lgaRoom("Dass", 100, "senate"); // another senatorial room covering Dass: the same election, so it adds up
+  await lgaRoom("Dass", 5000); // an LGA-chairman room at Dass is a different election: never added in
   await lgaRoom("Katagum", 1000);
   // the zone room: its own observers, then its whole zone (the Dass chairman's room too) - never Katagum
   assert.equal(ok(await api("collation", { tok: R })).sum.totals.LP, 42);
@@ -639,4 +640,36 @@ test("marketing: same device coming back is told apart from a link shared with o
   assert.deepEqual(rec.map((r) => r.devno), [1, 1, 1, 2]);
   assert.ok(st.total.devices >= 3 && st.total.repeats >= 3);
   assert.equal((await api("pitch/view", { body: { ref: "x", vid: "short" } })).s, 200, "a malformed id is ignored, not rejected");
+});
+
+test("elections: Governor / Presidential rooms cover the whole state; contests are never mixed or reconciled together", async () => {
+  const inv = ok(await api("tenants", { tok: S.A, body: { name: "Contest Test", state: "Taraba" } }));
+  const C = ok(await api("login/command", { body: { user: inv.operator, pass: inv.passcode } })).token;
+  const mkRoom = async (kind, scope) => {
+    const rm = ok(await api("rooms", { tok: C, body: { name: kind + " room", kind, scope } }));
+    ok(await api("rooms/" + rm.id + "/status", { tok: C, body: { status: "active" } }));
+    return { id: rm.id, R: ok(await api("login/room", { body: { id: rm.id, pass: rm.passcode } })).token };
+  };
+  const gov = await mkRoom("governor", "Jalingo, Wukari"), pres = await mkRoom("president", "");
+  const rooms = ok(await api("rooms", { tok: C }));
+  assert.deepEqual(rooms.map((r) => [r.kind, r.scope]).sort(), [["governor", ""], ["president", ""]], "whole-state contests ignore any LGAs sent");
+  assert.equal((await api("rooms", { tok: C, body: { name: "x", kind: "dictator" } })).s, 400, "an unknown election type is refused");
+  // an observer of each contest at the SAME polling unit, reporting different figures
+  const obs = async (room, v) => {
+    const code = ok(await api("room/obs", { tok: room.R, body: { state: "Taraba", lga: "Jalingo", ward: "W1", pu: "001", reg: 5000, name: "o" } })).code;
+    const t = ok(await api("login/observer", { body: { code, pin: "1234", device: "dev-" + code + "-0123456789abcdef" } })).token;
+    ok(await api("observer/tally", { tok: t, body: { party: "APC", v } }));
+  };
+  await obs(gov, 100);
+  await obs(pres, 700);
+  const all = ok(await api("pus", { tok: C }));
+  assert.equal(all.count, 2, "one entry per contest at the same unit");
+  assert.ok(all.items.every((x) => x.status == "single"), "different contests are not reconciled against each other (no false dispute)");
+  assert.deepEqual(all.items.map((x) => x.contest).sort(), ["governor", "president"]);
+  const g = ok(await api("collation?contest=governor", { tok: C })), p = ok(await api("collation?contest=president", { tok: C }));
+  assert.deepEqual([g.sum.totals.APC, p.sum.totals.APC], [100, 700]);
+  assert.deepEqual(ok(await api("collation", { tok: C })).contests.sort(), ["governor", "president"]);
+  // a room's whole-state view only adds its own kind of election
+  assert.equal(ok(await api("collation?pool=1", { tok: gov.R })).sum.totals.APC, 100);
+  assert.equal(ok(await api("collation?pool=1", { tok: pres.R })).sum.totals.APC, 700);
 });

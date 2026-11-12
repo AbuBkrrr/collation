@@ -24,11 +24,14 @@ app.post(
       return res.status(400).json({ error: "Name and valid state required" });
     // Who the room is for decides how many LGAs it covers: an LGA chairman has exactly one; a senator
     // (senatorial district), a House of Reps member (federal constituency) or a custom zone has a chosen set.
-    const KINDS = ["lga", "senate", "reps", "zone"],
+    const KINDS = ["lga", "governor", "president", "senate", "reps", "zone"],
       kind = KINDS.includes(b.kind) ? b.kind : null,
-      lgas = [...new Set(String(b.scope || "").split(",").map((x) => x.trim()).filter(Boolean))];
+      badKind = b.kind && !kind,
+      whole = kind == "governor" || kind == "president", // a whole-state contest: no LGAs to choose
+      lgas = whole ? [] : [...new Set(String(b.scope || "").split(",").map((x) => x.trim()).filter(Boolean))];
+    if (badKind) return res.status(400).json({ error: "Unknown election type" });
     if (kind == "lga" && lgas.length != 1) return res.status(400).json({ error: "An LGA room covers exactly one LGA" });
-    if (kind && kind != "lga" && !lgas.length) return res.status(400).json({ error: "Choose the LGAs this zone covers" });
+    if (kind && kind != "lga" && !whole && !lgas.length) return res.status(400).json({ error: "Choose the LGAs this zone covers" });
     if (lgas.length) {
       // where the state's LGA list is loaded, every chosen LGA must be one of that state's
       const known = (await q("select distinct lga from locations where state=$1", [b.state])).map((x) => x.lga.toLowerCase());
