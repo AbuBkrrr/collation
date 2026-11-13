@@ -67,17 +67,18 @@ const A = {
     await loadScript("/vendor/livekit-client.umd.js");
     const { Room, RoomEvent, Track } = LivekitClient,
       r = await A.post("livekit/token", { code }),
-      room = new Room({ adaptiveStream: true, dynacast: true });
+      room = new Room({ adaptiveStream: true, dynacast: true, audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
     room.on(RoomEvent.TrackSubscribed, (t) => {
       if (t.kind == Track.Kind.Video || t.kind == Track.Kind.Audio) t.attach(el);
     });
     await room.connect(r.url, r.token);
     room.startAudio().catch(() => {}); // make sure the observer's sound plays, not only the picture
-    A.pcs[code] = { close: () => room.disconnect() };
-    if (talk)
-      await room.localParticipant
-        .setMicrophoneEnabled(true)
-        .catch(() => toast("Microphone unavailable — listen only"));
+    A.pcs[code] = { close: () => room.disconnect(), talk: !!talk, setMic: (on) => room.localParticipant.setMicrophoneEnabled(on).catch(() => {}) };
+    // two-way audio starts MUTED: the microphone is open only while the operator holds the talk button
+    if (talk) {
+      await room.localParticipant.setMicrophoneEnabled(true).catch(() => toast("Microphone unavailable — listen only"));
+      await room.localParticipant.setMicrophoneEnabled(false).catch(() => {});
+    }
     if (!room.remoteParticipants.size) toast("Connected — waiting for the observer to start streaming…");
   },
   async watch(code, el, talk) {
@@ -88,9 +89,11 @@ const A = {
     pc.addTransceiver("video", { direction: "recvonly" });
     if (talk) {
       try {
-        mic = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mic.getTracks().forEach((t) => pc.addTrack(t, mic));
+        mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+        mic.getTracks().forEach((t) => ((t.enabled = false), pc.addTrack(t, mic))); // muted until the talk button is held
         pc.mic = mic;
+        pc.talk = true;
+        pc.setMic = (on) => mic.getAudioTracks().forEach((t) => (t.enabled = on));
       } catch {
         toast("Microphone unavailable — listen only");
       }
@@ -423,10 +426,34 @@ const vv = document.createElement("video");
 vv.autoplay = true;
 vv.playsInline = true;
 vv.style.cssText = "width:100%;height:100%;object-fit:cover";
+// hold-to-talk: while talking, the observer's sound is muted on this PC, so a phone next to the PC cannot feed back
+async function pttDown() {
+  if (!SEL) return;
+  if (!A.pcs[SEL]?.talk) await A.watch(SEL, vv, true).catch(() => {});
+  const c = A.pcs[SEL];
+  if (!c?.talk) return;
+  vv.muted = true;
+  c.setMic(true);
+  document.getElementById("pttb")?.classList.add("btn-danger");
+}
+function pttUp() {
+  const c = A.pcs[SEL];
+  if (c?.talk) c.setMic(false);
+  vv.muted = !LISTEN;
+  document.getElementById("pttb")?.classList.remove("btn-danger");
+}
+let LISTEN = true;
+function toggleListen() {
+  LISTEN = !LISTEN;
+  vv.muted = !LISTEN;
+  const b = document.getElementById("listenb");
+  if (b) b.innerHTML = LISTEN ? '<i class="fas fa-volume-high"></i> Sound on' : '<i class="fas fa-volume-xmark"></i> Sound off';
+  toast(LISTEN ? "🔊 Listening to the observer" : "🔇 Observer sound off — use this when the observer is in the same room as this PC");
+}
 function cardFeed(ro) {
   const o = DATA.obs.find((x) => x.code == SEL);
   return `<div class="card"><div class="card-header"><h3><i class="fas fa-video"></i> Live Video Feed</h3><span class="tag">${o ? esc(o.code) + " · " + esc(o.lga) + " · PU " + esc(o.pu) + " · " + (o.streaming ? "🔴 streaming" : o.live_req ? "⏳ live requested" : "not streaming") : "Select an observer"}</span></div><div class="video-container" id="vslot">${o ? "" : '<span style="opacity:.6">Click an observer marker or row</span>'}</div>
-${o && !ro ? `<div class="video-controls">${o.live_req ? `<button class="btn btn-danger" onclick="liveReq(SEL,false)"><i class="fas fa-video-slash"></i> End live video</button>` : `<button class="btn btn-danger" onclick="liveReq(SEL,true)"><i class="fas fa-video"></i> Request live video</button>`}<button class="btn btn-success" onclick="A.watch(SEL,vv,false)"><i class="fas fa-play"></i> Watch</button><button class="btn btn-outline" onclick="A.watch(SEL,vv,true)"><i class="fas fa-microphone"></i> Talkback (2-way audio)</button><button class="btn btn-outline" onclick="A.unwatch(SEL);vv.srcObject=null"><i class="fas fa-stop"></i> Stop</button><button class="btn btn-outline" onclick="msgTo('obs:'+SEL,'Please save your clip now','save')"><i class="fas fa-record-vinyl"></i> Save 60s Clip</button><button class="btn btn-outline" onclick="snapshot()"><i class="fas fa-camera"></i> Snapshot</button>${CFG.lk ? '<button class="btn btn-outline" onclick="restream()"><i class="fas fa-tower-broadcast"></i> Restream (YouTube/FB)</button><button class="btn btn-outline" onclick="restreamStop()">Stop restream</button>' : ""}<div class="share-dropdown"><button class="btn btn-primary" onclick="event.stopPropagation();$('#sm').classList.toggle('show')"><i class="fas fa-share-nodes"></i> Share Feed</button><div class="share-menu" id="sm">${["CP Command", "INEC", "NSCDC", "Dispatch", "Command Center"].map((x) => `<div onclick="shareTo('${x}')">${x}</div>`).join("")}</div></div></div>` : ""}</div>`;
+${o && !ro ? `<div class="video-controls">${o.live_req ? `<button class="btn btn-danger" onclick="liveReq(SEL,false)"><i class="fas fa-video-slash"></i> End live video</button>` : `<button class="btn btn-danger" onclick="liveReq(SEL,true)"><i class="fas fa-video"></i> Request live video</button>`}<button class="btn btn-success" onclick="A.watch(SEL,vv,false)"><i class="fas fa-play"></i> Watch</button><button class="btn btn-outline" id="pttb" onpointerdown="event.preventDefault();pttDown()" onpointerup="pttUp()" onpointerleave="pttUp()" oncontextmenu="return false" title="Hold to talk to the observer"><i class="fas fa-microphone"></i> Hold to talk</button><button class="btn btn-outline" id="listenb" onclick="toggleListen()">${LISTEN ? '<i class="fas fa-volume-high"></i> Sound on' : '<i class="fas fa-volume-xmark"></i> Sound off'}</button><button class="btn btn-outline" onclick="A.unwatch(SEL);vv.srcObject=null"><i class="fas fa-stop"></i> Stop</button><button class="btn btn-outline" onclick="msgTo('obs:'+SEL,'Please save your clip now','save')"><i class="fas fa-record-vinyl"></i> Save 60s Clip</button><button class="btn btn-outline" onclick="snapshot()"><i class="fas fa-camera"></i> Snapshot</button>${CFG.lk ? '<button class="btn btn-outline" onclick="restream()"><i class="fas fa-tower-broadcast"></i> Restream (YouTube/FB)</button><button class="btn btn-outline" onclick="restreamStop()">Stop restream</button>' : ""}<div class="share-dropdown"><button class="btn btn-primary" onclick="event.stopPropagation();$('#sm').classList.toggle('show')"><i class="fas fa-share-nodes"></i> Share Feed</button><div class="share-menu" id="sm">${["CP Command", "INEC", "NSCDC", "Dispatch", "Command Center"].map((x) => `<div onclick="shareTo('${x}')">${x}</div>`).join("")}</div></div></div>` : ""}</div>`;
 }
 // on-demand video: the observer phone starts its camera when asked and stops when ended (saves data + battery)
 async function liveReq(code, on) {
@@ -772,8 +799,13 @@ const tabData = () =>
 const tabAudit = () =>
   `<div class="card"><div class="card-header"><h3><i class="fas fa-clipboard-list"></i> Audit Log</h3></div><div class="tw"><table><tr><th>Time</th><th>Who</th><th>Action</th></tr>${DATA.aud.map((a) => `<tr><td>${DT(a.ts)}</td><td>${esc(a.who)}</td><td>${esc(a.action)}</td></tr>`).join("")}</table></div></div>`;
 // ---------- shell ----------
-async function loadAll() {
+// bg = a background refresh (socket push / timer): the heavy admin data is refreshed at most once a minute, and
+// nothing is redrawn when the live data has not changed. A deliberate reload (after an action) refreshes everything.
+let LASTSIG = "";
+async function loadAll(bg) {
   const g = (p) => A.get(p).catch(() => []);
+  const heavy = !bg || !DATA._h || Date.now() - DATA._h > 60000;
+  if (heavy) DATA._h = Date.now();
   [DATA.obs, DATA.inc, DATA.msg, DATA.con, DATA.units] = await Promise.all([
     g("obs"),
     g("incidents"),
@@ -781,17 +813,20 @@ async function loadAll() {
     g("contacts"),
     g("units"),
   ]);
-  if (A.role == "cmd")
-    [DATA.rooms, DATA.clips, DATA.bc, DATA.aud, DATA.set, DATA.cu, DATA.tn] = await Promise.all([
-      g("rooms"),
-      g("clips"),
-      g("broadcasts"),
-      g("audit"),
-      g("settings"),
-      g("cmdusers"),
-      ME.su ? g("tenants") : [],
-    ]);
-  else [DATA.radio, DATA.clips] = await Promise.all([g("radio"), g("clips")]);
+  if (A.role == "cmd") DATA.rooms = await g("rooms");
+  if (heavy) {
+    if (A.role == "cmd")
+      [DATA.clips, DATA.bc, DATA.aud, DATA.set, DATA.cu, DATA.tn] = await Promise.all([
+        g("clips"),
+        g("broadcasts"),
+        g("audit"),
+        g("settings"),
+        g("cmdusers"),
+        ME.su ? g("tenants") : [],
+      ]);
+    else DATA.clips = await g("clips");
+  }
+  if (A.role == "room") DATA.radio = await g("radio");
   if (A.role == "cmd") DATA.radio = await g("radio" + (DRILL ? "?room=" + DRILL : F.radioRoom ? "?room=" + F.radioRoom : ""));
   // listening-post control (on/off, tuning): this room's own, or the room chosen on the Command Center's Radio tab
   {
@@ -799,12 +834,18 @@ async function loadAll() {
     DATA.rctl = A.role == "room" || rr ? await A.get("radio/control" + (rr ? "?room=" + encodeURIComponent(rr) : "")).catch(() => null) : null;
   }
   radioAuto();
-  if (A.role == "cmd") DATA.totp = await A.get("totp").catch(() => ({}));
-  // a Command Center locked to one state: its LGA list, for the room form and the search filters
-  if (A.role == "cmd" && ME.tenantState && !DATA.lgas) DATA.lgas = (await g("locations?state=" + encodeURIComponent(ME.tenantState))).map((x) => x.lga);
-  if (A.role == "cmd" && ME.su) DATA.bk = await A.get("backups").catch(() => null);
-  if (A.role == "cmd" && ME.su) DATA.arch = await A.get("admin/archive").catch(() => null);
-  if (A.role == "cmd" && ME.su) DATA.mkt = await A.get("pitch/stats").catch(() => null);
+  if (heavy) {
+    if (A.role == "cmd") DATA.totp = await A.get("totp").catch(() => ({}));
+    // a Command Center locked to one state: its LGA list, for the room form and the search filters
+    if (A.role == "cmd" && ME.tenantState && !DATA.lgas) DATA.lgas = (await g("locations?state=" + encodeURIComponent(ME.tenantState))).map((x) => x.lga);
+    if (A.role == "cmd" && ME.su) DATA.bk = await A.get("backups").catch(() => null);
+    if (A.role == "cmd" && ME.su) DATA.arch = await A.get("admin/archive").catch(() => null);
+    if (A.role == "cmd" && ME.su) DATA.mkt = await A.get("pitch/stats").catch(() => null);
+  }
+  // unchanged data: do not redraw the whole page (the slow part on weak phones and big elections)
+  const sig = JSON.stringify([DATA.obs, DATA.inc, DATA.msg, DATA.con, DATA.units, DATA.rooms, DATA.radio, DATA.rctl, heavy ? DATA._h : 0]);
+  if (bg && sig == LASTSIG) return;
+  LASTSIG = sig;
   if ($("#collSlot")) loadColl();
   if (TAB == "res" && PUS_) loadPus();
   if (A.role == "room")
@@ -816,7 +857,7 @@ async function loadAll() {
 let dl_;
 const debLoad = () => {
   clearTimeout(dl_);
-  dl_ = setTimeout(loadAll, 300);
+  dl_ = setTimeout(() => loadAll(true), 300);
 };
 function refresh() {
   if (/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
@@ -893,7 +934,7 @@ async function start(role, tabsFn) {
   }
   A.ws((m) => (m.type == "changed" ? debLoad() : A.sig(m)));
   await loadAll();
-  setInterval(() => A.tok && document.visibilityState == "visible" && loadAll(), 20000); // live changes arrive over the socket; this is only a safety net
+  setInterval(() => A.tok && document.visibilityState == "visible" && loadAll(true), 20000); // live changes arrive over the socket; this is only a safety net
 }
 
 // ================= QR credentials: show, print, scan, and sign in by QR =================
