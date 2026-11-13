@@ -230,6 +230,16 @@ Officers are added only in the forms above — there is no separate officers scr
 
 ---
 
+### Talking back: Command Center, Situation Room and observer
+
+On a live feed, hold **Hold to talk**. The **observer** hears you on their phone, and the **other dashboard watching the same feed** (the Situation Room or the Command Center) hears you too. To keep it free of echo:
+- the microphone is open **only while you hold the button**, and everything this dashboard plays is muted while you talk;
+- **only one dashboard can talk at a time** — if the other is speaking, you are told to wait;
+- the observer's phone pauses its own microphone while anyone is speaking to it;
+- **Sound on / off** switches what this dashboard plays. If two dashboards or an observer are in the **same room** (for example when testing), turn **Sound off** on one of them or use headphones — a microphone cannot be made to ignore a speaker standing next to it.
+
+The Situation Room hears the Command Center when it has the same observer's feed open.
+
 ## 5a. Share a live view with people outside the system
 
 Use this for party leadership, a partner organisation, a media desk or a war-room screen — people who

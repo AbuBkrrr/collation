@@ -70,12 +70,32 @@ const A = {
       room = new Room({ adaptiveStream: true, dynacast: true, audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
     // only the observer's own sound is played here. Another dashboard's (or viewer's) talk-back microphone is never
     // played: two PCs side by side would otherwise hear each other's voice with a delay and feed it round and round.
+    // Intercom rules: the observer's sound plays on the video. The Command Center and the Situation Room hear each other's
+    // hold-to-talk voice (their own sound, separately switchable). Shared viewers' microphones are never played here.
     room.on(RoomEvent.TrackSubscribed, (t, pub, p) => {
-      if (t.kind == Track.Kind.Audio && !String(p?.identity || "").startsWith("obs:")) {
+      const id = String(p?.identity || "");
+      if (t.kind == Track.Kind.Audio) {
+        if (id.startsWith("obs:")) return void t.attach(el);
+        if (/^(cmd|room):/.test(id)) {
+          const a = t.attach();
+          a.autoplay = true;
+          a.dataset.ic = "1";
+          a.muted = !LISTEN || !!A.talking;
+          document.body.appendChild(a);
+          a.play().catch(() => {});
+          return;
+        }
         pub?.setSubscribed?.(false);
         return;
       }
-      if (t.kind == Track.Kind.Video || t.kind == Track.Kind.Audio) t.attach(el);
+      if (t.kind == Track.Kind.Video) t.attach(el);
+    });
+    room.on(RoomEvent.TrackUnsubscribed, (t) => {
+      if (t.kind == Track.Kind.Audio) t.detach().forEach((e) => e.dataset.ic && e.remove());
+    });
+    // only one side transmits at a time: while another dashboard is speaking, this one cannot start
+    room.on(RoomEvent.ActiveSpeakersChanged, (sp) => {
+      A.busy = sp.some((s) => s !== room.localParticipant && /^(cmd|room):/.test(String(s.identity)));
     });
     await room.connect(r.url, r.token);
     room.startAudio().catch(() => {}); // make sure the observer's sound plays, not only the picture
@@ -433,33 +453,41 @@ vv.autoplay = true;
 vv.playsInline = true;
 vv.style.cssText = "width:100%;height:100%;object-fit:cover";
 // hold-to-talk: while talking, the observer's sound is muted on this PC, so a phone next to the PC cannot feed back
+// every sound this dashboard plays (the observer, and the other dashboard's voice) is muted while we hold to talk
+function applyMute() {
+  vv.muted = !!A.talking || !LISTEN;
+  document.querySelectorAll("audio[data-ic]").forEach((e) => (e.muted = !!A.talking || !LISTEN));
+}
 async function pttDown() {
   if (!SEL) return;
+  if (A.busy) return toast("🔇 Another dashboard is speaking — wait for them to finish");
   if (!A.pcs[SEL]?.talk) await A.watch(SEL, vv, true).catch(() => {});
   const c = A.pcs[SEL];
   if (!c?.talk) return;
-  vv.muted = true;
+  A.talking = true;
+  applyMute();
   c.setMic(true);
   document.getElementById("pttb")?.classList.add("btn-danger");
 }
 function pttUp() {
   const c = A.pcs[SEL];
   if (c?.talk) c.setMic(false);
-  vv.muted = !LISTEN;
+  A.talking = false;
+  applyMute();
   document.getElementById("pttb")?.classList.remove("btn-danger");
 }
 let LISTEN = true;
 function toggleListen() {
   LISTEN = !LISTEN;
-  vv.muted = !LISTEN;
+  applyMute();
   const b = document.getElementById("listenb");
   if (b) b.innerHTML = LISTEN ? '<i class="fas fa-volume-high"></i> Sound on' : '<i class="fas fa-volume-xmark"></i> Sound off';
-  toast(LISTEN ? "🔊 Listening to the observer" : "🔇 Observer sound off — use this when the observer is in the same room as this PC");
+  toast(LISTEN ? "🔊 Sound on — observer and intercom" : "🔇 Sound off — use this (or headphones) when the observer or another dashboard is in the same room as this PC");
 }
 function cardFeed(ro) {
   const o = DATA.obs.find((x) => x.code == SEL);
   return `<div class="card"><div class="card-header"><h3><i class="fas fa-video"></i> Live Video Feed</h3><span class="tag">${o ? esc(o.code) + " · " + esc(o.lga) + " · PU " + esc(o.pu) + " · " + (o.streaming ? "🔴 streaming" : o.live_req ? "⏳ live requested" : "not streaming") : "Select an observer"}</span></div><div class="video-container" id="vslot">${o ? "" : '<span style="opacity:.6">Click an observer marker or row</span>'}</div>
-${o && !ro ? `<div class="video-controls">${o.live_req ? `<button class="btn btn-danger" onclick="liveReq(SEL,false)"><i class="fas fa-video-slash"></i> End live video</button>` : `<button class="btn btn-danger" onclick="liveReq(SEL,true)"><i class="fas fa-video"></i> Request live video</button>`}<button class="btn btn-success" onclick="A.watch(SEL,vv,false)"><i class="fas fa-play"></i> Watch</button><button class="btn btn-outline" id="pttb" onpointerdown="event.preventDefault();pttDown()" onpointerup="pttUp()" onpointerleave="pttUp()" oncontextmenu="return false" title="Hold to talk to the observer"><i class="fas fa-microphone"></i> Hold to talk</button><button class="btn btn-outline" id="listenb" onclick="toggleListen()">${LISTEN ? '<i class="fas fa-volume-high"></i> Sound on' : '<i class="fas fa-volume-xmark"></i> Sound off'}</button><button class="btn btn-outline" onclick="A.unwatch(SEL);vv.srcObject=null"><i class="fas fa-stop"></i> Stop</button><button class="btn btn-outline" onclick="msgTo('obs:'+SEL,'Please save your clip now','save')"><i class="fas fa-record-vinyl"></i> Save 60s Clip</button><button class="btn btn-outline" onclick="snapshot()"><i class="fas fa-camera"></i> Snapshot</button>${CFG.lk ? '<button class="btn btn-outline" onclick="restream()"><i class="fas fa-tower-broadcast"></i> Restream (YouTube/FB)</button><button class="btn btn-outline" onclick="restreamStop()">Stop restream</button>' : ""}<div class="share-dropdown"><button class="btn btn-primary" onclick="event.stopPropagation();$('#sm').classList.toggle('show')"><i class="fas fa-share-nodes"></i> Share Feed</button><div class="share-menu" id="sm">${["CP Command", "INEC", "NSCDC", "Dispatch", "Command Center"].map((x) => `<div onclick="shareTo('${x}')">${x}</div>`).join("")}</div></div></div>` : ""}</div>`;
+${o && !ro ? `<div class="video-controls">${o.live_req ? `<button class="btn btn-danger" onclick="liveReq(SEL,false)"><i class="fas fa-video-slash"></i> End live video</button>` : `<button class="btn btn-danger" onclick="liveReq(SEL,true)"><i class="fas fa-video"></i> Request live video</button>`}<button class="btn btn-success" onclick="A.watch(SEL,vv,false)"><i class="fas fa-play"></i> Watch</button><button class="btn btn-outline" id="pttb" onpointerdown="event.preventDefault();pttDown()" onpointerup="pttUp()" onpointerleave="pttUp()" oncontextmenu="return false" title="Hold to talk — the observer and the other dashboard watching this feed hear you"><i class="fas fa-microphone"></i> Hold to talk</button><button class="btn btn-outline" id="listenb" onclick="toggleListen()">${LISTEN ? '<i class="fas fa-volume-high"></i> Sound on' : '<i class="fas fa-volume-xmark"></i> Sound off'}</button><button class="btn btn-outline" onclick="A.unwatch(SEL);vv.srcObject=null"><i class="fas fa-stop"></i> Stop</button><button class="btn btn-outline" onclick="msgTo('obs:'+SEL,'Please save your clip now','save')"><i class="fas fa-record-vinyl"></i> Save 60s Clip</button><button class="btn btn-outline" onclick="snapshot()"><i class="fas fa-camera"></i> Snapshot</button>${CFG.lk ? '<button class="btn btn-outline" onclick="restream()"><i class="fas fa-tower-broadcast"></i> Restream (YouTube/FB)</button><button class="btn btn-outline" onclick="restreamStop()">Stop restream</button>' : ""}<div class="share-dropdown"><button class="btn btn-primary" onclick="event.stopPropagation();$('#sm').classList.toggle('show')"><i class="fas fa-share-nodes"></i> Share Feed</button><div class="share-menu" id="sm">${["CP Command", "INEC", "NSCDC", "Dispatch", "Command Center"].map((x) => `<div onclick="shareTo('${x}')">${x}</div>`).join("")}</div></div></div>` : ""}</div>`;
 }
 // on-demand video: the observer phone starts its camera when asked and stops when ended (saves data + battery)
 async function liveReq(code, on) {
