@@ -206,6 +206,8 @@ A third officer, **Collation Officer 3**, sits at **state** level and oversees a
 
 Each officer gets a **code and passcode with a QR sign-in** (shown once; *QR / Reset* issues a new one). They sign in at `/officer/` or in the **Collation Officer** Android app.
 
+**Reviewing results.** Each polling unit shows its status (Waiting, One observer, Matched, **Disputed**, Resolved), **every observer's own figures side by side**, registered / accredited voters, warnings (more votes than accredited, differing voter counts) and the **EC8A sheet photos**. A disputed unit says so, so the officer can compare the figures and the sheet before using **Correct once**. The ward, LGA and state officers see a **Review polling units** button on each ward, LGA or state line to open its polling units, worst first.
+
 **What an officer does** (sees only their own ward / LGA / state):
 - **Report A — Reported tallies.** The figures coming up from below (polling units for a ward officer, wards for the LGA officer, LGAs for the state officer). For each unit the officer presses **Confirm as reported**, or **Correct once** and types the right figures. Either can be done **only once** per unit. A ward officer's confirmed or corrected polling-unit figure is the one the LGA and state officers see.
 - **Report B — Physical results.** When the boxes / result sheets physically arrive at the ward, LGA or state collation centre, the officer enters the figures (and number of boxes). The app shows at once whether Report B **matches** Report A or which parties **differ**.

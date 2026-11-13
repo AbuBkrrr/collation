@@ -307,10 +307,14 @@ app.get(
 );
 app.get(
   "/api/ec8a/:id/file",
-  auth("cmd", "room"),
+  auth("cmd", "room", "officer"),
   h(async (req, res) => {
     const [x] = await q("select * from ec8a where id=$1", [+req.params.id || 0]);
     if (!x || (req.u.role == "room" && x.room_id != req.u.id)) return res.sendStatus(404);
+    if (req.u.role == "officer") {
+      const o = req.u.off;
+      if ((o.state && o.state != x.state) || (o.lga && o.lga != x.lga) || (o.ward && o.ward != x.ward)) return res.sendStatus(404);
+    }
     res.sendFile(x.path);
   }),
 );

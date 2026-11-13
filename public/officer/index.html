@@ -63,12 +63,50 @@
         ${list.length ? list.map((u, i) => (OTAB == "a" ? cardA(u) : cardB(u))).join("") : `<div class="card muted">${D.units.length ? "No match for your search." : "No " + OUNIT[OFFI.level] + " are listed for your area yet. The state's polling-unit list must be loaded (platform administrator → Locations tab), then tap refresh."}</div>`}</div>`;
       }
       const CONTEST = { lga: "LGA chairman", governor: "Governor", president: "Presidential", senate: "Senate", reps: "House of Reps", zone: "Zone", general: "" };
+      const ST = { pending: ["Waiting", "#a0aec0"], single: ["One observer", "#d69e2e"], partial: ["Incomplete", "#d69e2e"], matched: ["Matched", "#38a169"], disputed: ["Disputed", "#e53e3e"], resolved: ["Resolved", "#2b6cb0"] };
+      const chip = (k, n) => `<span style="display:inline-block;background:${ST[k][1]};color:#fff;font-size:11px;font-weight:700;border-radius:10px;padding:2px 9px;margin:2px 3px 2px 0">${ST[k][0]}${n != null ? " · " + n : ""}</span>`;
+      const stChips = (st) => ["disputed", "partial", "single", "pending", "matched", "resolved"].filter((k) => st && st[k]).map((k) => chip(k, st[k])).join("");
+      // one polling unit, in full: every observer's own figures, voter counts, flags, the EC8A sheets
+      const puDetail = (d) => `<div style="margin-top:8px;border-top:1px solid #edf2f7;padding-top:8px">
+        <div>${chip(d.status)}${d.anomaly ? '<span style="display:inline-block;background:#c53030;color:#fff;font-size:11px;font-weight:700;border-radius:10px;padding:2px 9px">⚠ more votes than accredited</span>' : ""}${d.sheetConflict ? '<span style="display:inline-block;background:#dd6b20;color:#fff;font-size:11px;font-weight:700;border-radius:10px;padding:2px 9px;margin-left:3px">⚠ voter counts differ</span>' : ""}</div>
+        ${d.obs.length ? d.obs.map((o) => `<div style="margin:6px 0;font-size:13px"><b>${esc(o.name || o.code)}</b>${o.name ? ` <span class="muted mono" style="font-size:11px">${esc(o.code)}</span>` : ""}<br>${Object.keys(o.t || {}).length ? Object.entries(o.t).map(([p, v]) => `<span class="badge" style="margin:1px"><b>${esc(p)}</b> ${typeof v == "object" ? v.v : v}</span>`).join("") : '<span class="muted">no figures sent</span>'}</div>`).join("") : '<div class="muted" style="font-size:13px;margin:6px 0">No observer has sent anything from this polling unit yet.</div>'}
+        <div class="muted" style="font-size:12px">${d.reg != null ? "Registered voters " + d.reg : ""}${d.acc != null ? " · Accredited " + d.acc : ""}</div>
+        ${d.photos.length ? d.photos.map((id, i) => `<button class="btn btn-sm btn-outline" style="margin:4px 4px 0 0" onclick="viewSheet(${id})"><i class="fas fa-image"></i> EC8A sheet ${i + 1}</button>`).join("") : '<div class="muted" style="font-size:12px;margin-top:4px">No EC8A sheet photo yet.</div>'}</div>`;
+      async function viewSheet(id) {
+        try {
+          const b = await A.get("ec8a/" + id + "/file"),
+            w = document.createElement("div");
+          w.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:9500;display:flex;flex-direction:column;align-items:center;padding:12px;overflow:auto";
+          w.innerHTML = `<button class="btn btn-outline" style="background:#fff;margin-bottom:10px" id="vs_x">Close</button><img src="${URL.createObjectURL(b)}" style="max-width:100%;height:auto;border-radius:8px">`;
+          document.body.appendChild(w);
+          w.querySelector("#vs_x").onclick = () => w.remove();
+        } catch (e) {
+          toast("❌ " + e.message);
+        }
+      }
+      // all the polling units under a ward / LGA / state, worst first
+      async function reviewPUs(k) {
+        const u = U(k);
+        try {
+          const rows = await A.get("officer/pus?key=" + encodeURIComponent(k)),
+            w = document.createElement("div");
+          w.style.cssText = "position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:9000;display:flex;align-items:flex-start;justify-content:center;padding:12px;overflow:auto";
+          w.innerHTML = `<div class="card" style="max-width:640px;width:100%;margin:auto"><div class="card-header"><h3>${esc(u.label)} — polling units (${rows.length})</h3></div>${rows.length ? rows.map((d) => `<details style="border-bottom:1px solid #edf2f7;padding:6px 0"${d.status == "disputed" ? " open" : ""}><summary style="cursor:pointer"><b>${esc(OFFI.level == "ward" ? "" : d.ward + " · ")}PU ${esc(d.pu)}${d.pu_name ? " · " + esc(d.pu_name) : ""}</b> ${chip(d.status)} <span class="muted">${d.total ? d.total + " votes" : ""}</span></summary>${puDetail(d)}</details>`).join("") : '<div class="muted">No observers have reported here yet.</div>'}<button class="btn btn-outline" style="margin-top:12px" id="rp_x">Close</button></div>`;
+          document.body.appendChild(w);
+          w.querySelector("#rp_x").onclick = () => w.remove();
+        } catch (e) {
+          toast("❌ " + e.message);
+        }
+      }
       const kid = (k) => esc(k).replace(/'/g, "&#39;");
       function cardA(u) {
         const m = u.mine;
         return `<div class="card"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>${esc(u.label)}</b><span class="muted">${esc(CONTEST[u.contest] ?? u.contest ?? "")}</span></div>
         <div class="muted" style="font-size:12px">${u.reporting}/${u.pus} polling units reporting${u.disputed ? " · " + u.disputed + " disputed" : ""}${u.verified ? " · " + u.verified + " verified" : ""}${u.pu?.wardConf ? "" : ""}</div>
+        <div>${stChips(u.st)}${u.anom ? chip("disputed", null).replace("Disputed", "⚠ " + u.anom + " over-vote" + (u.anom == 1 ? "" : "s")).replace("#e53e3e", "#c53030") : ""}</div>
         <div style="margin:6px 0">${figs(u.fig)} <b>= ${u.total}</b></div>
+        ${u.pu?.det?.status == "disputed" ? '<div style="color:#c53030;font-size:13px;margin:4px 0">Observers disagree — compare their figures below and the EC8A sheet, then use <b>Correct once</b> with the right figures.</div>' : ""}
+        ${u.pu ? puDetail(u.pu.det) : `<button class="btn btn-sm btn-outline" style="margin:4px 0" onclick="reviewPUs('${kid(u.key)}')"><i class="fas fa-list-check"></i> Review polling units</button>`}
         ${m ? `<div style="background:#f0fff4;border:1px solid #9ae6b4;border-radius:8px;padding:8px;font-size:13px">✓ You ${m.act == "confirm" ? "confirmed" : "corrected"} this ${new Date(m.ts).toLocaleString()}${m.act == "correct" ? "<br>Your figures: " + figs(m.fig) : ""}</div>` : `<div id="cf_${btoa(u.key).replace(/=/g, "")}"><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary" ${u.total || sum(u.fig) ? "" : "disabled"} onclick="confirmU('${kid(u.key)}')">✓ Confirm as reported</button><button class="btn btn-outline" onclick="corrU('${kid(u.key)}')">✎ Correct once</button></div></div>`}</div>`;
       }
       function cardB(u) {

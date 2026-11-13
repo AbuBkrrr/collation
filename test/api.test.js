@@ -983,3 +983,42 @@ test("platform administrator lists the rooms of every other Command Center (and 
   assert.ok(all.every((r) => r.tenant != "CC-MAIN"), "the administrator's own centre is not repeated");
   assert.equal((await api("admin/rooms?tenant=others", { tok: C })).s, 403, "a client cannot list other centres' rooms");
 });
+
+test("officers can review results properly: each observer's own figures, disputes, and the polling units under a ward / LGA", async () => {
+  const c = new Client({ connectionString: DB });
+  await c.connect();
+  await c.query("insert into locations(state,lga,ward,pu,reg,name) values('Yobe','Damaturu','Ward 1','001',500,'Market School'),('Yobe','Damaturu','Ward 1','002',500,'Clinic')");
+  await c.end();
+  const inv = ok(await api("tenants", { tok: S.A, body: { name: "Review CC", state: "Yobe", officer: { name: "Yobe State Officer" } } }));
+  const C = ok(await api("login/command", { body: { user: inv.operator, pass: inv.passcode } })).token;
+  const rm = ok(await api("rooms", { tok: C, body: { name: "Damaturu", kind: "lga", scope: "Damaturu", officer: { name: "Damaturu LGA Officer" } } }));
+  ok(await api("rooms/" + rm.id + "/status", { tok: C, body: { status: "active" } }));
+  const R = ok(await api("login/room", { body: { id: rm.id, pass: rm.passcode } })).token;
+  const units = ok(await api("locations/units?state=Yobe&lgas=Damaturu", { tok: R })).map(({ lga, ward, pu }) => ({ lga, ward, pu }));
+  const made = ok(await api("room/obs/bulk", { tok: R, body: { per: 2, units, officers: [{ lga: "Damaturu", ward: "Ward 1", name: "Ward 1 Officer" }] } }));
+  const o1 = made.created.filter((x) => x.pu == "001");
+  const tk = async (o) => ok(await api("login/observer", { body: { code: o.code, pin: "1234", device: "dev-" + o.code + "-0123456789abcdef" } })).token;
+  const [a, b] = [await tk(o1[0]), await tk(o1[1])];
+  ok(await api("observer/tally", { tok: a, body: { party: "APC", v: 100 } }));
+  ok(await api("observer/tally", { tok: b, body: { party: "APC", v: 90 } }));
+  const wo = made.officers[0],
+    W = ok(await api("login/officer", { body: { code: wo.code, pass: wo.passcode } })).token,
+    wu = ok(await api("officer/units", { tok: W })).units,
+    pu1 = wu.find((u) => u.label.endsWith("001"));
+  assert.equal(pu1.pu.det.status, "disputed");
+  assert.deepEqual(pu1.pu.det.obs.map((o) => o.t.APC.v ?? o.t.APC).sort((x, y) => x - y), [90, 100], "both observers' own figures are visible");
+  assert.equal(pu1.st.disputed, 1);
+  assert.equal(pu1.pu.det.reg, 500);
+  // the LGA officer drills from a ward into its polling units, worst first
+  const lo = ok(await api("officers", { tok: C, body: { level: "lga", name: "Dam LGA Review Officer", lga: "Damaturu" } })),
+    L = ok(await api("login/officer", { body: { code: lo.code, pass: lo.passcode } })).token,
+    ward = ok(await api("officer/units", { tok: L })).units.find((u) => u.label == "Ward 1"),
+    rows = ok(await api("officer/pus?key=" + encodeURIComponent(ward.key), { tok: L }));
+  assert.deepEqual(rows.map((r) => [r.pu, r.status]), [["001", "disputed"], ["002", "pending"]]);
+  assert.equal(rows[0].obs.length, 2);
+  // an officer of another area gets nothing from someone else's ward
+  const other = ok(await api("officers", { tok: C, body: { level: "ward", name: "Other Ward Officer", lga: "Damaturu", ward: "Ward 9" } })),
+    OT = ok(await api("login/officer", { body: { code: other.code, pass: other.passcode } })).token;
+  assert.deepEqual(ok(await api("officer/pus?key=" + encodeURIComponent(ward.key), { tok: OT })), []);
+  assert.equal((await api("officer/pus?key=x", { tok: R })).s, 403, "only officers use this");
+});

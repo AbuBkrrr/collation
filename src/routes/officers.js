@@ -124,11 +124,48 @@ const sum = (l) => {
 };
 // Report A — every unit under this officer: polling units (ward officer), wards (LGA officer), LGAs (state officer).
 // A polling-unit figure a ward officer has already confirmed/corrected is the one the levels above collect.
-async function fetchUnits(req) {
-  const o = req.u.off,
-    f = o.level == "federal" ? {} : { state: o.state };
+// everything an officer needs to judge one polling unit: each observer's own figures, the sheet photos, the voter counts, the flags
+const detail = (x) => ({
+  key: x.key,
+  pu: x.pu,
+  pu_name: x.pu_name,
+  ward: x.ward,
+  lga: x.lga,
+  contest: x.contest,
+  status: x.status,
+  fig: x.fig || null,
+  total: x.total || 0,
+  reg: x.reg ?? null,
+  acc: x.acc ?? null,
+  anomaly: !!x.anomaly,
+  sheetConflict: !!x.sheetConflict,
+  obs: (x.obs || []).map((o) => ({ name: o.name, code: o.code, t: o.t })),
+  photos: (x.photos || []).map((p) => p.id),
+});
+const scopeFilter = (o) => {
+  const f = o.level == "federal" ? {} : { state: o.state };
   if (o.lga) f.lga = o.lga;
   if (o.ward) f.ward = o.ward;
+  return f;
+};
+// the polling units under one unit of the officer's own list (a ward for the LGA officer, an LGA for the state officer ...)
+app.get("/api/officer/pus", auth("officer"), h(async (req, res) => {
+  const o = req.u.off,
+    key = String(req.query.key || ""),
+    [kind, rest] = [key.split(":")[0], key.slice(key.indexOf(":") + 1)],
+    p = rest.split("|"),
+    all = await puList({ role: "cmd", tn: req.u.tn, id: "officer" }, scopeFilter(o)),
+    pick = (x) =>
+      kind == "ward" ? x.state == p[0] && x.lga == p[1] && x.ward == p[2] && (!p[3] || x.contest == p[3])
+      : kind == "lga" ? x.state == p[0] && x.lga == p[1] && (!p[2] || x.contest == p[2])
+      : kind == "state" ? x.state == p[0] && (!p[1] || x.contest == p[1])
+      : false,
+    rank = { disputed: 0, partial: 1, single: 2, pending: 3, matched: 4, resolved: 5 };
+  res.json(all.filter(pick).sort((a, b) => (rank[a.status] ?? 9) - (rank[b.status] ?? 9) || String(a.ward).localeCompare(b.ward) || String(a.pu).localeCompare(String(b.pu), undefined, { numeric: true })).slice(0, 500).map(detail));
+}));
+async function fetchUnits(req) {
+  const o = req.u.off,
+    f = scopeFilter(o);
   const pus = await puList({ role: "cmd", tn: req.u.tn, id: "officer" }, f),
     pc = await q("select c.ckey,c.act,c.fig,c.ts,o.name,o.level from officer_confirms c join officers o on o.id=c.officer_id where o.level='ward'"),
     PC = Object.fromEntries(pc.map((c) => [c.ckey.replace(/^pu:/, ""), c])),
@@ -139,11 +176,13 @@ async function fetchUnits(req) {
   const eff = (x) => (PC[x.key] ? PC[x.key].fig : x.fig); // wards' confirmed figure wins over the raw observer figure
   const units = {};
   const add = (key, label, x) => {
-    const u = (units[key] = units[key] || { key, label, contest: x.contest, state: x.state, lga: x.lga, ward: x.ward, pus: 0, reporting: 0, disputed: 0, verified: 0, figs: [], pu: null });
+    const u = (units[key] = units[key] || { key, label, contest: x.contest, state: x.state, lga: x.lga, ward: x.ward, pus: 0, reporting: 0, disputed: 0, verified: 0, st: {}, anom: 0, figs: [], pu: null });
     u.pus++;
     if (x.fig || PC[x.key]) u.reporting++;
     if (x.status == "disputed") u.disputed++;
     if (x.verified) u.verified++;
+    u.st[x.status] = (u.st[x.status] || 0) + 1;
+    if (x.anomaly) u.anom++;
     u.figs.push(eff(x));
     return u;
   };
@@ -151,7 +190,7 @@ async function fetchUnits(req) {
     const ck = x.contest;
     if (o.level == "ward") {
       const u = add("pu:" + x.key, (x.pu_name || x.pu) + " · " + x.pu, x);
-      u.pu = { code: x.pu, status: x.status, obs: x.obs.length, anomaly: x.anomaly, ec8a: x.ec8a, wardConf: PC[x.key] ? { by: PC[x.key].name, act: PC[x.key].act } : null, raw: x.fig };
+      u.pu = { code: x.pu, status: x.status, obs: x.obs.length, anomaly: x.anomaly, ec8a: x.ec8a, wardConf: PC[x.key] ? { by: PC[x.key].name, act: PC[x.key].act } : null, raw: x.fig, det: detail(x) };
     } else if (o.level == "lga") add("ward:" + [x.state, x.lga, x.ward, ck].join("|"), x.ward, x);
     else if (o.level == "federal") add("state:" + [x.state, ck].join("|"), x.state, x);
     else add("lga:" + [x.state, x.lga, ck].join("|"), x.lga, x);
