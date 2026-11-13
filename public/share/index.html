@@ -264,7 +264,10 @@
             r = await api("watch", { code: SEL }),
             room = new Room({ adaptiveStream: true, dynacast: true, audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }),
             v = $("#vid");
-          room.on(RoomEvent.TrackSubscribed, (t) => (t.kind == Track.Kind.Video || t.kind == Track.Kind.Audio) && t.attach(v));
+          room.on(RoomEvent.TrackSubscribed, (t, pub, p) => {
+            if (t.kind == Track.Kind.Audio && !String(p?.identity || "").startsWith("obs:")) return void pub?.setSubscribed?.(false); // never play another viewer's microphone
+            if (t.kind == Track.Kind.Video || t.kind == Track.Kind.Audio) t.attach(v);
+          });
           room.on(RoomEvent.Disconnected, () => {
             if (ROOM == room) {
               ROOM = null;

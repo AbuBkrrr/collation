@@ -68,7 +68,13 @@ const A = {
     const { Room, RoomEvent, Track } = LivekitClient,
       r = await A.post("livekit/token", { code }),
       room = new Room({ adaptiveStream: true, dynacast: true, audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-    room.on(RoomEvent.TrackSubscribed, (t) => {
+    // only the observer's own sound is played here. Another dashboard's (or viewer's) talk-back microphone is never
+    // played: two PCs side by side would otherwise hear each other's voice with a delay and feed it round and round.
+    room.on(RoomEvent.TrackSubscribed, (t, pub, p) => {
+      if (t.kind == Track.Kind.Audio && !String(p?.identity || "").startsWith("obs:")) {
+        pub?.setSubscribed?.(false);
+        return;
+      }
       if (t.kind == Track.Kind.Video || t.kind == Track.Kind.Audio) t.attach(el);
     });
     await room.connect(r.url, r.token);
