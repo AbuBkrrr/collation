@@ -62,17 +62,18 @@
         <input class="fi" placeholder="Search ${OUNIT[OFFI.level]}…" value="${esc(OFILT)}" oninput="OFILT=this.value;clearTimeout(window._ft);window._ft=setTimeout(()=>{draw();const e=$('#sf');e&&(e.focus(),e.setSelectionRange(99,99))},250)" id="sf"></div>
         ${list.length ? list.map((u, i) => (OTAB == "a" ? cardA(u) : cardB(u))).join("") : `<div class="card muted">${D.units.length ? "No match for your search." : "No " + OUNIT[OFFI.level] + " are listed for your area yet. The state's polling-unit list must be loaded (platform administrator → Locations tab), then tap refresh."}</div>`}</div>`;
       }
+      const CONTEST = { lga: "LGA chairman", governor: "Governor", president: "Presidential", senate: "Senate", reps: "House of Reps", zone: "Zone", general: "" };
       const kid = (k) => esc(k).replace(/'/g, "&#39;");
       function cardA(u) {
         const m = u.mine;
-        return `<div class="card"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>${esc(u.label)}</b><span class="muted">${esc(u.contest || "")}</span></div>
+        return `<div class="card"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>${esc(u.label)}</b><span class="muted">${esc(CONTEST[u.contest] ?? u.contest ?? "")}</span></div>
         <div class="muted" style="font-size:12px">${u.reporting}/${u.pus} polling units reporting${u.disputed ? " · " + u.disputed + " disputed" : ""}${u.verified ? " · " + u.verified + " verified" : ""}${u.pu?.wardConf ? "" : ""}</div>
         <div style="margin:6px 0">${figs(u.fig)} <b>= ${u.total}</b></div>
         ${m ? `<div style="background:#f0fff4;border:1px solid #9ae6b4;border-radius:8px;padding:8px;font-size:13px">✓ You ${m.act == "confirm" ? "confirmed" : "corrected"} this ${new Date(m.ts).toLocaleString()}${m.act == "correct" ? "<br>Your figures: " + figs(m.fig) : ""}</div>` : `<div id="cf_${btoa(u.key).replace(/=/g, "")}"><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary" ${u.total || sum(u.fig) ? "" : "disabled"} onclick="confirmU('${kid(u.key)}')">✓ Confirm as reported</button><button class="btn btn-outline" onclick="corrU('${kid(u.key)}')">✎ Correct once</button></div></div>`}</div>`;
       }
       function cardB(u) {
         const m = u.manual, id = btoa(u.key).replace(/=/g, "");
-        return `<div class="card"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>${esc(u.label)}</b><span class="muted">${esc(u.contest || "")}</span></div>
+        return `<div class="card"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>${esc(u.label)}</b><span class="muted">${esc(CONTEST[u.contest] ?? u.contest ?? "")}</span></div>
         <div class="muted" style="font-size:12px">Reported (A): ${figs(u.fig)}</div>
         <div id="mf_${id}" style="margin-top:6px">${m ? `<div>Physical (B): ${figs(m.fig)} ${m.boxes != null ? '<span class="badge">' + m.boxes + " boxes</span>" : ""}</div>${u.diff && u.diff.length ? `<div style="color:#c53030;font-weight:600;margin:4px 0">⚠ Differs from Report A: ${u.diff.map(esc).join(", ")}</div>` : '<div style="color:#2f855a;margin:4px 0">✓ Matches Report A</div>'}${m.note ? '<div class="muted">' + esc(m.note) + "</div>" : ""}` : '<div class="muted">No physical result entered yet.</div>'}
         <button class="btn btn-outline btn-sm" style="margin-top:6px" onclick="manU('${kid(u.key)}')">${m ? "✎ Update" : "＋ Enter result from the boxes / sheet"}</button></div></div>`;
