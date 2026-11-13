@@ -187,7 +187,7 @@
       async function getAv() {
         const video = { facingMode: { ideal: "environment" }, width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 15, max: 20 } };
         try {
-          return await navigator.mediaDevices.getUserMedia({ video, audio: true });
+          return await navigator.mediaDevices.getUserMedia({ video, audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
         } catch (e) {
           if (e.name == "NotAllowedError" || e.name == "SecurityError") throw e;
           return await navigator.mediaDevices.getUserMedia({ video: true }); // no microphone / unusual camera
@@ -222,6 +222,21 @@
             toast("🔊 The Situation Room is speaking to you");
           });
           lk.on(RoomEvent.TrackUnsubscribed, (t) => t.detach().forEach((el) => el.remove()));
+          // half-duplex: while the Situation Room is talking, the phone's microphone is paused, so its own speaker
+          // can never be heard by its microphone and sent back (the howl / "microphone malfunction" noise)
+          let micTimer = null;
+          const setObsMic = (on) => {
+            try {
+              const pub = lk.localParticipant.getTrackPublication(Track.Source.Microphone);
+              if (pub) on ? pub.unmute() : pub.mute();
+            } catch {}
+          };
+          lk.on(RoomEvent.ActiveSpeakersChanged, (sp) => {
+            const remote = sp.some((s) => s !== lk.localParticipant);
+            clearTimeout(micTimer);
+            if (remote) setObsMic(false);
+            else micTimer = setTimeout(() => setObsMic(true), 700);
+          });
           lk.on(RoomEvent.Disconnected, () => {
             if (streaming) toast("⚠️ Stream link lost — reconnecting…");
           });

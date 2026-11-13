@@ -262,7 +262,7 @@
           await loadScript("/vendor/livekit-client.umd.js");
           const { Room, RoomEvent, Track } = LivekitClient,
             r = await api("watch", { code: SEL }),
-            room = new Room({ adaptiveStream: true, dynacast: true }),
+            room = new Room({ adaptiveStream: true, dynacast: true, audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }),
             v = $("#vid");
           room.on(RoomEvent.TrackSubscribed, (t) => (t.kind == Track.Kind.Video || t.kind == Track.Kind.Audio) && t.attach(v));
           room.on(RoomEvent.Disconnected, () => {
@@ -285,6 +285,8 @@
         try {
           MIC = !MIC;
           await ROOM.localParticipant.setMicrophoneEnabled(MIC);
+          const vd = document.getElementById("vid"); // while this viewer talks, the observer's sound is muted here so it cannot feed back
+          if (vd) vd.muted = MIC;
         } catch {
           MIC = false;
           toast("Microphone unavailable — allow microphone access to talk");
