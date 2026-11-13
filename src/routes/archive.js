@@ -136,7 +136,9 @@ app.post("/api/tenants/:id/wipe", auth("cmd"), su, h(async (req, res) => {
 }));
 // ---- Situation Rooms (any Command Center) ----
 app.get("/api/admin/rooms", auth("cmd"), su, h(async (req, res) =>
-  res.json(await qsys("select r.id,r.name,r.state,r.scope,r.kind,r.status,coalesce(r.archived,false) archived,(select count(*)::int from observers where room_id=r.id) obs from rooms r where r.tenant=$1 order by r.archived,r.id", [String(req.query.tenant || "")])),
+  req.query.tenant == "others"
+    ? res.json(await qsys("select r.id,r.name,r.state,r.scope,r.kind,r.status,r.tenant,t.name tname,coalesce(r.archived,false) archived,(select count(*)::int from observers where room_id=r.id) obs from rooms r join tenants t on t.id=r.tenant where r.tenant<>$1 order by t.name,r.archived,r.id", [req.u.tn]))
+    : res.json(await qsys("select r.id,r.name,r.state,r.scope,r.kind,r.status,coalesce(r.archived,false) archived,(select count(*)::int from observers where room_id=r.id) obs from rooms r where r.tenant=$1 order by r.archived,r.id", [String(req.query.tenant || "")])),
 ));
 const room = async (req, res) => {
   const [r] = await qsys("select * from rooms where id=$1", [req.params.id]);

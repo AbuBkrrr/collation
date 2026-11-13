@@ -102,6 +102,7 @@ delete** — Command Centres, Situation Rooms and election data.
 
 - **Archive** (Command Centres tab → **Archive**, or **Archive** on a room) switches it off and hides it
   everywhere (lists, collation, broadcasts). **Nothing is deleted.**
+- **Situation Rooms tab.** Besides your own Main Command Center's rooms, it lists the rooms of **every client Command Center** (centre name, room, area, status, observer count) with Archive / Delete, so a client's room is never hard to find. Only the room's details are shown here; its observers, maps and results stay inside the client's own Command Center.
 - **The Archive tab** (next to Command Centers) is where you find it all: **archived Command Centres**,
   **archived Situation Rooms** and **Stored records** (the copies kept when something was deleted or cleared).
   Press **Review** on any of them to read its results right there — votes by party, every polling unit with its

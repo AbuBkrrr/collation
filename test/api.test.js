@@ -972,3 +972,14 @@ test("all officer sign-ins in one list: Command Center sees all, a room only its
   assert.deepEqual(mine.map((o) => o.name), ["Sheet Akko Officer"], "a room sees only the officers of its own LGAs, never the state officer");
   assert.equal((await api("officers/credentials")).s, 401);
 });
+
+test("platform administrator lists the rooms of every other Command Center (and clients cannot)", async () => {
+  const inv = ok(await api("tenants", { tok: S.A, body: { name: "All Rooms CC", state: "Gombe", officer: { name: "AR State Officer" } } }));
+  const C = ok(await api("login/command", { body: { user: inv.operator, pass: inv.passcode } })).token;
+  const rm = ok(await api("rooms", { tok: C, body: { name: "Listed Room", kind: "governor" } }));
+  const all = ok(await api("admin/rooms?tenant=others", { tok: S.A }));
+  const mine = all.find((r) => r.id == rm.id);
+  assert.ok(mine && mine.tname == "All Rooms CC", "the client's room appears with its Command Center's name");
+  assert.ok(all.every((r) => r.tenant != "CC-MAIN"), "the administrator's own centre is not repeated");
+  assert.equal((await api("admin/rooms?tenant=others", { tok: C })).s, 403, "a client cannot list other centres' rooms");
+});
