@@ -21,7 +21,7 @@ before(async () => {
   const u = new URL(DB), adm = new URL(DB); adm.pathname = "/postgres";
   const c = new Client({ connectionString: adm.href }); await c.connect();
   await c.query(`drop database if exists "${u.pathname.slice(1)}" with (force)`); await c.query(`create database "${u.pathname.slice(1)}"`); await c.end();
-  srv = spawn(process.execPath, ["server.js"], { cwd: path.join(__dirname, ".."), env: { ...process.env, DATABASE_URL: DB, PORT, COMMAND_PASSCODE: "adminpass1", JWT_SECRET: "lk", SEED_LOCATIONS: "0", BACKUP_MINS: "0", DATA_DIR: fs.mkdtempSync(path.join(os.tmpdir(), "lk-")), LIVEKIT_URL: "wss://example.test/lk", LIVEKIT_API_KEY: "APItestkey", LIVEKIT_API_SECRET: "0123456789abcdef0123456789abcdef" }, stdio: "ignore" });
+  srv = spawn(process.execPath, ["server.js"], { cwd: path.join(__dirname, ".."), env: { ...process.env, REQUIRE_OFFICERS: "0", DATABASE_URL: DB, PORT, COMMAND_PASSCODE: "adminpass1", JWT_SECRET: "lk", SEED_LOCATIONS: "0", BACKUP_MINS: "0", DATA_DIR: fs.mkdtempSync(path.join(os.tmpdir(), "lk-")), LIVEKIT_URL: "wss://example.test/lk", LIVEKIT_API_KEY: "APItestkey", LIVEKIT_API_SECRET: "0123456789abcdef0123456789abcdef" }, stdio: "ignore" });
   for (let i = 0; i < 100; i++) { try { if ((await fetch(BASE + "/api/health")).ok) return; } catch {} await new Promise((r) => setTimeout(r, 150)); }
   throw new Error("server did not start");
 });
