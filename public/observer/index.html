@@ -486,22 +486,18 @@
         ORD.push(p);
       }
       function parseVoice(s) {
-        if (Date.now() < MUTE_UNTIL) return;
-        LASTTR = String(s);
-        const w = norm(s).join(" ");
-        if (hasPend()) {
-          if (/^(please )?(confirm(ed)?|yes|yeah|correct|send( it)?|submit|ok(ay)?)( please)?$/.test(w)) return confirmPend();
-          if (/^(cancel|clear( all)?|discard|start over|wrong)$/.test(w)) return clearPend();
-          if (/^(undo|remove( last)?|delete( last)?)$/.test(w)) return undoPend();
-        }
-        const es = voiceEntries(s);
-        if (!es.length) return render();
-        es.forEach((e) => stage(e.party, e.v));
-        savePend();
-        render();
-        const p = es[es.length - 1].party;
-        say("Confirm " + p + " total " + pendTotal(p) + " votes");
-      }
+  if (Date.now() < MUTE_UNTIL) return;
+  LASTTR = String(s);
+  const w = norm(s).join(" ");
+
+  const es = voiceEntries(s);
+  if (!es.length) return render();
+  es.forEach((e) => stage(e.party, e.v));
+  const p = es[es.length - 1].party;
+  const t = pendTotal(p);
+  confirmPend();
+  say("Sent " + p + " " + t + " votes");
+}
       function editPend(p, v) {
         const n = parseInt(v, 10);
         if (PEND[p] && !isNaN(n) && n >= 0 && n <= 100000) PEND[p].parts = [n]; // a typed total replaces what was spoken
@@ -899,7 +895,7 @@
 <div style="display:flex;justify-content:space-between;align-items:center;color:#a0aec0;font-size:11px"><span><i class="fas fa-building-columns" style="font-size:10px"></i> ${esc(OB.room_name || OB.room_id)}</span><span class="mono">${esc(OB.code)}</span></div><div style="color:#fff;font-weight:700;font-size:14px;line-height:1.25;margin-top:2px"><i class="fas fa-location-dot" style="color:#f6ad55;font-size:12px"></i> PU ${esc(OB.pu)}${OB.pu_name ? " · " + esc(OB.pu_name) : ""}</div>${OB.ward || OB.lga ? `<div style="color:#a0aec0;font-size:11px">${esc([OB.ward, OB.lga].filter(Boolean).join(" · "))}</div>` : ""}</div>
 <div class="app-content">${LIVEREQ && !streaming ? `<button class="btn-report" style="background:#e53e3e" onclick="startStream()"><i class="fas fa-video"></i> Situation Room requests LIVE VIDEO — tap to start</button>` : ""}<div style="font-size:12px;color:#a0aec0"><i class="fas fa-location-dot"></i> ${esc(OB.lga)} LGA · ${esc(OB.ward)} Ward</div>
 <div class="camera-view" id="camSlot"><div class="camera-overlay"><span style="color:${streaming ? "#fc8181" : "#fff"}">${streaming ? "● LIVE Streaming" : "Ready"}</span><span>${lat != null ? lat.toFixed(4) + ", " + lng.toFixed(4) : "GPS…"}</span></div><div class="stream-controls">${streaming ? '<button style="background:#e53e3e;color:#fff" onclick="stopStream()">⏹ Stop Stream</button>' : '<button style="background:#38a169;color:#fff" onclick="startStream()">▶ Start Stream</button>'}</div></div>
-<div class="tally-panel"><div class="tally-title"><span>TALLY · entries add up · tap a row to correct</span><span style="display:flex;gap:6px"><button class="btn btn-sm btn-outline" style="background:transparent;color:#a0aec0;border-color:#4a5568" title="Read figures back aloud" onclick="SPEAK=!SPEAK;localStorage.setItem('readback',SPEAK?1:0);if(!SPEAK)speechSynthesis?.cancel();render()"><i class="fas fa-volume-${SPEAK ? "high" : "xmark"}"></i></button><button class="btn btn-sm ${mic ? "btn-danger" : "btn-primary"}" onclick="toggleMic()"><i class="fas fa-microphone"></i> ${mic ? (fbMode ? "Listening (server)" : "Listening") : "Mic"}</button></span></div>${hasPend() ? `<div style="background:#2a4365;border:1px solid #4299e1;border-radius:12px;padding:10px;margin:8px 0"><div style="font-weight:700;font-size:13px;margin-bottom:6px">⏳ Confirm before it is sent to the Situation Room</div>${Object.keys(PEND).map((q) => `<div style="display:flex;align-items:center;gap:8px;margin:6px 0"><b style="width:46px">${q}</b><span style="flex:1;font-size:12px;color:#bee3f8">${PEND[q].parts.join(" + ")}${PEND[q].parts.length > 1 ? " =" : ""}</span><input id="pe_${q}" class="dk" type="number" inputmode="numeric" value="${pendTotal(q)}" style="width:86px;flex:none;padding:8px" onchange="editPend('${q}',this.value)"></div>`).join("")}<div class="correction-controls" style="margin-top:8px"><button style="background:#38a169;flex:3" onclick="confirmPend()">✓ Confirm &amp; send</button><button style="background:#718096" onclick="undoPend()">↶</button><button style="background:#e53e3e" onclick="clearPend()">✕</button></div><div style="color:#a0aec0;font-size:11px;margin-top:6px">Say “confirm” to send, “undo” to drop the last figure, “cancel” to clear — or type a corrected total above, then confirm.</div></div>` : ""}${rows}<div id="vstat" style="margin-top:8px;color:#faf089;font-size:12px;min-height:16px">${esc(VSTAT)}</div><div id="tr" style="margin-top:8px;color:#a0aec0;font-size:12px">${mic && ACTIVE && Date.now() - ACT_T < 25000 ? '🎤 Listening for <b style="color:#fff">' + ACTIVE + "</b> figures… " : ""}${LASTTR ? "“" + esc(LASTTR) + "”" : ""}</div>
+<div class="tally-panel"><div class="tally-title"><span>TALLY · entries add up · tap a row to correct</span><span style="display:flex;gap:6px"><button class="btn btn-sm btn-outline" style="background:transparent;color:#a0aec0;border-color:#4a5568" title="Read figures back aloud" onclick="SPEAK=!SPEAK;localStorage.setItem('readback',SPEAK?1:0);if(!SPEAK)speechSynthesis?.cancel();render()"><i class="fas fa-volume-${SPEAK ? "high" : "xmark"}"></i></button><button class="btn btn-sm ${mic ? "btn-danger" : "btn-primary"}" onclick="toggleMic()"><i class="fas fa-microphone"></i> ${mic ? (fbMode ? "Listening (server)" : "Listening") : "Mic"}</button></span></div>${rows}<div id="vstat" style="margin-top:8px;color:#faf089;font-size:12px;min-height:16px">${esc(VSTAT)}</div><div id="tr" style="margin-top:8px;color:#a0aec0;font-size:12px">${mic && ACTIVE && Date.now() - ACT_T < 25000 ? '🎤 Listening for <b style="color:#fff">' + ACTIVE + "</b> figures… " : ""}${LASTTR ? "“" + esc(LASTTR) + "”" : ""}</div>
 ${CORR ? `<div class="correction-controls"><input id="mi" type="number" inputmode="numeric" value="${t[CORR].v}"><button style="background:#38a169" onclick="saveCorr()">✓</button><button style="background:#e53e3e" onclick="CORR=null;render()">✕</button></div>` : ""}
 <div class="correction-controls"><select class="dk" id="mp" onchange="LASTP=this.value">${CFG.parties
             .map((p) => `<option value="${p}" ${window.LASTP == p ? "selected" : ""}>${p}${t[p] ? " (" + t[p].v + ")" : ""}</option>`)
