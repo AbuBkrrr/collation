@@ -22,7 +22,18 @@ async function puList(u, f) {
     a.push(v);
     w.push(c + "=$" + a.length);
   };
-  if (u.role == "room") add("o.room_id", u.id);
+  if (u.role == "room") {
+            const [rm] = await qsys("select state, scope from rooms where id=$1", [u.id]);
+            if (rm?.state) add("o.state", rm.state);
+            if (rm?.scope) {
+                const lgas = rm.scope.split(",").map(s => s.trim().toLowerCase());
+                if (lgas.length === 1) add("lower(o.lga)", lgas[0]);
+                else if (lgas.length > 1) {
+                    a.push(lgas);
+                    w.push("lower(o.lga) = any($" + a.length + ")");
+                }
+            }
+        }
   else if (f.room) add("o.room_id", f.room);
   LV.forEach((k) => f[k] && add("o." + k, String(f[k])));
   if (f.contest) add("coalesce((select kind from rooms r where r.id=o.room_id),'general')", String(f.contest));
