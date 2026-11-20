@@ -214,6 +214,10 @@ Each officer gets a **code and passcode with a QR sign-in** (shown once; *QR / R
 
 Officers are added only in the forms above — there is no separate officers screen.
 
+### The EC8A document scanner (observers)
+
+When an observer taps **Scan EC8A sheet** and takes the photo, the app opens a scanner before anything is sent: it **finds the sheet**, shows 4 corner handles (drag them if it missed), then **Scan** straightens the page, **removes shadows**, whitens the paper and sharpens the figures. The observer can switch the look (**Clear**, **Black & white**, **Original colour**), **Rotate**, adjust the corners again, or choose **Use original**; **Use this scan** uploads the clean, smaller copy. Tips for a good result: lay the sheet flat on a darker surface, whole page in view, in good light, and avoid your own shadow.
+
 ## 5. Watch the field live (video, GPS, talk-back)
 
 **Observers & Map** tab (Command Centre), or the map inside a room.

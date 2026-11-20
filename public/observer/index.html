@@ -816,10 +816,19 @@
       }
       // ---------- EC8A photo: resized to max 2400 px JPEG before upload (readable, ~0.5-1.5 MB) ----------
       async function ec8a(inp) {
-        const f = inp.files[0];
+        let f = inp.files[0];
         inp.value = "";
         if (!f) return;
         try {
+          // document scanner: find the sheet, straighten it, remove shadows, sharpen the figures (preview, then use)
+          try {
+            await loadScript("/shared/scan.js");
+            const scanned = await window.DocScan.open(f);
+            if (!scanned) return toast("EC8A photo cancelled.");
+            f = scanned;
+          } catch (e) {
+            toast("Scanner unavailable — sending the photo as it is.");
+          }
           const img = await createImageBitmap(f),
             k = Math.min(1, 2400 / Math.max(img.width, img.height)),
             c = document.createElement("canvas");
@@ -902,7 +911,7 @@ ${CORR ? `<div class="correction-controls"><input id="mi" type="number" inputmod
             .join(
               "",
             )}</select><input id="mv" class="dk" type="number" inputmode="numeric" placeholder="votes"><button style="background:#2b6cb0" onclick="manualAdd()">+</button></div></div>
-<div class="tally-panel"><div class="tally-title"><span>EC8A RESULT SHEET</span><span>${EC.length ? '<span style="color:#68d391">' + EC.length + " uploaded ✓</span>" : '<span style="color:#fc8181">not uploaded</span>'}</span></div><div class="correction-controls" style="margin:0 0 8px"><input id="er" class="dk" type="number" inputmode="numeric" placeholder="Voters on register" value="${OB.ec_reg ?? ""}"><input id="ea" class="dk" type="number" inputmode="numeric" placeholder="Accredited (BVAS)" value="${OB.ec_acc ?? ""}"><button style="background:#2b6cb0" onclick="saveSheet()" title="Save EC8A voter figures">✓</button></div><label class="btn btn-primary" style="width:100%;padding:12px;cursor:pointer"><i class="fas fa-camera"></i> Photograph EC8A<input type="file" accept="image/*" capture="environment" style="display:none" onchange="ec8a(this)"></label><div style="color:#a0aec0;font-size:11px;margin-top:6px">Whole sheet, flat, in good light. Your room uses it to settle any difference between the two observers.</div></div>
+<div class="tally-panel"><div class="tally-title"><span>EC8A RESULT SHEET</span><span>${EC.length ? '<span style="color:#68d391">' + EC.length + " uploaded ✓</span>" : '<span style="color:#fc8181">not uploaded</span>'}</span></div><div class="correction-controls" style="margin:0 0 8px"><input id="er" class="dk" type="number" inputmode="numeric" placeholder="Voters on register" value="${OB.ec_reg ?? ""}"><input id="ea" class="dk" type="number" inputmode="numeric" placeholder="Accredited (BVAS)" value="${OB.ec_acc ?? ""}"><button style="background:#2b6cb0" onclick="saveSheet()" title="Save EC8A voter figures">✓</button></div><label class="btn btn-primary" style="width:100%;padding:12px;cursor:pointer"><i class="fas fa-camera"></i> Scan EC8A sheet<input type="file" accept="image/*" capture="environment" style="display:none" onchange="ec8a(this)"></label><div style="color:#a0aec0;font-size:11px;margin-top:6px">Lay the sheet flat, whole page in view, in good light. The scanner straightens it and sharpens the figures — check the corners, then tap Scan. Your room uses it to settle any difference between the two observers.</div></div>
 <div class="tally-panel"><div class="tally-title">MESSAGES FROM ROOM / COMMAND</div>${
             ms
               .filter((m) => !m.cmd)

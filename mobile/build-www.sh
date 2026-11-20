@@ -24,7 +24,7 @@ lbl = sys.argv[1]; p = "www/index.html"
 s = open(p).read().replace("Collation Observer", lbl).replace("__APP__", sys.argv[2])   # read first, then truncate+write
 open(p, "w").write(s)
 PY
-cp "$ROOT/public/shared/ui.js" "$ROOT/public/shared/style.css" "$ROOT/public/shared/fonts.css" www/shared/
+cp "$ROOT/public/shared/ui.js" "$ROOT/public/shared/scan.js" "$ROOT/public/shared/style.css" "$ROOT/public/shared/fonts.css" www/shared/
 cp "$ROOT/node_modules/livekit-client/dist/livekit-client.umd.js" www/vendor/livekit-client.umd.js
 cp "$ROOT/node_modules/vosk-browser/dist/vosk.js" www/vendor/vosk.js
 cp "$ROOT/node_modules/read-excel-file/bundle/read-excel-file.min.js" www/vendor/read-excel-file.min.js
