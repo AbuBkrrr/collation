@@ -1081,6 +1081,18 @@ async function scanLogin(kind, fill) {
 }
 const credText = (c) => [c.title, ...c.lines.map(([k, v]) => k + ": " + v), c.link ? "Sign-in link: " + c.link : ""].filter(Boolean).join("\n");
 // one credential: text + QR, with copy / print. c = { title, lines:[[label,value]], link, note }
+// delete observer codes made by mistake / twice (kept if they already hold results — revoke those instead)
+async function obsDelete(codes, unused) {
+  const what = unused ? "every observer code of this room that no phone has ever signed in with" : codes.length == 1 ? "observer code " + codes[0] : codes.length + " observer codes";
+  if (!confirm("Delete " + what + "?\nCodes that already hold results or media are kept.")) return;
+  try {
+    const r = await A.post("obs/delete", { codes, unused: !!unused });
+    toast(r.deleted ? "🗑️ " + r.deleted + " observer code" + (r.deleted == 1 ? "" : "s") + " deleted" + (r.kept.length ? " · " + r.kept.length + " kept (" + r.kept[0].why + ")" : "") : "ℹ️ Nothing deleted" + (r.kept[0] ? ": " + r.kept[0].why : "."));
+    loadAll();
+  } catch (e) {
+    toast("⚠️ " + e.message);
+  }
+}
 // one officer: all their details, sign-in QR, and (Command Center) reset / archive / delete
 async function officerCard(id) {
   let o;
@@ -1100,7 +1112,7 @@ async function officerCard(id) {
   w.innerHTML = `<div class="card" style="max-width:460px;width:100%;margin:auto;max-height:96vh;overflow:auto"><div class="card-header"><h3><span class="otag otag-${o.level}">${esc(o.tag)}</span> ${esc(o.title)}</h3></div>
     ${row("Name", esc(o.name))}${row("Phone", o.phone ? `<a href="tel:${esc(o.phone)}">${esc(o.phone)}</a>` : '<span class="muted">—</span>')}${row("Area", esc(area))}${row("Status", o.active ? '<span style="color:#2f855a">Active</span>' : '<span style="color:#c53030">Archived (cannot sign in)</span>')}${row("Figures confirmed / corrected", o.confirmed)}${row("Physical results entered", o.manual)}${row("Officer code", `<span class="mono">${esc(o.code)}</span>`)}${row("Passcode", o.passcode ? `<span class="mono">${esc(o.passcode)}</span>` : '<span class="muted">changed by the officer</span>')}
     ${o.passcode ? `<div style="text-align:center;margin:14px 0 6px">${qrSvg(card.link, 5)}</div><div class="muted" style="text-align:center;font-size:12px">Scan with the phone camera or the Collation Officer app's <b>Scan QR</b> button.</div>` : ""}
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">${o.passcode ? '<button class="btn btn-primary" id="oc_c"><i class="fas fa-copy"></i> Copy</button><button class="btn btn-outline" id="oc_p"><i class="fas fa-print"></i> Print</button>' : ""}${mgr ? `<button class="btn btn-outline" id="oc_r">Reset passcode</button><button class="btn btn-outline" id="oc_a">${o.active ? "Archive" : "Restore"}</button><button class="btn btn-danger" id="oc_d">Delete</button>` : ""}<button class="btn btn-outline" id="oc_x">Done</button></div></div>`;
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">${o.passcode ? '<button class="btn btn-primary" id="oc_c"><i class="fas fa-copy"></i> Copy</button><button class="btn btn-outline" id="oc_p"><i class="fas fa-print"></i> Print</button>' : ""}${mgr ? `<button class="btn btn-outline" id="oc_r">Reset passcode</button><button class="btn btn-outline" id="oc_a">${o.active ? "Archive" : "Restore"}</button>` : ""}${mgr || A.role == "room" ? `<button class="btn btn-danger" id="oc_d">Delete</button>` : ""}<button class="btn btn-outline" id="oc_x">Done</button></div></div>`;
   document.body.appendChild(w);
   const q1 = (s) => w.querySelector(s);
   q1("#oc_x").onclick = () => w.remove();
@@ -1129,8 +1141,10 @@ async function officerCard(id) {
         toast("⚠️ " + e.message);
       }
     };
+  }
+  if (mgr || A.role == "room")
     q1("#oc_d").onclick = async () => {
-      const t = prompt("Delete " + o.name + " permanently, with every figure they confirmed or entered?\nType DELETE to confirm.");
+      const t = prompt("Delete " + o.name + " permanently" + (mgr ? ", with every figure they confirmed or entered" : " (only possible while they have confirmed nothing)") + "?\nType DELETE to confirm.");
       if (t !== "DELETE") return;
       try {
         await A.del("officers/" + id);
@@ -1141,7 +1155,6 @@ async function officerCard(id) {
         toast("⚠️ " + e.message);
       }
     };
-  }
 }
 // show a second card only after the first one has been closed (so a new officer card never covers the room / centre card)
 function afterModal(fn) {

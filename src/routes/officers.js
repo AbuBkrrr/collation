@@ -81,7 +81,17 @@ app.post("/api/officers/:id/active", auth("cmd"), h(async (req, res) => {
   aud("CMD", (req.body.active ? "Enabled" : "Disabled") + " officer " + r[0].code);
   res.json({ ok: 1 });
 }));
-app.delete("/api/officers/:id", auth("cmd"), h(async (req, res) => {
+app.delete("/api/officers/:id", auth("cmd", "room"), h(async (req, res) => {
+  if (req.u.role == "room") {
+    // a Situation Room can remove a ward / LGA officer of its own LGAs that was made by mistake or twice (nothing confirmed yet)
+    const [o] = await q("select * from officers where id=$1", [+req.params.id]),
+      [rm] = await q("select scope from rooms where id=$1", [req.u.id]),
+      sc = String(rm?.scope || "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
+    if (!o) return res.status(404).json({ error: "Not found" });
+    if (o.level == "state" || o.level == "federal" || (sc.length && !sc.includes((o.lga || "").toLowerCase()))) return res.status(403).json({ error: "That officer belongs to the Command Center" });
+    const [n] = await q("select (select count(*)::int from officer_confirms where officer_id=$1)+(select count(*)::int from officer_manual where officer_id=$1) n", [o.id]);
+    if (n.n) return res.status(409).json({ error: "This officer has already confirmed figures. Ask the Command Center to archive or delete them." });
+  }
   const r = await q("delete from officers where id=$1 returning code", [+req.params.id]);
   if (!r.length) return res.status(404).json({ error: "Not found" });
   aud("CMD", "Removed officer " + r[0].code);

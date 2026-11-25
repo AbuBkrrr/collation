@@ -218,6 +218,13 @@ Officers are added only in the forms above — there is no separate officers scr
 
 When an observer taps **Scan EC8A sheet** and takes the photo, the app opens a scanner before anything is sent: it **finds the sheet**, shows 4 corner handles (drag them if it missed), then **Scan** straightens the page, **removes shadows**, whitens the paper and sharpens the figures. The observer can switch the look (**Clear**, **Black & white**, **Original colour**), **Rotate**, adjust the corners again, or choose **Use original**; **Use this scan** uploads the clean, smaller copy. Tips for a good result: lay the sheet flat on a darker surface, whole page in view, in good light, and avoid your own shadow.
 
+### Fixing mistakes and doubles
+
+Everything created by mistake, or twice, can be deleted — as long as it holds no results yet:
+- **Situation Room** — **Delete** on the room row (Command Center). A room that already holds results, sheets or media can be deleted only by the platform administrator, who also gets a stored copy.
+- **Observer codes** — **Delete** on an observer row, or **Remove unused codes** at the top of a Situation Room's observer list (removes every code no phone has signed in with). A code that has already sent figures is kept — **Revoke** it instead.
+- **Collation officers** — **Delete** on the officer's card. A Situation Room can delete an unused ward or LGA officer of its own LGAs; the Command Center can delete any, and the platform administrator can archive instead if they have confirmed figures.
+
 ## 5. Watch the field live (video, GPS, talk-back)
 
 **Observers & Map** tab (Command Centre), or the map inside a room.
