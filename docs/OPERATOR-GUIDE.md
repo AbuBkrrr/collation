@@ -222,7 +222,7 @@ When an observer taps **Scan EC8A sheet** and takes the photo, the app opens a s
 
 Everything created by mistake, or twice, can be deleted — as long as it holds no results yet:
 - **Situation Room** — **Delete** on the room row (Command Center). A room that already holds results, sheets or media can be deleted only by the platform administrator, who also gets a stored copy.
-- **Observer codes** — **Delete** on an observer row, or **Remove unused codes** at the top of a Situation Room's observer list (removes every code no phone has signed in with). A code that has already sent figures is kept — **Revoke** it instead.
+- **Observer codes** — **Delete** on an observer row, or **Remove unused codes** at the top of a Situation Room's observer list (removes every code no phone has signed in with). A code that has already sent figures is kept — **Revoke** it instead. (The platform administrator can still delete it: **Delete** offers "delete anyway", types the code to confirm, and keeps a copy of everything it sent in the vault.)
 - **Collation officers** — **Delete** on the officer's card. A Situation Room can delete an unused ward or LGA officer of its own LGAs; the Command Center can delete any, and the platform administrator can archive instead if they have confirmed figures.
 
 ## 5. Watch the field live (video, GPS, talk-back)

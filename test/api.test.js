@@ -1068,3 +1068,20 @@ test("mistakes and doubles can be deleted: rooms, observer codes and officers â€
   // a room that holds results stays for the platform administrator
   assert.equal((await api("rooms/" + r1.id + "/remove", { tok: C, body: {} })).s, 409);
 });
+
+test("platform administrator can delete an observer code that holds results, with a copy kept in the vault", async () => {
+  const inv = ok(await api("tenants", { tok: S.A, body: { name: "Admin Obs Delete", state: "Kebbi", officer: { name: "KS Officer" } } }));
+  const C = ok(await api("login/command", { body: { user: inv.operator, pass: inv.passcode } })).token;
+  const rm = ok(await api("rooms", { tok: C, body: { name: "Gov", kind: "governor" } }));
+  ok(await api("rooms/" + rm.id + "/status", { tok: C, body: { status: "active" } }));
+  const R = ok(await api("login/room", { body: { id: rm.id, pass: rm.passcode } })).token;
+  const made = ok(await api("room/obs/bulk", { tok: R, body: { per: 1, units: [{ lga: "Argungu", ward: "W1", pu: "001" }], officers: [{ lga: "Argungu", ward: "W1", name: "Gov W1 Officer" }] } })).created[0];
+  const t = ok(await api("login/observer", { body: { code: made.code, pin: "1234", device: "dev-" + made.code + "-0123456789abcdef" } })).token;
+  ok(await api("observer/tally", { tok: t, body: { party: "APC", v: 77 } }));
+  assert.equal(ok(await api("obs/delete", { tok: C, body: { codes: [made.code] } })).deleted, 0, "a client cannot delete a code that holds results");
+  assert.equal((await api("admin/obs/" + made.code + "/delete", { tok: C, body: { confirm: made.code } })).s, 403, "only the platform administrator");
+  assert.equal((await api("admin/obs/" + made.code + "/delete", { tok: S.A, body: { confirm: "wrong" } })).s, 400, "typed confirmation is required");
+  ok(await api("admin/obs/" + made.code + "/delete", { tok: S.A, body: { confirm: made.code } }));
+  assert.ok(!ok(await api("obs", { tok: R })).some((o) => o.code == made.code), "the code is gone");
+  assert.ok(ok(await api("admin/vault", { tok: S.A })).some((v) => v.name.includes("observer_" + made.code)), "a copy is in the vault");
+});

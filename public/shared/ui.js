@@ -1087,6 +1087,14 @@ async function obsDelete(codes, unused) {
   if (!confirm("Delete " + what + "?\nCodes that already hold results or media are kept.")) return;
   try {
     const r = await A.post("obs/delete", { codes, unused: !!unused });
+    if (!r.deleted && !unused && codes.length == 1 && r.kept[0] && /results or media/.test(r.kept[0].why) && A.role == "cmd" && ME.su) {
+      // the platform administrator may delete it anyway: a copy of everything it sent is kept in the vault first
+      const t = prompt("Observer " + codes[0] + " already holds results or media.\nDelete it anyway? A copy of everything it sent is kept in the vault.\n\nType the code to confirm:");
+      if (t !== codes[0]) return toast("Cancelled — nothing deleted.");
+      await A.post("admin/obs/" + encodeURIComponent(codes[0]) + "/delete", { confirm: t });
+      toast("🗑️ Observer deleted; a copy of its data is in the vault");
+      return loadAll();
+    }
     toast(r.deleted ? "🗑️ " + r.deleted + " observer code" + (r.deleted == 1 ? "" : "s") + " deleted" + (r.kept.length ? " · " + r.kept.length + " kept (" + r.kept[0].why + ")" : "") : "ℹ️ Nothing deleted" + (r.kept[0] ? ": " + r.kept[0].why : "."));
     loadAll();
   } catch (e) {
