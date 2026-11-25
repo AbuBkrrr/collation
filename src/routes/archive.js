@@ -1,4 +1,4 @@
-const {qsys,als,fs,path,DATA,pool,aud,h,app,auth,su} = require("../core");
+const {qsys,als,fs,path,DATA,pool,aud,h,app,auth,su,q} = require("../core");
 const { puList } = require("./results");
 // ---- Platform administrator only: archive (hide, keep, restorable) or permanently delete Command Centers,
 // Situation Rooms and their election data. Clients can only suspend / deactivate; they cannot archive or delete.
@@ -164,6 +164,54 @@ app.post("/api/admin/rooms/:id/delete", auth("cmd"), su, h(async (req, res) => {
   });
   keepMedia(snap);
   aud("CMD", "Deleted Situation Room " + r.id + " (" + r.name + ", " + r.tenant + ") with all its observers; copy kept: " + snap.name);
+  res.json({ ok: 1, kept: snap.name });
+}));
+// A Command Center can delete its OWN Situation Room only while it holds nothing (no results, sheets, incidents, clips, radio):
+// the "created it by mistake / twice" case. A room with data stays: only the platform administrator can delete or archive it.
+app.post("/api/rooms/:id/remove", auth("cmd"), h(async (req, res) => {
+  const [r] = await q("select id,name,tenant from rooms where id=$1 and tenant=$2", [req.params.id, req.u.tn]);
+  if (!r) return res.sendStatus(404);
+  const [d] = await qsys(
+    `select (select count(*)::int from tallies t join observers o on o.code=t.code where o.room_id=$1)
+          + (select count(*)::int from ec8a where room_id=$1) + (select count(*)::int from incidents where room_id=$1)
+          + (select count(*)::int from clips where room_id=$1) + (select count(*)::int from radio where room_id=$1)
+          + (select count(*)::int from pu_results where room_id=$1) n`,
+    [r.id],
+  );
+  if (d.n) return res.status(409).json({ error: "This room already holds results or media, so only the platform administrator can delete it. You can suspend or deactivate it instead." });
+  const snap = await tx(async (c) => {
+    const s = await snapshot(c, "room_" + r.id + "_" + r.name, null, [r.id]);
+    await wipe(c, [r.id], false);
+    return s;
+  });
+  keepMedia(snap);
+  aud("CMD", "Deleted unused Situation Room " + r.id + " (" + r.name + ") with its observer codes; copy kept: " + snap.name);
+  res.json({ ok: 1 });
+}));
+app.post("/api/admin/obs/:code/delete", auth("cmd"), su, h(async (req, res) => {
+  const [o] = await qsys("select o.*,r.tenant,r.name room_name from observers o join rooms r on r.id=o.room_id where o.code=$1", [req.params.code]);
+  if (!o) return res.sendStatus(404);
+  if (req.body.confirm !== o.code) return res.status(400).json({ error: "Type the observer code (" + o.code + ") to confirm" });
+  const snap = await tx(async (c) => {
+    const rows = async (sql) => (await c.query(sql, [o.code])).rows,
+      data = {
+        label: "observer_" + o.code,
+        taken_at: new Date().toISOString(),
+        room: { id: o.room_id, name: o.room_name, tenant: o.tenant },
+        observer: { code: o.code, name: o.name, state: o.state, lga: o.lga, ward: o.ward, pu: o.pu, pu_name: o.pu_name, reg: o.reg, ec_reg: o.ec_reg, ec_acc: o.ec_acc, active: o.active },
+        tallies: await rows("select code,party,v,edits,hist from tallies where code=$1"),
+        ec8a: await rows("select id,code,room_id,state,lga,ward,pu,path,sha256,ts from ec8a where code=$1"),
+        incidents: await rows("select * from incidents where code=$1"),
+        clips: await rows("select id,code,room_id,kind,path,ts from clips where code=$1"),
+      },
+      name = stamp() + "_" + safe(data.label) + ".json";
+    fs.writeFileSync(path.join(VAULT, name), JSON.stringify(data));
+    for (const t of ["tallies", "ec8a", "clips", "incidents"]) await c.query(`delete from ${t} where code=$1`, [o.code]);
+    await c.query("delete from observers where code=$1", [o.code]);
+    return { name, media: [...data.ec8a.map((e) => e.path), ...data.clips.map((x) => x.path)].filter(Boolean) };
+  });
+  keepMedia(snap);
+  aud("CMD", "Deleted observer " + o.code + " (" + o.room_id + ", " + o.tenant + ") with its results; copy kept: " + snap.name);
   res.json({ ok: 1, kept: snap.name });
 }));
 app.post("/api/admin/rooms/:id/wipe", auth("cmd"), su, h(async (req, res) => {

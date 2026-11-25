@@ -1022,3 +1022,66 @@ test("officers can review results properly: each observer's own figures, dispute
   assert.deepEqual(ok(await api("officer/pus?key=" + encodeURIComponent(ward.key), { tok: OT })), []);
   assert.equal((await api("officer/pus?key=x", { tok: R })).s, 403, "only officers use this");
 });
+
+test("mistakes and doubles can be deleted: rooms, observer codes and officers — but never anything that already holds results", async () => {
+  const c = new Client({ connectionString: DB });
+  await c.connect();
+  await c.query("insert into locations(state,lga,ward,pu,reg,name) values('Kebbi','Argungu','W1','001',500,'a'),('Kebbi','Argungu','W1','002',500,'b')");
+  await c.end();
+  const inv = ok(await api("tenants", { tok: S.A, body: { name: "Delete CC", state: "Kebbi", officer: { name: "Kebbi State Officer" } } }));
+  const C = ok(await api("login/command", { body: { user: inv.operator, pass: inv.passcode } })).token;
+  // two rooms for the same LGA: the second is the "double"
+  const r1 = ok(await api("rooms", { tok: C, body: { name: "Argungu", kind: "lga", scope: "Argungu", officer: { name: "Argungu LGA Officer" } } }));
+  const r2 = ok(await api("rooms", { tok: C, body: { name: "Argungu again", kind: "lga", scope: "Argungu" } }));
+  ok(await api("rooms/" + r1.id + "/status", { tok: C, body: { status: "active" } }));
+  const R = ok(await api("login/room", { body: { id: r1.id, pass: r1.passcode } })).token;
+  // the client deletes the empty double, and cannot touch a stranger's room
+  ok(await api("rooms/" + r2.id + "/remove", { tok: C, body: {} }));
+  assert.ok(!ok(await api("rooms", { tok: C })).some((r) => r.id == r2.id), "the double is gone");
+  assert.equal((await api("rooms/" + r1.id + "/remove", { tok: S.A, body: {} })).s, 404, "another Command Center cannot");
+  // observer codes: some made twice
+  const made = ok(await api("room/obs/bulk", { tok: R, body: { per: 3, units: [{ lga: "Argungu", ward: "W1", pu: "001" }, { lga: "Argungu", ward: "W1", pu: "002" }], officers: [{ lga: "Argungu", ward: "W1", name: "W1 Officer" }] } }));
+  assert.equal(made.created.length, 6);
+  const tok = async (o) => ok(await api("login/observer", { body: { code: o.code, pin: "1234", device: "dev-" + o.code + "-0123456789abcdef" } })).token;
+  const used = made.created[0], phone = made.created[1];
+  ok(await api("observer/tally", { tok: await tok(used), body: { party: "APC", v: 10 } }));
+  await tok(phone); // signed in, but sent nothing
+  // one code at a time: a code with results is kept, an empty one is deleted
+  const keep = ok(await api("obs/delete", { tok: R, body: { codes: [used.code] } }));
+  assert.deepEqual([keep.deleted, keep.kept.length], [0, 1], "a code holding results is protected");
+  assert.equal(ok(await api("obs/delete", { tok: R, body: { codes: [made.created[2].code] } })).deleted, 1);
+  // "remove unused codes": only the codes no phone ever signed in with (and that hold nothing)
+  const un = ok(await api("obs/delete", { tok: R, body: { unused: true } }));
+  assert.equal(un.deleted, 3, "6 made - 1 deleted - the used one - the signed-in one = 3 left unused");
+  const left = ok(await api("obs", { tok: R })).map((o) => o.code).sort();
+  assert.deepEqual(left, [used.code, phone.code].sort());
+  assert.equal((await api("obs/delete", { tok: S.A, body: { codes: [used.code] } })).j.deleted, 0, "another Command Center cannot");
+  // officers: a room removes an unused ward officer of its LGA, not one that confirmed figures, not the state officer
+  const dup = ok(await api("officers", { tok: R, body: { level: "ward", name: "Duplicate Ward Officer", lga: "Argungu", ward: "W2" } }));
+  ok(await api("officers/" + dup.id, { tok: R, method: "DELETE" }));
+  const w1 = made.officers[0], W = ok(await api("login/officer", { body: { code: w1.code, pass: w1.passcode } })).token,
+    wu = ok(await api("officer/units", { tok: W })).units, one = wu.find((u) => u.fig && u.fig.APC);
+  ok(await api("officer/confirm", { tok: W, body: { key: one.key } }));
+  assert.equal((await api("officers/" + w1.id, { tok: R, method: "DELETE" })).s, 409, "an officer who confirmed figures is protected from the room");
+  const so = ok(await api("officers/credentials", { tok: C })).find((o) => o.level == "state");
+  assert.equal((await api("officers/" + so.id, { tok: R, method: "DELETE" })).s, 403, "the state officer is the Command Center's");
+  // a room that holds results stays for the platform administrator
+  assert.equal((await api("rooms/" + r1.id + "/remove", { tok: C, body: {} })).s, 409);
+});
+
+test("platform administrator can delete an observer code that holds results, with a copy kept in the vault", async () => {
+  const inv = ok(await api("tenants", { tok: S.A, body: { name: "Admin Obs Delete", state: "Kebbi", officer: { name: "KS Officer" } } }));
+  const C = ok(await api("login/command", { body: { user: inv.operator, pass: inv.passcode } })).token;
+  const rm = ok(await api("rooms", { tok: C, body: { name: "Gov", kind: "governor" } }));
+  ok(await api("rooms/" + rm.id + "/status", { tok: C, body: { status: "active" } }));
+  const R = ok(await api("login/room", { body: { id: rm.id, pass: rm.passcode } })).token;
+  const made = ok(await api("room/obs/bulk", { tok: R, body: { per: 1, units: [{ lga: "Argungu", ward: "W1", pu: "001" }], officers: [{ lga: "Argungu", ward: "W1", name: "Gov W1 Officer" }] } })).created[0];
+  const t = ok(await api("login/observer", { body: { code: made.code, pin: "1234", device: "dev-" + made.code + "-0123456789abcdef" } })).token;
+  ok(await api("observer/tally", { tok: t, body: { party: "APC", v: 77 } }));
+  assert.equal(ok(await api("obs/delete", { tok: C, body: { codes: [made.code] } })).deleted, 0, "a client cannot delete a code that holds results");
+  assert.equal((await api("admin/obs/" + made.code + "/delete", { tok: C, body: { confirm: made.code } })).s, 403, "only the platform administrator");
+  assert.equal((await api("admin/obs/" + made.code + "/delete", { tok: S.A, body: { confirm: "wrong" } })).s, 400, "typed confirmation is required");
+  ok(await api("admin/obs/" + made.code + "/delete", { tok: S.A, body: { confirm: made.code } }));
+  assert.ok(!ok(await api("obs", { tok: R })).some((o) => o.code == made.code), "the code is gone");
+  assert.ok(ok(await api("admin/vault", { tok: S.A })).some((v) => v.name.includes("observer_" + made.code)), "a copy is in the vault");
+});

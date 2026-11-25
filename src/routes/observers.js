@@ -157,6 +157,39 @@ app.post(
     res.json({ ok: 1 });
   }),
 );
+// Delete observer codes made by mistake or twice. A code that already holds results, sheets, incidents or clips is kept (revoke
+// it instead); `unused: true` (a Situation Room) removes every code of the room that no phone has ever signed in with.
+app.post(
+  "/api/obs/delete",
+  auth("cmd", "room"),
+  h(async (req, res) => {
+    let codes = Array.isArray(req.body.codes) ? req.body.codes.map(String).slice(0, 2000) : [];
+    if (req.body.unused && req.u.role == "room")
+      codes = (await q("select code from observers where room_id=$1 and device_hash is null", [req.u.id])).map((x) => x.code);
+    const deleted = [],
+      kept = [];
+    for (const code of codes) {
+      const o = await own(req.u, code);
+      if (!o) {
+        kept.push({ code, why: "not found" });
+        continue;
+      }
+      const [d] = await q(
+        `select (select count(*)::int from tallies where code=$1) + (select count(*)::int from ec8a where code=$1)
+              + (select count(*)::int from incidents where code=$1) + (select count(*)::int from clips where code=$1) n`,
+        [code],
+      );
+      if (d.n) {
+        kept.push({ code, why: "has results or media — revoke it instead" });
+        continue;
+      }
+      await q("delete from observers where code=$1", [code]);
+      deleted.push(code);
+    }
+    if (deleted.length) aud(req.u.role == "room" ? req.u.id : "CMD", "Deleted " + deleted.length + " unused observer code(s): " + deleted.slice(0, 5).join(", ") + (deleted.length > 5 ? "…" : ""));
+    res.json({ deleted: deleted.length, kept });
+  }),
+);
 app.post(
   "/api/obs/:code/toggle",
   auth("cmd", "room"),
